@@ -51,10 +51,17 @@ import { createLobby } from '../ui/lobby.js';
 import { unlockedSave } from '../progress/unlocked.js';
 import { ARCHETYPES } from '../combat/enemies.js';
 import { DEFAULTS } from '../physics/constants.js';
+import { createDirector } from '../story/director.js';
+import { createStoryUi } from '../ui/storyUi.js';
+import { createSlots } from '../ui/slots.js';
+import { stepById } from '../story/steps.js';
+import { resolveSite } from '../story/sites.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
   let settings = loadSettings(window.localStorage);
+  // The story (Plan 7): on in a story slot, off in free swing and multiplayer.
+  let storyOn = false, director = null, storyEnv = null;
   let quality = getQuality(settings.quality);
   const dev = params.has('dev');
 
@@ -99,15 +106,17 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   let shadeFreeze = false;
   const mixC = (a, b, t, out) => out.setHex(a).lerp(C4.setHex(b), t);
   function applyEnv(dt) {
-    if (settings.timeOfDay === 'cycle') { clock.cycle = true; clock.update(dt); } else { clock.cycle = false; clock.set(PRESETS[settings.timeOfDay]); }
-    if (settings.weather === 'cycle') {
+    // A mission holds its own hour and weather; free roam follows the settings.
+    if (storyEnv) { clock.cycle = false; clock.set(storyEnv.hour); } else if (settings.timeOfDay === 'cycle') { clock.cycle = true; clock.update(dt); } else { clock.cycle = false; clock.set(PRESETS[settings.timeOfDay]); }
+    const wantW = storyEnv?.weather ?? settings.weather;
+    if (wantW === 'cycle') {
       weatherState.next -= dt;
       if (weatherState.next <= 0) {
         const r = Math.random();
         weatherState.from = weatherState.to; weatherState.to = r < 0.6 ? 'clear' : r < 0.85 ? 'overcast' : 'rain';
         weatherState.k = 0; weatherState.next = 180 + Math.random() * 240;
       }
-    } else if (weatherState.to !== settings.weather) { weatherState.from = weatherState.to; weatherState.to = settings.weather; weatherState.k = 0; }
+    } else if (weatherState.to !== wantW) { weatherState.from = weatherState.to; weatherState.to = wantW; weatherState.k = 0; }
     weatherState.k = Math.min(1, weatherState.k + dt / 12);
     const a = envAt(clock.hour, weatherState.from), b = envAt(clock.hour, weatherState.to), t = weatherState.k;
     const u = sky.uniforms;
@@ -144,7 +153,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   const hero = createHero(world, { gravity: settings.gravity, assist: settings.swingAssist });
   // Combat: enemies, projectiles, gadgets and the hero's fighting state.
-  const combat = createCombat({ scene, world, assets, hero, city, getSettings: () => settings, feedback: {
+  const combat = createCombat({ scene, world, assets, hero, city, getSettings: () => (storyOn && director?.quiet ? { ...settings, crimes: false } : settings), feedback: {
     splat: (hit) => fx.splat(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz),
     boom: (p) => { fx.ring(p.x, p.y, p.z, 1.6); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.6); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('KA-BOOM!', s.x, s.y, 'hit'); sfx.event({ type: 'land', hard: true, impact: 30 }); },
     sense: (e, unblockable, ranged) => { combatHud.sense(e, unblockable, ranged); sfx.event({ type: 'sense' }); },
@@ -175,7 +184,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     const p = hero.body.p;
     if (hero.state === 'ground') save.world.position = { x: p.x, y: p.y, z: p.z };
     save.world.hour = clock.hour;
-    writeSlot(window.localStorage, save);
+    if (save.slot <= 3) writeSlot(window.localStorage, save);
   };
   // Map, waypoint and subway fast travel.
   let waypoint = null;
@@ -220,7 +229,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onProgress: () => progressMenu.show(),
     onRoster: () => rosterMenu.show(),
     onMultiplayer: () => lobby.show(),
+    onStory: () => slots.show(),
   });
+  const slots = createSlots(uiRoot, { onPick: (slot, fresh) => enterStory(slot, fresh), onBack: () => menus.showTitle() });
+  const storyUi = createStoryUi(uiRoot, { getSettings: () => settings, onSound: (k) => sfx.event({ type: k }) });
   // Characters (spec 13): the roster unlocks in solo free roam after the story; ?roster opens it.
   const rosterOpen = () => params.has('roster') || save.story.done.includes('act4.epilogue');
   const rosterMenu = createRosterMenu(uiRoot, { isOpen: rosterOpen, current: () => character.id, onPick: (id) => { switchCharacter(id); rosterMenu.hide(); resume(); }, onBack: () => menus.showPause() });
@@ -382,6 +394,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     input.setEnabled(true);
   }
   function toTitle() {
+    if (storyOn) { director.stop(); storyOn = false; }
     mode = 'title';
     hud.show(false);
     input.setEnabled(false);
@@ -517,8 +530,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       case 'slam': fx.ring(e.at.x, e.at.y - 0.9, e.at.z, 2.2); if (settings.cameraShake) rig.shake = 0.8; break;
       case 'enemyOut': combatHud.ko(e.e); break;
       case 'enemyPinned': { const p = e.e.body.p; fx.splat(p.x, p.y, p.z, e.e.pin.nx, 0, e.e.pin.nz); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('PINNED!', s.x, s.y - 40); break; }
-      case 'encounterStart': hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; break;
-      case 'encounterDone': hud.caption(COPY.combat.gangBusted); if (waypoint?.auto) waypoint = null; break;
+      case 'encounterStart': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; } break;
+      case 'encounterDone': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangBusted); if (waypoint?.auto) waypoint = null; } break;
       case 'thwip': if (e.combat) sfx.event({ type: 'thwip' }); break;
       default: break;
     }
@@ -529,6 +542,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Defeated: a slow fall, a fade, and back on your feet at the nearest found subway station.
   let defeatT = 0;
   function defeatStep(dt) {
+    if (storyOn && director.onDefeat()) return;
     if (session.active && mpRule.friendlyFire) {
       if (defeatT === 0) session.all({ k: 'ko', by: session.lastHurtBy });
       defeatT += dt;
@@ -669,6 +683,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       gdt = dt * combat.timeScale(dt);
       if (gadgetHold > 12) { if (!combatHud.wheelOpen) combatHud.openWheel(); combatHud.steerWheel(input.look, input.move); wheelUsed = true; }
       else if (combatHud.wheelOpen) { const pick = combatHud.closeWheel(); if (pick) combat.gadgets.select(pick); }
+      if (storyOn) director.preStep(intent, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
       combat.preStep(intent, gdt);
       const Tp = performance.now();
       const adv = fixed.advance(gdt);
@@ -684,6 +699,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       hero.events.length = 0;
       combat.step(gdt);
       progress.step(gdt);
+      if (storyOn) director.update(gdt);
       if (session.active) {
         session.update(dt);
         modes.update(dt);
@@ -716,6 +732,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         interpolate();
         rig.update(dt, NO_LOOK, view, world, settings);
       }
+      if (mode === 'comic') director.update(dt);
       if (menus.open) menus.padNav();
       if (mode === 'map' && (input.pressed('map') || input.pressed('pause'))) map.hide();
     }
@@ -776,7 +793,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       wpV.set(waypoint.x, Math.max(2, hero.body.p.y * 0.5), waypoint.z).project(camera);
       const behind = wpV.z > 1;
       const d = Math.hypot(waypoint.x - hero.body.p.x, waypoint.z - hero.body.p.z);
-      if (d < 20) { waypoint = null; hud.waypoint(false); } else hud.waypoint(true, (wpV.x * 0.5 + 0.5) * innerWidth, (-wpV.y * 0.5 + 0.5) * innerHeight, d, behind);
+      if (d < 20) { if (!waypoint.story) waypoint = null; hud.waypoint(false); } else hud.waypoint(true, (wpV.x * 0.5 + 0.5) * innerWidth, (-wpV.y * 0.5 + 0.5) * innerHeight, d, behind);
     } else hud.waypoint(false);
     sky.follow(camera, time);
     applyEnv(mode === 'play' ? dt : 0);
@@ -824,6 +841,66 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (frame === 3) { performance.mark('boot:firstFrame'); state.ready = true; }
   }
 
+  function placeHeroAt(x, y, z, vx = 0, vy = 0, vz = 0, st = 'air', yaw = null) {
+    hero.place(x, y, z, vx, vy, vz, st);
+    // Snap the drawn position too, so hooks used right after (aimAt) see the new spot.
+    prevP.x = renderP.x = x; prevP.y = renderP.y = y; prevP.z = renderP.z = z;
+    if (yaw !== null) rig.yaw = yaw;
+    rig.focus.x = x; rig.focus.y = y + 0.55; rig.focus.z = z;
+  }
+
+  // Story ------------------------------------------------------------------------------------------
+  director = createDirector({
+    scene, world, city, combat, hero, ui: storyUi, save, assets, buildCharacter, createPoser,
+    getSettings: () => settings,
+    heroDef: () => (character.id === 'peter' ? { ...characterById('peter'), suitId: save.progress.suit ?? 'classic' } : character),
+    word: (t, p, kind) => { const sc = screenOf(p.x, p.y + 1, p.z); if (sc.front) hud.word(t, sc.x, sc.y - 40, kind); },
+    shake: (k) => { if (settings.cameraShake) rig.shake = Math.max(rig.shake, k); },
+    sfx, reward: (k) => progress.reward(k), caption: (t) => hud.caption(t), fade: (on) => hud.fade(on), persist: () => persist(),
+    setEnv: (e) => { storyEnv = e; }, setWaypoint: (w) => { waypoint = w; },
+    placeHero: (x, y, z) => placeHeroAt(x, y, z, 0, 0, 0, 'air'),
+    hideHero: (on) => { heroModel.root.visible = !on; },
+    focusSun: (x, z) => { sun.target.position.set(x, 0, z); sun.position.copy(sun.target.position).addScaledVector(sunDir, 400); sun.target.updateMatrixWorld(); },
+    aspect: () => innerWidth / innerHeight,
+    snapshot: (cam) => { ink.render(scene, cam, time); return renderer.domElement.toDataURL('image/jpeg', 0.86); },
+    onBlock: (on) => {
+      if (on && mode === 'play') { mode = 'comic'; input.setEnabled(false); if (locked()) document.exitPointerLock(); }
+      else if (!on && mode === 'comic') { mode = 'play'; resetIntent(); input.setEnabled(true); }
+    },
+  });
+  // The save object stays the same one everywhere (menus and runtime hold it): a slot loads into it.
+  function loadInto(next) {
+    for (const k of Object.keys(save)) delete save[k];
+    Object.assign(save, next);
+    progress.useSave(save);
+  }
+  function enterStory(slot, fresh) {
+    if (session.active) return;
+    const next = fresh ? newSave(slot) : (loadSlot(window.localStorage, slot) ?? newSave(slot));
+    loadInto(next);
+    slots.hide();
+    if (character.id !== 'peter') switchCharacter('peter');
+    const p = save.world.position;
+    if (p && !fresh) placeHeroAt(p.x, p.y + 0.1, p.z, 0, 0, 0, 'ground'); else placeHeroAt(spawn.x, spawn.y, spawn.z, 0, 0, 0, 'ground', 0);
+    storyOn = true;
+    director.stop();
+    enterPlay();
+    director.start();
+    persist();
+  }
+  // Dev and test entry: ?at=<step id> plays from that step in a scratch save (never written).
+  function devStory(id) {
+    loadInto(newSave(9));
+    storyOn = true;
+    director.stop();
+    combat.heroCombat.revive();
+    enterPlay();
+    director.start(id);
+    const st = stepById(id);
+    const site = st?.site ? resolveSite(city, st.site) : null;
+    if (site) placeHeroAt(site.x, site.y + 0.2, site.z + (site.ground ? 10 : 0), 0, 0, 0, 'air');
+  }
+
   // Shaders compile under the loading bar, not on the first swing.
   await ink.compileAsync(scene, camera);
   onProgress(1);
@@ -840,13 +917,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       facing: { ...hero.facing }, hangInverted: hero.hangInverted,
     }),
     camera: () => ({ yaw: rig.yaw, pitch: rig.pitch, pos: { ...rig.pos }, fwd: { ...rig.fwd }, fov: rig.fov }),
-    teleport(x, y, z, vx = 0, vy = 0, vz = 0, st = 'air', yaw = null) {
-      hero.place(x, y, z, vx, vy, vz, st);
-      // Snap the drawn position too, so hooks used right after (aimAt) see the new spot.
-      prevP.x = renderP.x = x; prevP.y = renderP.y = y; prevP.z = renderP.z = z;
-      if (yaw !== null) rig.yaw = yaw;
-      rig.focus.x = x; rig.focus.y = y + 0.55; rig.focus.z = z;
-    },
+    teleport: placeHeroAt,
     setLook(yaw, pitch) { rig.yaw = yaw; rig.pitch = pitch; rig.sinceLook = 0; },
     // Turns the camera so the crosshair sits on a world point (for scripted play).
     aimAt(x, y, z) {
@@ -874,12 +945,33 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     spawnGang: (x, z, opts) => combat.spawnGang(x, z, 'midtown', opts),
     progress: () => progress,
     switchCharacter: (id) => switchCharacter(id),
+    story: () => director.state(),
+    storySkip: () => director.skip(),
+    storyJump: (id) => director.jump(id),
+    storyAt: (id) => devStory(id),
+    startStory: (slot, fresh = true) => enterStory(slot, fresh),
+    bossPhase: (n) => director.bossPhase(n),
+    director: () => director,
+    get storyOn() { return storyOn; },
     mp: () => session,
     modes: () => modes,
     lobby: () => lobby,
     character: () => character.id,
     roster: () => ROSTER.map((c) => c.id),
-    combatState: () => ({ hp: combat.heroCombat.c.hp, focus: combat.heroCombat.c.focus, combo: combat.heroCombat.c.combo, state: combat.heroCombat.c.state, enemies: combat.enemies.list.map((e) => ({ id: e.id, arch: e.arch, state: e.state, hp: e.hp, x: e.body.p.x, y: e.body.p.y, z: e.body.p.z })) }),
+    combatState: () => ({ hp: combat.heroCombat.c.hp, focus: combat.heroCombat.c.focus, combo: combat.heroCombat.c.combo, state: combat.heroCombat.c.state, defeated: combat.heroCombat.c.defeated, enemies: combat.enemies.list.map((e) => ({ id: e.id, arch: e.arch, state: e.state, hp: e.hp, x: e.body.p.x, y: e.body.p.y, z: e.body.p.z, vx: e.body.v.x, vy: e.body.v.y, vz: e.body.v.z, t: e.t, at: e.strikeAt, boss: !!e.boss, ranged: !!e.A?.ranged, reach: e.A?.reach ?? 2 })) }),
+    props: () => director.props.list.filter((q) => q.state === 'rest').map((q) => ({ x: q.p.x, y: q.p.y, z: q.p.z })),
+    // Test hook: the nearest point 1.6 m out from a building face (pilots back up to walls).
+    wallSpot(x, z, r = 40, off = 1.6) {
+      let best = null, bd = Infinity;
+      for (const b of city.boxes) {
+        if (b.kind !== 'building' || b.max[1] < 2.5) continue;
+        const cx = Math.max(b.min[0], Math.min(b.max[0], x)), cz = Math.max(b.min[2], Math.min(b.max[2], z));
+        const d = Math.hypot(cx - x, cz - z);
+        if (d > r || d < 1e-3 || d >= bd) continue;
+        bd = d; best = { x: cx + ((x - cx) / d) * off, z: cz + ((z - cz) / d) * off, nx: (x - cx) / d, nz: (z - cz) / d };
+      }
+      return best;
+    },
     save: () => save,
     openMap: () => openMap(),
     travel: (id) => { const st = city.stations.find((s) => s.id === id); if (st) travel(st); },
@@ -901,5 +993,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   };
 
   requestAnimationFrame((t) => { last = t; tick(t); });
-  if (params.get('at') === 'swing') enterPlay(); else menus.showTitle();
+  const at = params.get('at');
+  if (at === 'swing') enterPlay();
+  else if (at && stepById(at)) devStory(at);
+  else menus.showTitle();
 }

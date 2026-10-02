@@ -65,6 +65,10 @@ export const onQueens = (x, z, margin = 0) => inRound(QUEENS, x, z, margin);
 export const RESERVOIR = { cx: 120, cz: -760, rx: 170, rz: 95 };
 export const ZOO = { minX: -420, maxX: -230, minZ: -580, maxZ: -470 };
 export const NEON_PLAZA = { minX: 690, maxX: 750, minZ: -330, maxZ: 150 };
+// The West Side rail yard in Hell's Kitchen (Rhino's last stand): two blocks and the street
+// between them, gravel and track, freight cars and container stacks.
+export const RAILYARD = { minX: -1425, maxX: -1335, minZ: -51, maxZ: 51 };
+const inYard = (x, z) => x > RAILYARD.minX && x < RAILYARD.maxX && z > RAILYARD.minZ && z < RAILYARD.maxZ;
 const inReservoir = (x, z) => ((x - RESERVOIR.cx) / RESERVOIR.rx) ** 2 + ((z - RESERVOIR.cz) / RESERVOIR.rz) ** 2 < 1;
 
 // Blocks: the land between avenues and streets (the island grid, or Queens' with its x range).
@@ -97,6 +101,7 @@ export const LANDMARKS = [
   { id: 'bridge', name: 'Queensway Bridge', x: 1635, z: 700 },
   { id: 'zoo', name: 'Park Zoo', x: (ZOO.minX + ZOO.maxX) / 2, z: (ZOO.minZ + ZOO.maxZ) / 2 },
   { id: 'reservoir', name: 'Reservoir', x: RESERVOIR.cx, z: RESERVOIR.cz },
+  { id: 'railyard', name: 'West Side Rail Yard', x: (RAILYARD.minX + RAILYARD.maxX) / 2, z: 0 },
 ];
 export const landmark = (id) => LANDMARKS.find((l) => l.id === id);
 
@@ -115,12 +120,15 @@ export function buildCity() {
   // Landmarks first: they claim their blocks.
   const landmarkBoxes = {};
   for (const l of LANDMARKS) {
-    if (['bridge', 'zoo', 'reservoir', 'mayHouse'].includes(l.id)) continue;
+    if (['bridge', 'zoo', 'reservoir', 'mayHouse', 'railyard'].includes(l.id)) continue;
     const b = nearestBlock(l.x, l.z);
     used.add(b);
     l.block = b;
     landmarkBoxes[l.id] = buildLandmark(l, b, add);
   }
+
+  for (const b of all) if (inYard(b.cx, b.cz)) used.add(b);
+  buildRailYard(add);
 
   for (const d of DISTRICTS) {
     const rng = createRng(d.seed);
@@ -242,6 +250,24 @@ function buildCrane(b, rng, add, district) {
   add([cx - 2, 0, cz - 2], [cx + 2, h, cz + 2], 'building', district, 10);
   const len = rng.range(25, 40);
   add([cx - 3, h, cz - 1.5], [cx + len, h + 3, cz + 1.5], 'building', district, 10);
+}
+
+// The rail yard: rows of freight cars along the tracks (hard cover a charging Rhino bounces off),
+// container stacks on the edges and two light towers. Its own RNG, so it never shifts the district.
+function buildRailYard(add) {
+  const rng = createRng(4242);
+  const Y = RAILYARD;
+  for (let i = 0; i < 6; i++) {
+    const x = Y.minX + 12 + i * 13.5;
+    for (let z = Y.minZ + 4; z < Y.maxZ - 18; z += rng.range(19, 26)) {
+      if (!rng.chance(0.62)) continue;
+      add([x - 1.6, 0, z], [x + 1.6, 4.2, z + 15], 'building', 'hells', i % 2 ? 26 : 25);
+    }
+  }
+  for (const z of [Y.minZ + 1, Y.maxZ - 3.5]) {
+    for (let x = Y.minX + 2; x < Y.maxX - 13; x += 14) if (rng.chance(0.7)) add([x, 0, z], [x + 12.2, 2.6 * rng.int(1, 3), z + 2.5], 'building', 'hells', 26);
+  }
+  for (const [x, z] of [[Y.minX + 4, 0], [Y.maxX - 4, 0]]) add([x - 0.5, 0, z - 0.5], [x + 0.5, 24, z + 0.5], 'building', 'hells', 16);
 }
 
 // A container yard: stacks of shipping containers (good low anchors and cover).
@@ -421,6 +447,7 @@ function buildLandMap() {
         if (d?.id === 'park') t = inReservoir(x, z) ? LAND.water : (x > ZOO.minX && x < ZOO.maxX && z > ZOO.minZ && z < ZOO.maxZ ? LAND.plaza : LAND.park);
         if (x > NEON_PLAZA.minX && x < NEON_PLAZA.maxX && z > NEON_PLAZA.minZ && z < NEON_PLAZA.maxZ) t = LAND.plaza;
         if (d?.id === 'harbor' && !onIsland(x, z, 30)) t = LAND.pier;
+        if (inYard(x, z)) t = LAND.yard;
       } else if (onQueens(x, z)) t = LAND.suburb;
       else if (z > ISLAND.maxZ - 10 && z < ISLAND.maxZ + 110 && x > 600 && x < 1400 && ((x - 600) % 110) < 22) t = LAND.pier; // piers into the river
       data[j * w + i] = t;

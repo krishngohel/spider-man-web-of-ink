@@ -534,6 +534,17 @@ ${COMIC_SHADE}`)
     float joint = max(inkAt(fract(sl.x + 0.5) - 0.5, pw / 3.0, 1.0), inkAt(fract(sl.y + 0.5) - 0.5, pw / 3.0, 1.0));
     col = mix(col, col * 0.9, step(0.5, fract(sin(dot(floor(sl), vec2(7.1, 3.7))) * 437.5)) * 0.6);
     gInkG = max(gInkG, joint * 0.4 * near);
+  } else if (t > 4.5 && t < 5.5) {
+    // The rail yard: gravel, timber ties and two steel rails per track, tracks along z.
+    float gr = fract(sin(dot(floor(w * 1.7), vec2(12.9, 78.2))) * 43758.5);
+    col = mix(uSidewalk * 0.72, uAsphalt * 1.1, 0.4 + 0.3 * gr);
+    float tx = mod(w.x + 1425.0 - 12.0 + 6.75, 13.5) - 6.75;
+    if (abs(tx) < 1.4) {
+      col = mix(col, uPier * 0.8, step(0.55, fract(w.y / 0.75)));
+      float rail = min(abs(abs(tx) - 0.72), 1.0);
+      col = mix(col, vec3(0.55, 0.56, 0.6), 1.0 - smoothstep(0.06, 0.1, rail));
+      gInkG = max(gInkG, inkAt(rail - 0.09, pw, 1.0) * near);
+    }
   } else {
     float ax = mod(w.x - uGrid.x, uGrid.z);
     float sz = mod(w.y - uGrid.y, uGrid.w);
@@ -585,7 +596,7 @@ ${COMIC_SHADE}`)
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-ground-v4';
+  mat.customProgramCacheKey = () => 'city-ground-v5';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';

@@ -119,6 +119,10 @@ export function createSfx(getVolume) {
         case 'dodge': burst({ freq: 800, freq2: 2600, q: 0.8, dur: 0.18, gain: 0.22 }); break;
         case 'uppercut': burst({ freq: 300, freq2: 1600, q: 0.9, dur: 0.22, gain: 0.35 }); break;
         case 'gadget': burst({ freq: 3000, freq2: 900, q: 1.4, dur: 0.12, gain: 0.3 }); tone({ freq: 880, freq2: 440, dur: 0.08, gain: 0.08, type: 'triangle' }); break;
+        case 'radio': burst({ freq: 2400, freq2: 1200, q: 3, dur: 0.12, gain: 0.08 }); break;
+        case 'crackle': burst({ freq: 3000, freq2: 1500, q: 2, dur: 0.35, gain: 0.1 }); burst({ freq: 900, freq2: 2600, q: 4, dur: 0.15, gain: 0.06 }); break;
+        case 'page': burst({ freq: 1200, freq2: 3400, q: 0.6, dur: 0.18, gain: 0.08 }); break;
+        case 'stamp': tone({ freq: 140, freq2: 60, dur: 0.25, gain: 0.3 }); burst({ freq: 400, freq2: 200, q: 1, dur: 0.2, gain: 0.25 }); break;
         case 'enemyOut': tone({ freq: 330, freq2: 165, dur: 0.18, gain: 0.08, type: 'triangle' }); break;
         case 'noAnchor': tone({ freq: 240, freq2: 200, dur: 0.06, gain: 0.05, type: 'square' }); break;
         default: break;

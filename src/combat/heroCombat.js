@@ -168,7 +168,9 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       const t2 = pickTarget(P(), camFwd, enemies.list, COMBAT.webRange);
       const from = { x: P().x, y: P().y + 0.5, z: P().z };
       if (t2) {
-        const q = t2.body.p;
+        // Lead a moving target (a flyer at 20 m/s moves metres while the web is in the air).
+        const q0 = t2.body.p, tv = t2.body.v, lead = Math.hypot(q0.x - from.x, q0.y - from.y, q0.z - from.z) / 75;
+        const q = { x: q0.x + tv.x * lead, y: q0.y + tv.y * lead, z: q0.z + tv.z * lead };
         projectiles.fire('web', from, { x: q.x, y: q.y + 0.3, z: q.z }, { owner: 'hero', dmg: 0.34 });
         onEvent({ type: 'thwip', x: q.x, y: q.y, z: q.z, combat: true });
       } else {
@@ -180,6 +182,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     // Yank (the hang key, when a target is near and the hero is not on a web).
     if (intent.yankPressed && tgt && near.d < COMBAT.yankRange && !hero.swing.active) {
       intent.hangPressed = false;
+      // A boss decides for itself what a yank does (tug of war, too heavy, pulled out of a dive).
+      if (tgt.boss) { if (tgt.boss.yank(near)) onEvent({ type: 'yank', e: tgt }); else { c.state = 'strike'; c.t = 0; onEvent({ type: 'webStrike', e: tgt }); } return; }
       const A = ARCHETYPES[tgt.arch];
       if (A.ranged && !tgt.disarmed) { tgt.disarmed = true; word('YOINK!', tgt); onEvent({ type: 'disarm', e: tgt }); enemies.hit(tgt, { dmg: 2, dir: { x: -near.x, z: -near.z }, push: 1, from: P() }); }
       else if (A.heavy) { c.state = 'strike'; c.t = 0; onEvent({ type: 'webStrike', e: tgt }); }

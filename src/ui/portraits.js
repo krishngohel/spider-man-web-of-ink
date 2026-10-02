@@ -1,0 +1,53 @@
+// Radio portraits, drawn in code as small comic heads (SVG, 100 x 100). Each speaker is a face
+// shape plus hair, mask or helmet, and a collar; the ink outline and a halftone shade come free.
+
+const INK = '#12101c';
+const dots = `<pattern id="hd" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.4" fill="${INK}" opacity="0.28"/></pattern>`;
+
+function head({ skin = '#e8b48a', w = 30, h = 36, y = 52 }) {
+  return `<ellipse cx="50" cy="${y}" rx="${w}" ry="${h}" fill="${skin}" stroke="${INK}" stroke-width="3"/>`
+    + `<path d="M${50 + w * 0.2} ${y - h} A ${w} ${h} 0 0 1 ${50 + w} ${y} A ${w} ${h} 0 0 1 ${50 + w * 0.2} ${y + h} Z" fill="url(#hd)"/>`;
+}
+const eyes = (y = 48, dx = 11, r = 2.6) => `<circle cx="${50 - dx}" cy="${y}" r="${r}" fill="${INK}"/><circle cx="${50 + dx}" cy="${y}" r="${r}" fill="${INK}"/>`;
+const brows = (y = 41, dx = 11, tilt = 0) => `<path d="M${50 - dx - 7} ${y + tilt} L${50 - dx + 6} ${y - tilt}" stroke="${INK}" stroke-width="3" stroke-linecap="round"/><path d="M${50 + dx - 6} ${y - tilt} L${50 + dx + 7} ${y + tilt}" stroke="${INK}" stroke-width="3" stroke-linecap="round"/>`;
+const mouth = (y = 68, w = 9, curve = 3) => `<path d="M${50 - w} ${y} Q50 ${y + curve} ${50 + w} ${y}" stroke="${INK}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+const collar = (c, c2 = c) => `<path d="M14 100 Q50 78 86 100 Z" fill="${c}" stroke="${INK}" stroke-width="3"/><path d="M42 84 L50 96 L58 84" fill="${c2}" stroke="${INK}" stroke-width="2"/>`;
+
+const FACES = {
+  peter: () => collar('#c8202a') + head({ skin: '#d3232e' })
+    + `<g stroke="${INK}" stroke-width="1.4" fill="none" opacity="0.8"><path d="M50 16 L50 88"/><path d="M20 52 L80 52"/><path d="M28 26 L72 78"/><path d="M72 26 L28 78"/><ellipse cx="50" cy="52" rx="12" ry="14"/><ellipse cx="50" cy="52" rx="22" ry="25"/></g>`
+    + `<path d="M28 40 Q36 34 46 44 Q40 56 30 52 Z" fill="#f4f6fb" stroke="${INK}" stroke-width="3.4"/><path d="M72 40 Q64 34 54 44 Q60 56 70 52 Z" fill="#f4f6fb" stroke="${INK}" stroke-width="3.4"/>`,
+  parker: () => collar('#34548a', '#d8d8de') + head({ skin: '#f0c8a4', w: 27 })
+    + `<path d="M22 48 Q20 18 50 16 Q80 18 78 46 Q72 30 60 30 Q66 26 56 24 Q44 30 30 32 Q24 38 22 48 Z" fill="#4a3020" stroke="${INK}" stroke-width="3"/>` + eyes(50, 10, 2.4) + brows(43, 10, -1) + mouth(70, 8, 4),
+  yuri: () => collar('#1f2c4a', '#d8d8de') + head({ skin: '#ecc7a0', w: 27 })
+    + `<path d="M22 50 Q20 16 50 16 Q80 16 78 50 L74 40 Q60 26 30 32 Z" fill="#141418" stroke="${INK}" stroke-width="3"/>` + eyes(50, 10, 2.4) + brows(43, 10, 1.5) + mouth(70, 7, 0),
+  mj: () => collar('#2f7a4a') + `<path d="M16 86 Q12 30 50 18 Q88 30 84 86 Z" fill="#c8402a" stroke="${INK}" stroke-width="3"/>` + head({ skin: '#f2cfae', w: 26, h: 33, y: 54 })
+    + `<path d="M24 46 Q34 22 58 26 Q72 30 76 46 Q60 34 44 36 Q32 38 24 46 Z" fill="#c8402a" stroke="${INK}" stroke-width="3"/>` + eyes(54, 10, 2.4) + mouth(72, 8, 5),
+  may: () => collar('#8a5a8a', '#f4f0e6') + head({ skin: '#efcfb6', w: 27 })
+    + `<circle cx="50" cy="16" r="10" fill="#e6e6ea" stroke="${INK}" stroke-width="3"/><path d="M22 50 Q22 20 50 20 Q78 20 78 50 Q70 30 50 30 Q30 30 22 50 Z" fill="#e6e6ea" stroke="${INK}" stroke-width="3"/>`
+    + `<g fill="none" stroke="${INK}" stroke-width="2.4"><circle cx="39" cy="50" r="7"/><circle cx="61" cy="50" r="7"/><path d="M46 50 L54 50"/></g>` + eyes(50, 11, 1.8) + mouth(70, 8, 4),
+  jameson: () => collar('#4a4a52', '#f4f4f4') + head({ skin: '#e8b48a', w: 29, h: 35 })
+    + `<path d="M24 34 L24 18 L76 18 L76 34 Q66 28 50 28 Q34 28 24 34 Z" fill="#2a2a2e" stroke="${INK}" stroke-width="3"/><path d="M19 52 Q19 38 26 34 L28 54 Z M81 52 Q81 38 74 34 L72 54 Z" fill="#d8d8dc" stroke="${INK}" stroke-width="2.4"/>`
+    + eyes(48, 11, 2.4) + brows(40, 11, 4) + `<path d="M34 64 Q42 58 50 62 Q58 58 66 64 Q58 68 50 66 Q42 68 34 64 Z" fill="#2a2a2e" stroke="${INK}" stroke-width="2"/>`
+    + `<rect x="58" y="69" width="20" height="5" rx="2" fill="#8a5a3a" stroke="${INK}" stroke-width="1.6" transform="rotate(-12 58 69)"/>` + mouth(72, 6, -2),
+  kingpin: () => collar('#f2f0e8', '#6a2a6a') + head({ skin: '#e2b088', w: 34, h: 37 }) + eyes(48, 12, 2.2) + brows(41, 12, 3) + mouth(70, 10, -2)
+    + `<path d="M18 46 Q16 22 50 16 Q84 22 82 46" fill="none" stroke="${INK}" stroke-width="1.5" opacity="0.4"/>`,
+  shocker: () => collar('#8a6030') + head({ skin: '#d8b030' })
+    + `<g stroke="${INK}" stroke-width="1.6" opacity="0.7"><path d="M24 30 L76 74"/><path d="M76 30 L24 74"/><path d="M20 52 L50 22 L80 52 L50 84 Z" fill="none"/></g>`
+    + `<rect x="32" y="40" width="36" height="13" rx="5" fill="#8a6030" stroke="${INK}" stroke-width="3"/><circle cx="41" cy="46.5" r="3.5" fill="#f2e6a0"/><circle cx="59" cy="46.5" r="3.5" fill="#f2e6a0"/>`,
+  vulture: () => `<path d="M8 100 Q20 70 50 76 Q80 70 92 100 Z" fill="#3f6a3a" stroke="${INK}" stroke-width="3"/><path d="M20 84 Q30 64 50 70 Q70 64 80 84" fill="#c8b070" stroke="${INK}" stroke-width="3"/>`
+    + head({ skin: '#d8b090', w: 25, h: 36 }) + eyes(48, 9, 2.2) + brows(40, 9, 4) + `<path d="M50 50 L46 62 L52 62" stroke="${INK}" stroke-width="2.4" fill="none"/>` + mouth(72, 7, -2),
+  rhino: () => collar('#7a7f86') + head({ skin: '#8a8f96', w: 33, h: 37 })
+    + `<path d="M50 30 Q46 12 58 4 Q56 18 60 30 Z" fill="#c8ccd2" stroke="${INK}" stroke-width="3"/><path d="M28 30 Q22 22 24 14 Q32 20 34 28 Z M72 30 Q78 22 76 14 Q68 20 66 28 Z" fill="#7a7f86" stroke="${INK}" stroke-width="2.4"/>`
+    + `<ellipse cx="50" cy="66" rx="16" ry="11" fill="#e8b48a" stroke="${INK}" stroke-width="2.6"/>` + eyes(48, 12, 2.6) + brows(41, 12, 5) + mouth(68, 6, -2),
+  cop: () => collar('#1f2c4a', '#d8d8de') + head({ skin: '#c99a76', w: 28 })
+    + `<path d="M18 34 Q50 4 82 34 L82 40 L18 40 Z" fill="#1f2c4a" stroke="${INK}" stroke-width="3"/><rect x="44" y="24" width="12" height="9" fill="#d8c040" stroke="${INK}" stroke-width="2"/>` + eyes(52, 11, 2.4) + mouth(72, 8, 1),
+  robbie: () => collar('#5a5a6a', '#f4f4f4') + head({ skin: '#7a5236', w: 28 }) + `<path d="M24 38 Q26 20 50 20 Q74 20 76 38 Q64 28 50 28 Q36 28 24 38 Z" fill="#d8d8dc" stroke="${INK}" stroke-width="3"/>` + eyes(50, 11, 2.4) + mouth(70, 8, 3),
+};
+
+export function portraitSvg(who, broadcast = false) {
+  const body = (FACES[who] ?? FACES.cop)();
+  const bg = broadcast ? '#f7e36a' : '#cfe3f2';
+  return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs>${dots}</defs><rect width="100" height="100" fill="${bg}"/>${body}</svg>`;
+}
+export const PORTRAITS = Object.keys(FACES);

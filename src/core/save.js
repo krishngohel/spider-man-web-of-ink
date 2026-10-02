@@ -18,7 +18,7 @@ export function newSave(slot = 1) {
     createdAt: now,
     updatedAt: now,
     playTime: 0,
-    story: { step: 'prologue.swing', done: [], choices: {} },
+    story: { step: 'prologue.open', done: [], choices: {} },
     world: { stations: [], districts: [], hour: 11, weather: 'clear', position: null },
     collect: { backpacks: [], photos: [], tags: [], pigeons: [] },
     activities: { crimes: 0, crimeKinds: {}, bases: [], challenges: {}, races: {}, research: [], bugle: [] },

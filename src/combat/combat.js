@@ -176,6 +176,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   return {
     enemies, projectiles, heroCombat, gadgets,
     preStep, step,
+    emit, heroHit,
     timeScale: (realDt) => heroCombat.timeScale(realDt),
     spawnGang,
     setTargets(fn) { targetsFn = fn; },

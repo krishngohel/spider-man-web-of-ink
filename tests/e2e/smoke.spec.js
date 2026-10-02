@@ -22,7 +22,7 @@ test('free swing enters play, and an aimed, held swing attaches a web', async ({
   const errors = collectErrors(page);
   await page.goto('/');
   await page.waitForFunction(ready, null, { timeout: 90000 });
-  await page.locator('.title .mbtn.primary').click();
+  await page.locator('.title .mbtn', { hasText: 'FREE SWING' }).click();
   await page.waitForFunction(() => window.__game.mode === 'play');
   await expect(page.locator('.hud')).toBeVisible();
   await page.evaluate(() => {
@@ -92,4 +92,25 @@ test('pause menu opens from play and resumes', async ({ page }) => {
   await expect(page.locator('.menu .card h2')).toHaveText('PAUSED');
   await page.locator('.menu .mbtn.primary').click();
   await page.waitForFunction(() => window.__game.mode === 'play');
+});
+
+test('story: a new game in slot 1 opens the first comic page, Esc reads on, play follows', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  await page.evaluate(() => { for (let i = 1; i <= 3; i++) localStorage.removeItem(`web-of-ink-save-${i}`); });
+  await page.reload();
+  await page.waitForFunction(ready, null, { timeout: 90000 });
+  await page.locator('.title .mbtn', { hasText: 'STORY' }).click();
+  await page.locator('.slot').first().locator('.mbtn', { hasText: 'NEW GAME' }).click();
+  await page.waitForFunction(() => window.__game.mode === 'comic', null, { timeout: 15000 });
+  await expect(page.locator('.comic .cpanel img').first()).toBeVisible();
+  await expect(page.locator('.comic .ccaption').first()).toContainText('New York');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__game.mode === 'play' && window.__game.story().step === 'prologue.swing', null, { timeout: 10000 });
+  await expect(page.locator('.objective')).toContainText('Fisk Tower');
+  // Saved by step id in slot 1.
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('web-of-ink-save-1')).story);
+  expect(saved.step).toBe('prologue.swing');
+  expect(saved.done).toContain('prologue.open');
+  expect(errors).toEqual([]);
 });

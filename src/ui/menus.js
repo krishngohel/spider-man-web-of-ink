@@ -5,14 +5,15 @@ import { ACTIONS, DEFAULT_BINDINGS, keyLabel, rebind } from '../core/bindings.js
 // Title screen, pause menu, settings and controls (with rebinding). Mouse, keyboard and gamepad
 // (D-pad or left stick to move, A to choose, B to go back, left/right to change a value).
 
-export function createMenus(root, { getSettings, setSettings, input, onPlay, onResume, onRestart, onQuit, onProgress = () => {}, onRoster = () => {}, onMultiplayer = () => {} }) {
+export function createMenus(root, { getSettings, setSettings, input, onPlay, onResume, onRestart, onQuit, onProgress = () => {}, onRoster = () => {}, onMultiplayer = () => {}, onStory = () => {} }) {
   const C = COPY.settings;
   // Title ---------------------------------------------------------------------------------------
   const title = el('div', { class: 'title hidden' }, el('div', { class: 'card' }, [
     el('h1', { class: 'logo' }, [el('span', { class: 'a' }, COPY.title.a), el('span', { class: 'b' }, COPY.title.b)]),
     el('p', { class: 'sub' }, COPY.subtitle),
     el('div', { class: 'buttons' }, [
-      el('button', { class: 'mbtn primary', onclick: () => onPlay() }, COPY.buttons.play),
+      el('button', { class: 'mbtn primary', onclick: () => { hideAll(); onStory(); } }, COPY.buttons.story),
+      el('button', { class: 'mbtn', onclick: () => onPlay() }, COPY.buttons.play),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onMultiplayer(); } }, COPY.buttons.multiplayer),
       el('button', { class: 'mbtn', onclick: () => openSettings('title') }, COPY.buttons.settings),
       el('button', { class: 'mbtn', onclick: () => openControls('title') }, COPY.buttons.controls),

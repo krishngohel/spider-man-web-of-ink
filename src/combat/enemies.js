@@ -41,7 +41,7 @@ export function pickTarget(heroP, camFwd, enemies, maxDist = 14) {
   return best;
 }
 
-export const isActive = (e) => e.alive && !['out', 'webbed', 'pinned'].includes(e.state);
+export const isActive = (e) => e.alive && !['out', 'webbed', 'pinned', 'away'].includes(e.state);
 
 // May this enemy start an attack now? The director hands out at most `max` attack slots.
 export function canAttack(enemies, max) {
@@ -107,6 +107,8 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
 
   // A hit on an enemy. dir: unit push direction (x, z); lift: up speed; kind: 'melee', 'web', ...
   function hit(e, args = {}) {
+    // A story boss: its own module decides what a hit does (src/story/bossActor.js).
+    if (e.boss) return e.boss.hit(args);
     if (e.puppet || e.isPlayer) {
       // Someone else's: the host (or the other player) applies it. Show the hit here at once.
       e.model.hurt.value = 1;
@@ -151,7 +153,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     for (const e of list) if (e.puppet) puppetStep(e, dt);
     // Alerts spread: anyone near an alerted ally joins in.
     for (const e of list) {
-      if (!e.alive || e.puppet || e.isPlayer) continue;
+      if (!e.alive || e.puppet || e.isPlayer || e.boss) continue;
       const hp = nearest(e.body.p).body.p;
       const dHero = Math.hypot(e.body.p.x - hp.x, e.body.p.z - hp.z);
       if (!e.alerted && (dHero < 20 || list.some((o) => o.alerted && o !== e && Math.hypot(o.body.p.x - e.body.p.x, o.body.p.z - e.body.p.z) < 25))) {
@@ -160,7 +162,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       }
     }
     for (const e of list) {
-      if (!e.alive || e.puppet || e.isPlayer) continue;
+      if (!e.alive || e.puppet || e.isPlayer || e.boss) continue;
       const T = nearest(e.body.p);
       const hp = T.body.p, hero = T, heroInvuln = T.invuln, heroHit = T.hit;
       const A = e.A, b = e.body, p = b.p, v = b.v;

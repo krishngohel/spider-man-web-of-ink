@@ -115,6 +115,18 @@ const GEAR = {
     holder.add(c); attach(b, 'spine_03', holder, [0, 1.47, -0.15]);
     return { update(dt, hero) { const v = Math.hypot(hero.body.v.x, hero.body.v.z); c.rotation.x = -Math.min(1.3, 0.12 + v * 0.03); } };
   },
+  // Long hair in the def's colour (story cast: MJ, Captain Watanabe).
+  hairLong(b, assets, def) {
+    const h = assets.hair.clone(true);
+    const col = def.hairColor ?? 0x2a1a10;
+    h.traverse((o) => { if (o.isMesh) { o.material = M('hair' + col, col); o.castShadow = true; } });
+    const holder = new THREE.Group(); holder.add(h);
+    attach(b, 'Head', holder, [0, 0, 0]);
+  },
+  moustache(b, assets, def) {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.016, 0.02), M('stache', def.hairColor ?? 0x2a2a2e));
+    attach(b, 'Head', m, [0, headY(def) - 0.075, 0.105]);
+  },
   hairWhite(b, assets) {
     const h = assets.hair.clone(true);
     h.traverse((o) => { if (o.isMesh) { o.material = M('hairW', 0xf4f4f6); o.castShadow = true; } });

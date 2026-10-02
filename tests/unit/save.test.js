@@ -20,7 +20,7 @@ describe('saves', () => {
   });
   it('migrate fills anything missing and drops junk', () => {
     const m = migrate({ story: { step: 42, done: ['a', 5, null] }, progress: { level: 99, tokens: { crime: 'x', base: 3 }, gadgets: { webBomb: 7 } } });
-    expect(m.story.step).toBe('prologue.swing');
+    expect(m.story.step).toBe('prologue.open');
     expect(m.story.done).toEqual(['a']);
     expect(m.progress.level).toBe(50);
     expect(m.progress.tokens.crime).toBe(0);
