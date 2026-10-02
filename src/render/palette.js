@@ -26,6 +26,7 @@ export const PALETTE = {
   crane: 0xe8b52a,
   windowDark: 0x35557d,
   windowLit: 0xffd27a,
+  awning: 0x2f8a5e,
   asphalt: 0x3b3f49,
   sidewalk: 0xb3ada0,
   laneMark: 0xf3e6b8,

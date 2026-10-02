@@ -12,7 +12,7 @@ import { GRID } from './testCity.js';
 const CHUNK = 240;
 const STYLE_COLORS = {
   0: PALETTE.brick, 1: PALETTE.sandstone, 2: PALETTE.glass, 3: PALETTE.concrete,
-  7: PALETTE.limestone, 8: PALETTE.deco, 10: PALETTE.crane,
+  7: PALETTE.limestone, 8: PALETTE.deco, 10: PALETTE.crane, 13: PALETTE.limestone,
 };
 
 const shared = { night: { value: 0 } };
@@ -26,81 +26,237 @@ function buildingMaterial() {
     shader.uniforms.uWinDark = { value: new THREE.Color(PALETTE.windowDark) };
     shader.uniforms.uWinLit = { value: new THREE.Color(PALETTE.windowLit) };
     shader.uniforms.uRoof = { value: new THREE.Color(PALETTE.roof) };
+    shader.uniforms.uInk = { value: new THREE.Color(PALETTE.ink) };
+    shader.uniforms.uStone = { value: new THREE.Color(PALETTE.limestone) };
+    shader.uniforms.uAwning = { value: new THREE.Color(PALETTE.awning) };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aStyle;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nflat varying vec2 vStyle;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;\nvWNrm = normal;\nvStyle = aStyle;');
+      .replace('#include <common>', '#include <common>\nattribute vec2 aStyle;\nattribute vec4 aBox;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nflat varying vec2 vStyle;\nflat varying vec4 vBox;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;\nvWNrm = normal;\nvStyle = aStyle;\nvBox = aBox;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform float uNight;
-uniform vec3 uWinDark, uWinLit, uRoof;
+uniform vec3 uWinDark, uWinLit, uRoof, uInk, uStone, uAwning;
 varying vec3 vWPos;
 varying vec3 vWNrm;
-// Flat: a per-building value must not be interpolated (tiny interpolation error, amplified by the
+// Flat: per-building values must not be interpolated (tiny interpolation error, amplified by the
 // window hash, showed up as streaks across the glass).
 flat varying vec2 vStyle;
+flat varying vec4 vBox;     // face u range (u0, u1) and the building's y range (y0, y1)
+float gInk = 0.0;           // ink drawn over the lit colour
+float gGlass = 0.0;         // a glass reflection streak, drawn over the lit colour
+float gEmit = 0.0;          // a lit window at night, unaffected by light
+float gNear = 1.0;          // fine detail fades with distance (1 near, 0 far)
 float h21(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+// Ink on the boundary of the box [lo, hi] (world units), px pixels wide, antialiased.
+float frame(vec2 p, vec2 lo, vec2 hi, float pw, float px) {
+  vec2 c = (lo + hi) * 0.5, h = (hi - lo) * 0.5;
+  vec2 q = abs(p - c) - h;
+  float d = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+  return 1.0 - smoothstep(pw * px * 0.5, pw * (px * 0.5 + 1.0), abs(d));
+}
+float hline(float y, float at, float pw, float px) {
+  return 1.0 - smoothstep(pw * px * 0.5, pw * (px * 0.5 + 1.0), abs(y - at));
+}
+float inside(vec2 p, vec2 lo, vec2 hi) { return step(lo.x, p.x) * step(p.x, hi.x) * step(lo.y, p.y) * step(p.y, hi.y); }
+
+vec3 glassColor(vec2 id, float seed, float u, float v) {
+  float r = h21(id + seed * 13.1);
+  vec3 g = mix(uWinDark, uWinDark * 1.6 + vec3(0.05, 0.09, 0.14), step(0.7, r));
+  // Night: some windows light up.
+  gEmit = max(gEmit, step(1.0 - uNight * 0.55, r) * uNight);
+  return mix(g, uWinLit * (0.75 + 0.25 * r), gEmit);
+}
+
 vec3 facade(vec3 base, float style, float seed) {
   bool xFace = abs(vWNrm.x) > 0.5;
   float u = xFace ? vWPos.z : vWPos.x;
   float v = vWPos.y;
-  vec2 cell = vec2(3.0, 3.4); vec2 m = vec2(0.24, 0.3);
-  if (style < 0.5) { cell = vec2(3.0, 3.4); m = vec2(0.26, 0.3); }
-  else if (style < 1.5) { cell = vec2(3.4, 3.8); m = vec2(0.3, 0.2); }
-  else if (style < 2.5) { cell = vec2(2.2, 3.6); m = vec2(0.05, 0.07); }
-  else if (style < 3.5) { cell = vec2(6.0, 3.6); m = vec2(0.02, 0.34); }
-  else if (style < 7.5) { cell = vec2(1.8, 4.2); m = vec2(0.28, 0.1); }
-  else return base;
-  vec2 g = vec2(u, v) / cell;
+  float u0 = vBox.x, u1 = vBox.y, y0 = vBox.z, y1 = vBox.w;
+  float pw = max(length(fwidth(vec2(u, v))), 1e-4);  // metres per pixel here
+  gNear = 1.0 - smoothstep(0.035, 0.14, pw);
+  float lineK = gNear;
+  vec3 col = base;
+  bool streetLevel = y0 < 0.5;
+  float du = min(u - u0, u1 - u);
+  float top = y1 - v;
+  vec2 p = vec2(u, v);
+
+  // Building edges: a strong ink line down each corner and along the roof line.
+  gInk = max(gInk, hline(du, 0.0, pw, 2.2));
+
+  // Glass curtain wall.
+  if (style > 1.5 && style < 2.5) {
+    vec2 cell = vec2(1.6, 3.6);
+    vec2 g = (p - vec2(u0, y0)) / cell;
+    vec2 f = fract(g), id = floor(g);
+    col = glassColor(id, seed, u, v);
+    // Mullions and floor slabs.
+    float mull = max(1.0 - smoothstep(0.0, fwidth(g.x) * 1.5, min(f.x, 1.0 - f.x)), 1.0 - smoothstep(0.0, fwidth(g.y) * 2.5, min(f.y, 1.0 - f.y)));
+    col = mix(col, uInk * 1.6 + base * 0.2, mull * 0.8 * lineK);
+    // Big diagonal reflection bands across the whole wall (the comic "shine").
+    float band = fract((u * 0.8 + v * 0.55) / 22.0 + seed * 3.7);
+    gGlass = max(gGlass, (step(band, 0.1) + 0.55 * step(0.16, band) * step(band, 0.2)) * 0.55);
+    gInk = max(gInk, hline(top, 0.0, pw, 2.0));
+    return col;
+  }
+
+  // Masonry: cornice band at the top.
+  if (top < 1.8) {
+    col = mix(base, uStone, 0.65);
+    gInk = max(gInk, hline(top, 1.8, pw, 1.6) * lineK);
+    gInk = max(gInk, hline(top, 0.0, pw, 2.0));
+    // Dentils under the cornice.
+    if (top > 1.15 && top < 1.5) { float dn = fract(u / 0.55); col = mix(col, col * 0.62, step(0.5, dn) * lineK); }
+    gInk = max(gInk, hline(top, 1.15, pw, 1.0) * lineK);
+    return col;
+  }
+  // Street level: shopfronts with awnings.
+  if (streetLevel && v - y0 < 4.6) {
+    float sv = v - y0;
+    float bay = 6.0;
+    float fx = fract((u - u0) / bay);
+    vec2 lo = vec2(0.08, 0.5), hi = vec2(0.92, 3.3);
+    vec2 q = vec2(fx, sv / 1.0);
+    if (fx > lo.x && fx < hi.x && sv > lo.y && sv < hi.y) {
+      col = glassColor(vec2(floor((u - u0) / bay), 99.0), seed, u, v);
+      gGlass = max(gGlass, step(fract((u * 0.8 + sv) / 3.0), 0.12) * 0.5);
+    }
+    // Awning stripe over each shop.
+    if (sv > 3.4 && sv < 4.2) col = mix(uAwning, uStone, step(0.5, fract(u / 0.8)) * 0.25);
+    gInk = max(gInk, hline(sv, 4.2, pw, 1.8) * lineK);
+    gInk = max(gInk, hline(sv, 3.4, pw, 1.4) * lineK);
+    gInk = max(gInk, frame(vec2(fx * bay, sv), lo * vec2(bay, 1.0), hi * vec2(bay, 1.0), pw, 1.4) * lineK);
+    return col;
+  }
+  // Corner pilasters.
+  float pil = 1.1;
+  if (du < pil) {
+    col = base * 0.9;
+    gInk = max(gInk, hline(du, pil, pw, 1.2) * lineK);
+    return col;
+  }
+
+  // Windows in bays and floors.
+  float floorH = style < 0.5 ? 3.3 : style < 1.5 ? 3.8 : style < 3.5 ? 3.6 : 4.2;
+  float bayW = style < 0.5 ? 2.8 : style < 1.5 ? 3.2 : style < 3.5 ? 6.0 : 1.8;
+  float vStart = streetLevel ? y0 + 4.6 : y0;
+  vec2 cellP = vec2(u - u0 - pil, v - vStart);
+  vec2 g = cellP / vec2(bayW, floorH);
   vec2 f = fract(g), id = floor(g);
-  float win = step(m.x, f.x) * step(f.x, 1.0 - m.x) * step(m.y, f.y) * step(f.y, 1.0 - m.y);
-  // Ground floor: shopfronts, big dark glass.
-  if (v < 4.2) { win = step(0.08, fract(u / 7.0)) * step(fract(u / 7.0), 0.92) * step(0.6, v) * step(v, 3.6); }
-  // Far away the grid is finer than a pixel and shimmers: blend toward its average coverage.
+  vec2 wlo, whi;
+  if (style > 2.5 && style < 3.5) { wlo = vec2(0.02, 0.32); whi = vec2(0.98, 0.78); }      // ribbon windows
+  else if (style > 6.5) { wlo = vec2(0.3, 0.1); whi = vec2(0.7, 0.86); }                  // deco: narrow, tall
+  else if (style > 0.5) { wlo = vec2(0.24, 0.2); whi = vec2(0.76, 0.84); }                // sandstone: tall
+  else { wlo = vec2(0.22, 0.26); whi = vec2(0.78, 0.8); }                                 // brick
+  vec2 fp = f * vec2(bayW, floorH);
+  vec2 lo = wlo * vec2(bayW, floorH), hi = whi * vec2(bayW, floorH);
+  float inWin = inside(fp, lo, hi);
+  if (inWin > 0.5) {
+    col = glassColor(id, seed, u, v);
+    // A diagonal highlight in the top corner of each pane.
+    float s = (fp.x - lo.x) + (hi.y - fp.y);
+    gGlass = max(gGlass, step(0.25, s) * step(s, 0.55) * 0.45 * lineK);
+  } else {
+    // Deco piers: vertical ribs between the window columns.
+    if (style > 6.5) col = mix(base, base * 1.12, step(0.86, f.x) + step(f.x, 0.14));
+    // Brick coursing, up close only.
+    if (style < 0.5) col = mix(col, col * 0.82, (1.0 - smoothstep(0.0, fwidth(v / 0.3) * 1.2, min(fract(v / 0.3), 1.0 - fract(v / 0.3)))) * gNear * 0.6);
+    // Sill under each window.
+    if (fp.y < lo.y && fp.y > lo.y - 0.22 && fp.x > lo.x - 0.1 && fp.x < hi.x + 0.1) col = mix(col, uStone, 0.75);
+  }
+  gInk = max(gInk, frame(fp, lo, hi, pw, 1.3) * lineK);
+  // A floor ledge line every floor for masonry.
+  if (style < 1.5) gInk = max(gInk, hline(fp.y, 0.0, pw, 1.0) * lineK * 0.7);
+  // Far away, the window grid is finer than a pixel: blend it to its average.
   vec2 fw = fwidth(g);
-  win = mix(win, (1.0 - 2.0 * m.x) * (1.0 - 2.0 * m.y) * 0.8, smoothstep(0.22, 0.55, max(fw.x, fw.y)));
-  float r = h21(id + seed * 13.1 + (xFace ? 7.0 : 0.0));
-  vec3 glass = mix(uWinDark, uWinDark * 1.9 + vec3(0.06, 0.1, 0.16), step(0.72, r) * (1.0 - uNight));
-  vec3 lit = uWinLit * (0.75 + 0.25 * r);
-  vec3 w = mix(glass, lit, step(1.0 - uNight * 0.55, r) * uNight);
-  // A cornice band at the top floor of masonry styles.
-  return mix(base, w, win);
+  float far = smoothstep(0.22, 0.55, max(fw.x, fw.y));
+  float cover = (whi.x - wlo.x) * (whi.y - wlo.y);
+  col = mix(col, mix(base, uWinDark * 1.3, cover * 0.85), far);
+  return col;
 }
+
 `)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
   float style = floor(vStyle.x + 0.5), seed = floor(vStyle.y * 997.0 + 0.5) / 997.0;
   vec3 base = diffuseColor.rgb;
-  if (vWNrm.y > 0.5 && style < 8.5) base = uRoof * (0.85 + 0.3 * fract(seed * 7.3));
-  else if (abs(vWNrm.y) < 0.5) base = facade(base, style, seed);
+  if (vWNrm.y > 0.5 && style < 8.5) {
+    // Roof: tar paper with a few seams, the parapet edge inked.
+    base = uRoof * (0.85 + 0.3 * fract(seed * 7.3));
+    float pw = max(length(fwidth(vWPos.xz)), 1e-4);
+    vec2 r = vWPos.xz;
+    float seam = 1.0 - smoothstep(0.0, fwidth(r.x / 4.0) * 1.2, min(fract(r.x / 4.0), 1.0 - fract(r.x / 4.0)));
+    base = mix(base, base * 0.8, seam * 0.5);
+    float edge = min(min(vWPos.x - vBox.x, vBox.y - vWPos.x), min(vWPos.z - vBox.z, vBox.w - vWPos.z));
+    gInk = max(gInk, 1.0 - smoothstep(pw * 1.1, pw * 2.2, edge));
+  } else if (abs(vWNrm.y) < 0.5) base = facade(base, style, seed);
   diffuseColor.rgb = base;
-}`);
+}`)
+      .replace('#include <opaque_fragment>', `{
+  // Comic shading: three flat tones from the lighting, with cool hue-shifted shadows and a warm
+  // sunlit tone, cross-hatching in shadow up close, then ink and glass shine on top.
+  float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+  float alb = max(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), 1e-3);
+  float ratio = lum / alb;
+  float t1 = smoothstep(0.5, 0.56, ratio), t2 = smoothstep(0.86, 0.92, ratio);
+  vec3 shade = mix(vec3(0.42, 0.47, 0.72), vec3(0.78, 0.8, 0.9), t1);
+  shade = mix(shade, vec3(1.06, 1.02, 0.94), t2);
+  vec3 c = diffuseColor.rgb * shade;
+  if (ratio < 0.56 && gNear > 0.0) {
+    float hp = (vWPos.x + vWPos.z + vWPos.y * 0.7) / 0.5;
+    float hatch = 1.0 - smoothstep(0.0, fwidth(hp) * 1.4, min(fract(hp), 1.0 - fract(hp)));
+    c = mix(c, uInk, hatch * 0.3 * gNear);
+  }
+  c = mix(c, vec3(0.86, 0.93, 1.0), gGlass * (0.4 + 0.6 * t2));
+  c = mix(c, uWinLit, gEmit);
+  c = mix(c, uInk, clamp(gInk, 0.0, 1.0));
+  outgoingLight = c;
+}
+#include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v1';
+  mat.customProgramCacheKey = () => 'city-building-v2';
   return mat;
 }
 
-function pushBox(b, seed, arr) {
+function pushQuadBox(arr, b, style, seed, col, yBase, yTop, withBottom) {
   const [x0, y0, z0] = b.min, [x1, y1, z1] = b.max;
-  const col = new THREE.Color(STYLE_COLORS[b.style] ?? PALETTE.concrete);
-  // A little per-building variation, kept inside the style's family.
-  const j = 0.88 + 0.24 * ((seed * 0.618) % 1);
-  col.multiplyScalar(j);
   const faces = [
-    // normal, four corners (counter-clockwise seen from outside)
-    [[1, 0, 0], [x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1]],
-    [[-1, 0, 0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0]],
-    [[0, 0, 1], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]],
-    [[0, 0, -1], [x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0]],
-    [[0, 1, 0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0]],
+    // normal, four corners (counter-clockwise seen from outside), face u range
+    [[1, 0, 0], [x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], z0, z1],
+    [[-1, 0, 0], [x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], z0, z1],
+    [[0, 0, 1], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], x0, x1],
+    [[0, 0, -1], [x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], x0, x1],
+    [[0, 1, 0], [x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], 0, 0],
   ];
-  if (y0 > 0.5) faces.push([[0, -1, 0], [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1]]);
-  for (const [n, a, bb, c, d] of faces) {
+  if (withBottom) faces.push([[0, -1, 0], [x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], x0, x1]);
+  for (const [n, a, bb, c, d, u0, u1] of faces) {
+    // Roofs carry their x/z extents (for the inked parapet edge); walls their u range and the
+    // building's full height (for the cornice and the street level).
+    const box = n[1] > 0.5 ? [x0, x1, z0, z1] : [u0, u1, yBase, yTop];
     for (const v of [a, bb, c, a, c, d]) {
       arr.pos.push(v[0], v[1], v[2]);
       arr.nrm.push(n[0], n[1], n[2]);
       arr.col.push(col.r, col.g, col.b);
-      arr.sty.push(b.style, seed);
+      arr.sty.push(style, seed);
+      arr.box.push(box[0], box[1], box[2], box[3]);
     }
+  }
+}
+
+const MASONRY = new Set([0, 1, 3, 7]);
+function pushBox(b, seed, arr) {
+  const col = new THREE.Color(STYLE_COLORS[b.style] ?? PALETTE.concrete);
+  // A little per-building variation, kept inside the style's family.
+  const j = 0.88 + 0.24 * ((seed * 0.618) % 1);
+  col.multiplyScalar(j);
+  const [x0, y0, z0] = b.min, [x1, y1, z1] = b.max;
+  pushQuadBox(arr, b, b.style, seed, col, y0, y1, y0 > 0.5);
+  // Masonry gets a real cornice: a slab that juts out under the roof line (visual only; the
+  // collision box stays flush).
+  if (MASONRY.has(b.style) && y1 - y0 > 12 && b.kind === 'building') {
+    const out = 0.45;
+    const stone = new THREE.Color(PALETTE.limestone).multiplyScalar(0.95 * j);
+    pushQuadBox(arr, { min: [x0 - out, y1 - 0.9, z0 - out], max: [x1 + out, y1 - 0.1, z1 + out] }, 13, seed, stone, y1 - 0.9, y1 - 0.1, true);
   }
 }
 
@@ -115,7 +271,7 @@ export function buildCityMeshes(city, scene, quality) {
     if (b.style === 9) { towers.push(b); return; }
     const cx = (b.min[0] + b.max[0]) / 2, cz = (b.min[2] + b.max[2]) / 2;
     const k = `${Math.floor(cx / CHUNK)},${Math.floor(cz / CHUNK)}`;
-    if (!chunks.has(k)) chunks.set(k, { pos: [], nrm: [], col: [], sty: [] });
+    if (!chunks.has(k)) chunks.set(k, { pos: [], nrm: [], col: [], sty: [], box: [] });
     pushBox(b, (i * 0.137) % 1 + 0.01, chunks.get(k));
   });
   for (const arr of chunks.values()) {
@@ -124,6 +280,7 @@ export function buildCityMeshes(city, scene, quality) {
     geo.setAttribute('normal', new THREE.Float32BufferAttribute(arr.nrm, 3));
     geo.setAttribute('color', new THREE.Float32BufferAttribute(arr.col, 3));
     geo.setAttribute('aStyle', new THREE.Float32BufferAttribute(arr.sty, 2));
+    geo.setAttribute('aBox', new THREE.Float32BufferAttribute(arr.box, 4));
     geo.computeBoundingSphere();
     const mesh = new THREE.Mesh(geo, mat);
     mesh.castShadow = quality.shadows;
