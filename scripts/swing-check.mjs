@@ -138,6 +138,14 @@ if (ledge) {
 }
 check('flying a little low at a roof edge mantles onto the roof', mantleOk, mantleDetail);
 
+// D4. Air trick on R.
+await teleport(0, 60, -330, 0, 4, 18);
+await sleep(100);
+await page.keyboard.press('KeyR');
+await sleep(120);
+const trk = await page.evaluate(() => window.__game.poser().trick);
+check('the trick key flips in the air', !!trk, trk ?? 'no trick');
+
 // E2. A skilled run down the avenue: aim each web, hold, let go on the rise, steer back toward
 // the centre line. Covers the length of Midtown without touching the street.
 await teleport(0, 45, -400, 0, 0, 18);

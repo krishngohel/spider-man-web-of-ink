@@ -86,9 +86,10 @@ export function createPoser(heroModel) {
   }
   function startTrick(kind, hero) {
     const v = hero.body.v, sp = Math.hypot(v.x, v.y, v.z);
-    if (sp < 14 && kind !== 'swingJump') { trick = null; return; }
+    if (sp < 14 && kind !== 'swingJump' && kind !== 'trick') { trick = null; return; }
     let name;
-    if (kind === 'swingJump') name = v.y > 4 ? 'backflip' : 'frontflip';
+    if (kind === 'trick') name = ['frontflip', 'backflip', 'sideflip', 'spin', 'doubleflip'][trickN++ % 5];
+    else if (kind === 'swingJump') name = v.y > 4 ? 'backflip' : 'frontflip';
     else if (kind === 'perfect') name = sp > 30 ? 'doubleflip' : 'frontflip';
     else {
       // Vary it, never the same one twice running, sometimes nothing.
@@ -138,7 +139,7 @@ export function createPoser(heroModel) {
 
       for (const e of events) {
         if (e.type === 'thwip') { webSide = sideOf(hero, e.x, e.z); shot = { t: 0, x: e.x, y: e.y, z: e.z }; trick = null; }
-        else if (e.type === 'release' || e.type === 'perfect' || e.type === 'swingJump') startTrick(e.type, hero);
+        else if (e.type === 'release' || e.type === 'perfect' || e.type === 'swingJump' || e.type === 'trick') startTrick(e.type, hero);
         else if (e.type === 'launch') { trick = { def: TRICKS.frontflip, name: 'frontflip', t: 0 }; perchT = 0; }
         else if (e.type === 'vault') { trick = { def: TRICKS.sideflip, name: 'sideflip', t: 0 }; }
         else if (e.type === 'perch') perchT = 0.9;

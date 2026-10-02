@@ -47,6 +47,7 @@ export function emptyIntent() {
     jump: false, jumpPressed: false, jumpReleased: false,
     zipPressed: false, dive: false,
     hangPressed: false, climb: 0,
+    trickPressed: false,
   };
 }
 
@@ -81,6 +82,8 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     hangStill: 0,
     lastCorner: -10,
     mantleUntil: -1,
+    jumpHoldUntil: -1,
+    lastTrick: -10,
     mantleIn: { x: 0, z: 0, s: 0 },
     // Tests turn this on: a surface push with nothing to push against throws.
     strict: false,
@@ -94,7 +97,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       this.pendingWeb = null; this.zip = null;
       this.state = state;
       this.airTime = 0; this.ungrounded = 0; this.wallLost = 0;
-      this.launchUntil = -1; this.lastJumpPress = -10; this.shootNow = false; this.mantleUntil = -1;
+      this.launchUntil = -1; this.lastJumpPress = -10; this.shootNow = false; this.mantleUntil = -1; this.jumpHoldUntil = -1;
       this.contactAge = state === 'ground' || state === 'wall' ? 0 : 1;
     },
 
@@ -293,6 +296,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       if (hero.time <= hero.launchUntil) pointLaunch(intent);
       else {
         push(0, tune.jumpSpeed - Math.max(0, v.y), 0, 'jump');
+        hero.jumpHoldUntil = hero.time + tune.jumpHold;
         emit('jump');
       }
       hero.state = 'air';
@@ -324,6 +328,10 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   function airStep(intent, dt) {
     hero.airTime += dt;
     airForces(intent, dt);
+    // Holding jump just after take-off carries the jump higher (a tap is still a jump at once).
+    if (intent.jump && hero.time < hero.jumpHoldUntil && body.v.y > 0) applyDv(body, 'assist', 0, g() * tune.jumpHoldLift * dt, 0);
+    else if (!intent.jump) hero.jumpHoldUntil = -1;
+    if (intent.trickPressed && hero.time - hero.lastTrick > 0.5) { hero.lastTrick = hero.time; emit('trick'); }
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
     // A fresh press re-aims, even with a web still in flight; a held button never refires.
     if (intent.swingPressed) { hero.pendingWeb = null; shootWeb(intent); }

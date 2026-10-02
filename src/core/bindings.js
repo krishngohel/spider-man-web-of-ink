@@ -9,6 +9,7 @@ export const ACTIONS = [
   { id: 'zip', label: 'Web zip to where the camera points', group: 'Move' },
   { id: 'hang', label: 'Hang on the web (climb with forward and back), press again to let go', group: 'Move' },
   { id: 'dive', label: 'Dive (hold in the air)', group: 'Move' },
+  { id: 'trick', label: 'Air trick (flips and spins)', group: 'Move' },
   { id: 'help', label: 'Controls help', group: 'Other' },
   { id: 'pause', label: 'Pause and settings', group: 'Other' },
 ];
@@ -23,6 +24,7 @@ export const DEFAULT_BINDINGS = {
   zip: ['KeyQ'],
   hang: ['KeyE'],
   dive: ['KeyC'],
+  trick: ['KeyR'],
   help: ['KeyH'],
   pause: ['Escape', 'KeyP'],
 };
@@ -32,6 +34,7 @@ export const PAD = {
   jump: 0,      // A / Cross
   dive: 1,      // B / Circle
   hang: 3,      // Y / Triangle
+  trick: 2,     // X / Square
   zipHold: 6,   // LT / L2 (with RT: zip)
   swing: 7,     // RT / R2
   help: 8,      // Back / Share

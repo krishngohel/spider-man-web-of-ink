@@ -225,11 +225,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     intent.jumpReleased = !jump && consumedJump;
     intent.zipPressed = intent.zipPressed || input.pressed('zip');
     intent.hangPressed = intent.hangPressed || input.pressed('hang');
+    intent.trickPressed = intent.trickPressed || input.pressed('trick');
     intent.climb = input.move.y;
     intent.dive = input.down('dive');
   }
   const clearEdges = () => {
-    intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false; intent.hangPressed = false;
+    intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false; intent.hangPressed = false; intent.trickPressed = false;
     consumedSwing = intent.swing; consumedJump = intent.jump;
   };
   const resetIntent = () => { clearEdges(); intent.swing = false; intent.jump = false; consumedSwing = false; consumedJump = false; swingLatch = false; };

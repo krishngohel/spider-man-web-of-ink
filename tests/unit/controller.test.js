@@ -23,7 +23,7 @@ function run(hero, intent, seconds, each) {
   const n = Math.round(seconds / dt);
   for (let i = 0; i < n; i++) {
     hero.step(intent, dt);
-    intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false; intent.hangPressed = false;
+    intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false; intent.hangPressed = false; intent.trickPressed = false;
     if (each) each(i);
   }
 }
@@ -551,5 +551,40 @@ describe('feedback', () => {
     run(h, i, 0.5);
     expect(h.events.some((e) => e.type === 'miss')).toBe(false);
     expect(h.state).toBe('ground');
+  });
+});
+
+describe('jump height and tricks', () => {
+  function peak(hold) {
+    const w = createWorld();
+    w.addBox({ min: [-500, -1, -500], max: [500, 0, 500], kind: 'ground' });
+    w.build();
+    const h = createHero(w);
+    h.strict = true;
+    h.place(0, 0.9, 0, 0, 0, 0, 'ground');
+    const i = emptyIntent(); i.jumpPressed = true; i.jump = true;
+    let top = 0, n = 0;
+    run(h, i, 2, () => { n++; if (n === Math.round(hold / dt)) i.jump = false; top = Math.max(top, h.body.p.y); });
+    return top - 0.9;
+  }
+  it('a tap jumps the same instant; holding jump goes much higher', () => {
+    const tap = peak(dt), held = peak(1);
+    expect(tap).toBeGreaterThan(1.8);
+    expect(held / tap).toBeGreaterThan(1.6);
+    expect(held / tap).toBeLessThan(2.6);
+  });
+  it('the trick key flips in the air, not on the ground', () => {
+    const w = createWorld();
+    w.addBox({ min: [-500, -1, -500], max: [500, 0, 500], kind: 'ground' });
+    w.build();
+    const h = createHero(w);
+    h.place(0, 0.9, 0, 0, 0, 0, 'ground');
+    const i = emptyIntent(); i.trickPressed = true;
+    run(h, i, dt);
+    expect(h.events.some((e) => e.type === 'trick')).toBe(false);
+    h.place(0, 40, 0, 0, 0, 20);
+    i.trickPressed = true;
+    run(h, i, dt);
+    expect(h.events.some((e) => e.type === 'trick')).toBe(true);
   });
 });

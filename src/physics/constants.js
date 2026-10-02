@@ -69,6 +69,8 @@ export const DEFAULTS = {
   groundAccel: 40,
   rollDecel: 15,
   jumpSpeed: 9.5,
+  jumpHold: 0.32,          // s: holding jump this long after take-off carries the hero higher
+  jumpHoldLift: 0.8,       // share of gravity held off while it does
   wallFriction: 12,
   wallRunSpeed: 9,
   wallCrawlSpeed: 3,
