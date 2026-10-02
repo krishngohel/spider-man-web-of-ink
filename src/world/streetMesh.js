@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { toonGradient } from '../render/toon.js';
+import { comicToon } from '../render/comicShade.js';
 import { PALETTE } from '../render/palette.js';
 
 // Draws the street furniture as a handful of instanced meshes (one draw call each): lamp posts,
@@ -86,7 +86,7 @@ function hydrantGeometry() {
 export function buildStreetMeshes(props, scene, quality) {
   const group = new THREE.Group();
   group.name = 'street';
-  const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() });
+  const mat = comicToon({ vertexColors: true });
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
   const add = (geo, list, place, colorOf, shadows = false) => {
     if (!list.length) return;

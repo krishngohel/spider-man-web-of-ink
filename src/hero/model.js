@@ -3,6 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { toonGradient } from '../render/toon.js';
 import { PALETTE } from '../render/palette.js';
+import { COMIC_SHADE, SHADOW_ALPHA } from '../render/comicShade.js';
 
 // The hero: Quaternius's CC0 superhero body (T-pose, facing +z, 1.81 m) wearing a classic suit
 // painted by a shader from each fragment's bind-pose position: red head, chest, shoulders,
@@ -88,6 +89,7 @@ function suitMaterial(suit) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform vec3 uRed, uBlue, uBlack, uLens;
+${COMIC_SHADE}
 varying vec3 vBind;
 const float TAU = 6.2831853;
 float gLens = 0.0;
@@ -189,13 +191,9 @@ vec3 paintSuit(vec3 p) {
       // Comic shading for the hero: three flat tones (shadows lifted and cooled so the suit never
       // goes muddy), plus a rim light so the silhouette pops off the city behind.
       .replace('#include <opaque_fragment>', `{
-  float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
-  float alb = max(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), 1e-3);
-  float ratio = lum / alb;
-  float t1 = smoothstep(0.48, 0.55, ratio), t2 = smoothstep(0.84, 0.9, ratio);
-  vec3 shade = mix(vec3(0.55, 0.58, 0.82), vec3(0.82, 0.84, 0.94), t1);
-  shade = mix(shade, vec3(1.08, 1.03, 0.97), t2);
-  vec3 c = diffuseColor.rgb * shade;
+  // The hero's shadow is lighter than the city's, so the suit never sinks into the background.
+  vec3 c = comicShade(diffuseColor.rgb, outgoingLight, vec3(0.74, 0.64, 0.8), vec3(0.92, 0.9, 0.95), vec3(1.08, 1.03, 0.97));
+  gShadow *= 0.55; // light dots on the suit's shadow side, never a dark hatch
   float rim = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
   c += vec3(1.0, 0.95, 0.85) * rim * 0.28;
   outgoingLight = c;
@@ -203,10 +201,11 @@ vec3 paintSuit(vec3 p) {
 #include <opaque_fragment>`)
       // The lenses after lighting: bright white with a faint cool shade, never grey.
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+${SHADOW_ALPHA}
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, uLens * (0.92 + 0.08 * clamp(vBind.y * 6.0 - 9.9, 0.0, 1.0)), gLens);
 	if (gLens > 0.5) gl_FragColor.a = 0.0;`);
   };
-  mat.customProgramCacheKey = () => 'suit-v3';
+  mat.customProgramCacheKey = () => 'suit-v4';
   return mat;
 }
 

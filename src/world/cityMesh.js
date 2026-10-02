@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PALETTE } from '../render/palette.js';
 import { toonGradient } from '../render/toon.js';
 import { GRID } from './testCity.js';
+import { COMIC_SHADE, SHADOW_ALPHA, comicToon } from '../render/comicShade.js';
 
 // Draws the blockout city. Buildings are merged into one mesh per 240 m chunk (so frustum culling
 // still drops what's behind the camera) with one shared toon material; facade windows, storefronts
@@ -37,6 +38,7 @@ function buildingMaterial() {
       .replace('#include <common>', `#include <common>
 uniform float uNight;
 uniform vec3 uWinDark, uWinLit, uRoof, uInk, uStone, uAwning;
+${COMIC_SHADE}
 varying vec3 vWPos;
 varying vec3 vWNrm;
 // Flat: per-building values must not be interpolated (tiny interpolation error, amplified by the
@@ -96,13 +98,20 @@ vec3 facade(vec3 base, float style, float seed) {
     vec2 cell = vec2(1.6, 3.6);
     vec2 g = (p - vec2(u0, y0)) / cell;
     vec2 f = fract(g), id = floor(g);
-    col = glassColor(id, seed, u, v);
+    // Comic glass: one flat blue per tower, catching the sky toward the top; panes only differ
+    // at night, when some light up.
+    float hgt = clamp((v - y0) / max(y1 - y0, 1.0), 0.0, 1.0);
+    vec3 tint = uWinDark * (1.25 + 0.35 * fract(seed * 5.3)) + vec3(0.04, 0.07, 0.12);
+    col = mix(tint, tint * 1.45 + vec3(0.06, 0.08, 0.1), smoothstep(0.35, 1.0, hgt));
+    float r = h21(id + seed * 13.1);
+    gEmit = max(gEmit, step(1.0 - uNight * 0.55, r) * uNight);
+    col = mix(col, uWinLit * (0.75 + 0.25 * r), gEmit);
     // Mullions and floor slabs.
     float mull = max(1.0 - smoothstep(0.0, fwidth(g.x) * 1.5, min(f.x, 1.0 - f.x)), 1.0 - smoothstep(0.0, fwidth(g.y) * 2.5, min(f.y, 1.0 - f.y)));
-    col = mix(col, uInk * 1.6 + base * 0.2, mull * 0.8 * lineK);
-    // Big diagonal reflection bands across the whole wall (the comic "shine").
-    float band = fract((u * 0.8 + v * 0.55) / 22.0 + seed * 3.7);
-    gGlass = max(gGlass, (step(band, 0.1) + 0.55 * step(0.16, band) * step(band, 0.2)) * 0.55);
+    col = mix(col, col * 0.55, mull * 0.7 * lineK);
+    // Big diagonal reflection bands across the whole wall (the comic "shine"): one wide, one thin.
+    float band = fract((u * 0.8 + v * 0.55) / 26.0 + seed * 3.7);
+    gGlass = max(gGlass, (step(band, 0.09) + step(0.13, band) * step(band, 0.15)) * 0.8);
     gInk = max(gInk, hline(top, 0.0, pw, 2.0));
     return col;
   }
@@ -202,26 +211,16 @@ vec3 facade(vec3 base, float style, float seed) {
       .replace('#include <opaque_fragment>', `{
   // Comic shading: three flat tones from the lighting, with cool hue-shifted shadows and a warm
   // sunlit tone, cross-hatching in shadow up close, then ink and glass shine on top.
-  float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
-  float alb = max(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), 1e-3);
-  float ratio = lum / alb;
-  float t1 = smoothstep(0.5, 0.56, ratio), t2 = smoothstep(0.86, 0.92, ratio);
-  vec3 shade = mix(vec3(0.42, 0.47, 0.72), vec3(0.78, 0.8, 0.9), t1);
-  shade = mix(shade, vec3(1.06, 1.02, 0.94), t2);
-  vec3 c = diffuseColor.rgb * shade;
-  if (ratio < 0.56 && gNear > 0.0) {
-    float hp = (vWPos.x + vWPos.z + vWPos.y * 0.7) / 0.5;
-    float hatch = 1.0 - smoothstep(0.0, fwidth(hp) * 1.4, min(fract(hp), 1.0 - fract(hp)));
-    c = mix(c, uInk, hatch * 0.3 * gNear);
-  }
-  c = mix(c, vec3(0.86, 0.93, 1.0), gGlass * (0.4 + 0.6 * t2));
+  vec3 c = comicShade(diffuseColor.rgb, outgoingLight);
+  c = mix(c, vec3(0.9, 0.95, 1.0), gGlass * (1.0 - 0.55 * gShadow));
   c = mix(c, uWinLit, gEmit);
   c = mix(c, uInk, clamp(gInk, 0.0, 1.0));
   outgoingLight = c;
 }
-#include <opaque_fragment>`);
+#include <opaque_fragment>`)
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v2';
+  mat.customProgramCacheKey = () => 'city-building-v3';
   return mat;
 }
 
@@ -301,7 +300,7 @@ export function buildCityMeshes(city, scene, quality) {
   if (trunks.length) {
     const tg = new THREE.CylinderGeometry(0.35, 0.5, 1, 7);
     tg.translate(0, 0.5, 0);
-    const tm = new THREE.InstancedMesh(tg, new THREE.MeshToonMaterial({ color: PALETTE.trunk, gradientMap: toonGradient() }), trunks.length);
+    const tm = new THREE.InstancedMesh(tg, comicToon({ color: PALETTE.trunk }), trunks.length);
     trunks.forEach((b, i) => {
       p.set((b.min[0] + b.max[0]) / 2, b.min[1], (b.min[2] + b.max[2]) / 2);
       s.set(1, b.max[1] - b.min[1], 1);
@@ -310,7 +309,7 @@ export function buildCityMeshes(city, scene, quality) {
     tm.castShadow = quality.shadows;
     group.add(tm);
     const cg = new THREE.SphereGeometry(1, 14, 10);
-    const cm = new THREE.InstancedMesh(cg, new THREE.MeshToonMaterial({ color: PALETTE.leaves, gradientMap: toonGradient() }), crowns.length);
+    const cm = new THREE.InstancedMesh(cg, comicToon({ color: PALETTE.leaves }), crowns.length);
     crowns.forEach((b, i) => {
       p.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2 + 0.6, (b.min[2] + b.max[2]) / 2);
       const r = (b.max[0] - b.min[0]) * 0.62;
@@ -330,7 +329,7 @@ export function buildCityMeshes(city, scene, quality) {
       const leg = new THREE.BoxGeometry(0.3, 2.4, 0.3); leg.translate(lx, 1.2, lz); parts.push(leg);
     }
     const geo = mergeGeometries(parts);
-    const tm = new THREE.InstancedMesh(geo, new THREE.MeshToonMaterial({ color: PALETTE.waterTower, gradientMap: toonGradient() }), towers.length);
+    const tm = new THREE.InstancedMesh(geo, comicToon({ color: PALETTE.waterTower }), towers.length);
     towers.forEach((b, i) => {
       p.set((b.min[0] + b.max[0]) / 2, b.min[1], (b.min[2] + b.max[2]) / 2);
       s.set(1, 1, 1);
@@ -387,7 +386,7 @@ uniform vec4 uGrid, uBounds;
 uniform float uWaterZ;
 varying vec3 vWPos;
 float band(float x, float a, float b) { return step(a, x) * step(x, b); }
-`)
+${COMIC_SHADE}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
   vec2 w = vWPos.xz;
@@ -459,18 +458,13 @@ float band(float x, float a, float b) { return step(a, x) * step(x, b); }
   diffuseColor.rgb = col;
 }`)
       .replace('#include <opaque_fragment>', `{
-  // Comic shading (shared look with the buildings): three flat tones with cool shadows.
-  float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
-  float alb = max(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), 1e-3);
-  float ratio = lum / alb;
-  float t1 = smoothstep(0.5, 0.56, ratio), t2 = smoothstep(0.86, 0.92, ratio);
-  vec3 shade = mix(vec3(0.42, 0.47, 0.72), vec3(0.78, 0.8, 0.9), t1);
-  shade = mix(shade, vec3(1.06, 1.02, 0.94), t2);
-  outgoingLight = mix(diffuseColor.rgb * shade, uInkG, gInkG);
+  // Comic shading, shared with the buildings.
+  outgoingLight = mix(comicShade(diffuseColor.rgb, outgoingLight), uInkG, gInkG);
 }
-#include <opaque_fragment>`);
+#include <opaque_fragment>`)
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-ground-v2';
+  mat.customProgramCacheKey = () => 'city-ground-v3';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';

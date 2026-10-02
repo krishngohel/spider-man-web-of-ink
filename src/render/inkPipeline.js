@@ -89,7 +89,10 @@ void main() {
   float edge = max(depthEdge, normalEdge) * (1.0 - smoothstep(70.0, 180.0, dc));
 
   // Colour, with a hair of print misregistration.
-  vec3 col = texture2D(tColor, vUv).rgb;
+  vec4 raw0 = texture2D(tColor, vUv);
+  vec3 col = raw0.rgb;
+  // How deep in shadow the material says this pixel is (its alpha; see render/comicShade.js).
+  float shadowK = raw0.a >= 0.5 ? clamp((1.0 - raw0.a) / 0.45, 0.0, 1.0) : 0.0;
   if (uMisreg > 0.0) {
     vec2 o = uTexel * 1.1 * uMisreg;
     col.r = mix(col.r, texture2D(tColor, vUv + vec2(o.x, o.y * 0.5)).r, 0.6);
@@ -109,17 +112,22 @@ void main() {
   bool sky = dc > uFar * 0.9;
   float nearK = 1.0 - smoothstep(25.0, 80.0, dc);
   // Shadows: cross-hatching up close, Ben-Day dots further out (never both at full strength).
-  float hatchZone = smoothstep(0.2, 0.1, L) * nearK * uHatch;
-  float r = (0.3 * smoothstep(0.24, 0.15, L) + 0.12 * smoothstep(0.1, 0.04, L)) * (1.0 - smoothstep(60.0, 150.0, dc)) * uHalftoneAmount * (1.0 - hatchZone * 0.8);
+  // Driven by the material's own shadow shape, plus anything simply very dark.
+  float nearH = 1.0 - smoothstep(9.0, 24.0, dc);
+  float hatchZone = max(smoothstep(0.2, 0.1, L) * nearK, smoothstep(0.45, 0.9, shadowK) * nearH) * uHatch;
+  float rDark = (0.3 * smoothstep(0.24, 0.15, L) + 0.12 * smoothstep(0.1, 0.04, L)) * (1.0 - smoothstep(60.0, 150.0, dc));
+  float rShade = 0.26 * smoothstep(0.3, 0.8, shadowK) * (1.0 - smoothstep(110.0, 300.0, dc));
+  float r = max(rDark, rShade) * uHalftoneAmount * (1.0 - hatchZone * 0.8);
   float dotMask = 1.0 - smoothstep(r - 0.06, r + 0.06, length(fract(cell) - 0.5));
-  col = mix(col, uInk, dotMask * step(0.001, r) * 0.9);
+  // Dots are a deep shade of the surface's own colour, the way a colourist prints shadow.
+  col = mix(col, mix(col * 0.32, uInk, 0.45), dotMask * step(0.001, r) * 0.92);
   if (hatchZone > 0.0) {
     vec2 hp = frag + (uWobble > 0.0 ? vec2(vnoise(frag / 40.0 + floor(uTime * 8.0)) * 1.5, 0.0) : vec2(0.0));
     float s = uHalftone * 0.9;
     float h1 = 1.0 - smoothstep(0.12, 0.28, abs(fract((hp.x + hp.y) / s) - 0.5));
     float h2 = 1.0 - smoothstep(0.12, 0.28, abs(fract((hp.x - hp.y) / s) - 0.5));
     float hatch = max(h1, h2 * smoothstep(0.1, 0.05, L)) * hatchZone;
-    col = mix(col, uInk, hatch * 0.75);
+    col = mix(col, mix(col * 0.3, uInk, 0.6), hatch * 0.8);
   }
   // Mid tones: a light dot tint of the surface's own hue.
   float mid = smoothstep(0.18, 0.26, L) * (1.0 - smoothstep(0.42, 0.55, L)) * (1.0 - smoothstep(50.0, 120.0, dc)) * uMidDots;
@@ -186,11 +194,11 @@ void main() {
   }
   col *= 0.96 + 0.04 * hash(floor(frag / 2.0) + floor(uTime * 6.0));
   vec2 v = vUv - 0.5;
-  col *= 1.0 - 0.72 * dot(v, v);
+  col *= 1.0 - 0.36 * dot(v, v);
   // Pixels a material marked with alpha < 0.5 (Spider-Man's lenses) skip the ink: clean colour, only
   // the paper vignette.
   vec4 raw = texture2D(tColor, vUv);
-  if (raw.a < 0.5) col = raw.rgb * (1.0 - 0.72 * dot(v, v));
+  if (raw.a < 0.5) col = raw.rgb * (1.0 - 0.36 * dot(v, v));
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }
@@ -250,7 +258,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     const h = Math.max(1, Math.floor(height * pr));
     colorRT.setSize(w, h);
     normalRT.setSize(Math.max(1, Math.floor(w * quality.normalScale)), Math.max(1, Math.floor(h * quality.normalScale)));
-    uniforms.uTexel.value.set(1 / w, 1 / h).multiplyScalar(Math.max(1, pr * 0.75));
+    uniforms.uTexel.value.set(1 / w, 1 / h).multiplyScalar(Math.max(1.35, pr * 1.05)); // ink line weight
     uniforms.uHalftone.value = 7 * pr;
   }
 
