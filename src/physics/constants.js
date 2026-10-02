@@ -18,7 +18,7 @@ export const DEFAULTS = {
   maxSpeed: 110,
   // Web line.
   webMin: 6,
-  webMax: 70,
+  webMax: 75,
   webTravel: 0.06,
   ropeGive: 0.03,
   // How fast a slack line is hauled in (no load on it, so this is just how fast the arm pulls).
@@ -32,33 +32,20 @@ export const DEFAULTS = {
   zipSpeed: 34,
   zipTension: 30000,
   zipRange: 60,
-  // Swinging (Insomniac-style, spec 4.3 and 4.4). Line length grows with speed. Tuned with
-  // scripts/swing-tune.mjs toward ~140 km/h cruising with real rise and fall (2026-10-01).
-  swingLenBase: 24,
-  swingLenPerSpeed: 0.63,
-  swingLenMin: 16,
-  swingLenMax: 45,
-  swingStartAngle: 67,     // degrees behind the pivot at the start of a swing
-  altTarget: 42,           // working height over the ground that chained swings settle around
-  altGain: 0.15,            // start angle change (degrees) per metre above or below it
-  swingReach: 45,          // how far a building can be from the ideal pivot
-  swingTurn: 2.2,          // rad/s the swing plane turns toward the wanted heading
-  swingSideDamp: 7.2,        // 1/s, sideways velocity relative to the heading dies this fast
-  swingTerminal: 116,       // lighter drag on a swing than in a plain fall
-  cruiseSpeed: 40,         // the pump pushes toward this through the bottom of each arc
-  pumpAccel: 28.5,
-  pumpCone: 60,            // degrees either side of the bottom where the pump works
-  groundClear: 2.2,        // the bottom of an arc stays this far over the ground
-  releaseAngle: 25,        // auto release when holding: this far past the bottom, rising
-  releaseBoost: 7,
-  perfectMin: 25, perfectMax: 62,
-  perfectBoost: 7,
-  swingJumpFwd: 7,
-  swingJumpUp: 9,
-  chainDelay: 0.21,        // shortest flight between chained swings
-  chainApexVy: 3.1,          // fire the next web once rising slower than this
-  airTurn: 1.7,            // rad/s the velocity turns toward the wanted heading in the air
-  airAccel: 7,             // m/s^2 toward the wanted heading when slow in the air
+  // Swinging (Amazing Spider-Man style, spec 4.3 and 4.4): aimed webs on the real rope, plus
+  // light assists. All of these are live sliders in the dev panel.
+  cruiseSpeed: 30,         // the pump pushes toward this through the bottom of each arc
+  pumpAccel: 9,
+  pumpCone: 40,            // degrees either side of the bottom where the pump works
+  groundClear: 2.2,        // the line shortens so the bottom of an arc stays this far over the ground
+  releaseBoost: 1.5,       // letting go on the rise
+  perfectMin: 15, perfectMax: 55,
+  perfectBoost: 5,         // letting go inside the sweet window on the rise
+  swingJumpFwd: 6,
+  swingJumpUp: 8,
+  webSpeed: 600,           // m/s the web flies (on top of webTravel)
+  airTurn: 1.1,            // rad/s the velocity turns toward the stick in the air
+  airAccel: 6,             // m/s^2 toward the stick when slow in the air
   wallRunKeep: 0.85,       // share of speed kept turning a swing into a wall run
   wallRunFriction: 4,
   // Aerodynamics. Body lift is the skydiver's "tracking": a lean turns the velocity without

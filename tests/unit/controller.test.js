@@ -64,43 +64,70 @@ describe('hero on the ground', () => {
 });
 
 describe('swinging', () => {
+  // Mechanical energy per kg (a swing-jump may turn speed into height).
+  const energy = (h) => 0.5 * h.speed ** 2 + 19.62 * h.body.p.y;
+
+  // Points the crosshair from the hero's shoulder straight at a world point.
+  const aim = (i, h, x, y, z) => {
+    const cx = h.body.p.x, cy = h.body.p.y + 0.6, cz = h.body.p.z;
+    const dx = x - cx, dy = y - cy, dz = z - cz, l = Math.hypot(dx, dy, dz);
+    i.camPos = { x: cx, y: cy, z: cz };
+    i.camFwd = { x: dx / l, y: dy / l, z: dz / l };
+  };
+
+  it('the web sticks exactly where it was aimed and the hero swings on it', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(0, 40, 0, 0, 0, 20);
+    const i = emptyIntent();
+    aim(i, h, 15, 62, 30); // the east towers' west face
+    i.swing = true; i.swingPressed = true;
+    run(h, i, 0.3);
+    expect(h.state).toBe('swing');
+    expect(h.swing.R.x).toBeCloseTo(14.95, 1);
+    expect(h.swing.R.y).toBeCloseTo(62, 0);
+    expect(h.swing.R.z).toBeCloseTo(30, 0);
+  });
+  it('a miss is a miss: aiming at open sky fires nothing', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(0, 40, 0, 0, 0, 20);
+    const i = emptyIntent();
+    i.camPos = { x: 0, y: 41, z: -5 }; i.camFwd = { x: 0, y: 0.3, z: 0.954 };
+    i.swing = true; i.swingPressed = true;
+    let missed = false;
+    run(h, i, 0.4, () => { if (h.events.some((e) => e.type === 'miss')) missed = true; });
+    expect(h.state).toBe('air');
+    expect(h.pendingWeb).toBe(null);
+  });
   it('a swing carries forward after the release', () => {
     const w = city();
     const h = createHero(w);
     h.place(0, 40, 0, 0, 0, 20);
-    const i = emptyIntent(); i.swing = true; i.swingPressed = true;
+    const i = emptyIntent();
+    aim(i, h, 15, 62, 30);
+    i.swing = true; i.swingPressed = true;
     let attached = false;
     run(h, i, 1.2, () => { if (h.state === 'swing') attached = true; });
     expect(attached).toBe(true);
     i.swing = false; i.swingReleased = true;
     run(h, i, 0.05);
     expect(h.state).toBe('air');
-    expect(h.body.v.z).toBeGreaterThan(15);
+    expect(h.body.v.z).toBeGreaterThan(10);
   });
-  // Mechanical energy per kg: what the winch and the flick add (they may turn it into height
-  // rather than speed, so speed alone is the wrong measure).
-  const energy = (h) => 0.5 * h.speed ** 2 + 19.62 * h.body.p.y;
-
-  it('holding swing chains arcs and builds speed toward cruise speed', () => {
+  it('a new press while swinging lets go and fires at the new aim', () => {
     const w = city();
     const h = createHero(w);
-    h.place(0, 45, -150, 0, 0, 12);
-    const i = emptyIntent(); i.swing = true; i.swingPressed = true; i.moveZ = 1;
-    let swings = 0, last = '';
-    run(h, i, 6, () => { if (h.state === 'swing' && last !== 'swing') swings++; last = h.state; });
-    expect(swings).toBeGreaterThanOrEqual(3);
-    expect(h.speed).toBeGreaterThan(22);
-    expect(h.body.p.z).toBeGreaterThan(-150 + 100);
-    expect(h.body.p.y).toBeGreaterThan(3);
-  });
-  it('a swing keeps to its plane: no sideways yank toward the wall it is stuck to', () => {
-    const w = city();
-    const h = createHero(w);
-    h.place(0, 45, -150, 0, 0, 20);
-    const i = emptyIntent(); i.swing = true; i.swingPressed = true; i.moveZ = 1;
-    let maxSide = 0;
-    run(h, i, 1.5, () => { maxSide = Math.max(maxSide, Math.abs(h.body.p.x)); });
-    expect(maxSide).toBeLessThan(4);
+    h.place(0, 40, 0, 0, 0, 20);
+    const i = emptyIntent();
+    aim(i, h, 15, 62, 30);
+    i.swing = true; i.swingPressed = true;
+    run(h, i, 0.5);
+    aim(i, h, -15, 60, 50);
+    i.swingPressed = true;
+    run(h, i, 0.3);
+    expect(h.state).toBe('swing');
+    expect(h.swing.R.x).toBeLessThan(-14);
   });
   it('no air jumps: a jump press in mid-air adds no speed', () => {
     const w = city();
@@ -114,14 +141,16 @@ describe('swinging', () => {
     expect(h.speed).toBeLessThanOrEqual(before + 19.62 * dt + 1e-9);
     expect(h.state).toBe('glide');
   });
-  it('the release flick adds speed along the line', () => {
-    const go = (flick) => {
+  it('a swing-jump adds speed and lift', () => {
+    const go = (jump) => {
       const w = city();
       const h = createHero(w);
       h.place(0, 40, 0, 0, 0, 20);
-      const i = emptyIntent(); i.swing = true; i.swingPressed = true;
+      const i = emptyIntent();
+      aim(i, h, 15, 62, 30);
+      i.swing = true; i.swingPressed = true;
       run(h, i, 0.9);
-      if (flick) { i.jumpPressed = true; run(h, i, dt); }
+      if (jump) { i.jumpPressed = true; run(h, i, dt); }
       i.swing = false; i.swingReleased = true;
       run(h, i, 0.3);
       return energy(h);

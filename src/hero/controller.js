@@ -3,14 +3,14 @@ import { createBody, applyDv, placeBody } from '../physics/ledger.js';
 import { applyGravity, applyDrag, applyGlide, dragK } from '../physics/aero.js';
 import { createRope } from '../physics/rope.js';
 import { createSwing, releaseBoost, swingJump, airControl } from '../physics/swing.js';
-import { findSwingAnchor, findZipPoint } from '../physics/anchors.js';
+import { findAimPoint, findZipPoint } from '../physics/anchors.js';
 
 // The hero's movement, free of Three.js. One call to step() is one fixed physics step. States:
 //   ground  running, parkour (swing held), jumping, point launch after a zip
-//   air     falling, with air control; swing shoots a web (holding swing chains webs), a new jump
-//           press opens web wings
-//   swing   an Insomniac-style arc (physics/swing.js): steer, auto release at the sweet spot
-//           while held, perfect release by hand, jump for a swing-jump
+//   air     falling, with air control; a swing press shoots a web where the crosshair points
+//           (a miss is a miss), a new jump press opens web wings
+//   swing   a real pendulum about the aimed point (physics/swing.js): hold to hang on, let go to
+//           fly (perfect release on the rise), jump for a swing-jump
 //   zip     winching to a point on the real rope; arrival perches on a roof or sticks to a wall
 //   wall    on a facade: momentum from a swing carries into a wall run; crawl, run up (hold
 //           swing), jump off, vault over the top
@@ -28,7 +28,6 @@ const REACH = 1.6;
 // A surface push needs a contact this recent (one or two physics steps of slack, plus coyote time).
 const CONTACT_FRESH = 0.07;
 const ZIP_TIMEOUT = 3;
-const WEB_RETRY = 0.12;
 const WALL_ACCEL = 30;
 const RUN_UP_ACCEL = 60;
 const ADHESION = 0.5;
@@ -61,7 +60,6 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     wall: { nx: 0, nz: 0, box: null },
     facing: { x: 0, z: 1 },
     pendingWeb: null,
-    webRetry: 0,
     shootNow: false,
     lastJumpPress: -10,
     zip: null,
@@ -70,7 +68,6 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     diving: false,
     landing: null,
     contactAge: 0,
-    lastNoAnchor: -10,
     wallMomentum: false,
     // Tests turn this on: a surface push with nothing to push against throws.
     strict: false,
@@ -84,7 +81,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       this.pendingWeb = null; this.zip = null;
       this.state = state;
       this.airTime = 0; this.ungrounded = 0; this.wallLost = 0;
-      this.launchUntil = -1; this.webRetry = 0; this.lastJumpPress = -10; this.shootNow = false;
+      this.launchUntil = -1; this.lastJumpPress = -10; this.shootNow = false;
       this.contactAge = state === 'ground' || state === 'wall' ? 0 : 1;
     },
 
@@ -143,12 +140,12 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (c.wall) { touch.wall = true; touch.nx = c.nx; touch.nz = c.nz; touch.box = c.box; hero.contactAge = 0; }
   }
 
-  function airForces(intent, dt) {
+  function airForces(intent, dt, control = 1) {
     applyGravity(body, g(), dt);
     hero.diving = intent.dive && hero.state === 'air';
     applyDrag(body, dragK(g(), hero.diving ? tune.diveTerminal : tune.terminal), dt);
     const m = Math.hypot(intent.moveX, intent.moveZ);
-    if (m > 0.05) airControl(body, intent.moveX, intent.moveZ, m, dt);
+    if (m > 0.05) airControl(body, intent.moveX, intent.moveZ, m * control, dt);
   }
 
   function wantedHeading(intent) {
@@ -159,17 +156,14 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     return { x: hero.facing.x, z: hero.facing.z };
   }
 
+  // Fires a web where the crosshair points. Returns false on a miss.
   function shootWeb(intent) {
-    const h = wantedHeading(intent);
-    const a = findSwingAnchor(world, body, { dirX: h.x, dirZ: h.z, g: g() });
-    if (!a) {
-      hero.webRetry = WEB_RETRY;
-      // Holding swing with nothing to web retries every 0.12 s; tell the player twice a second.
-      if (hero.time - hero.lastNoAnchor > 0.6) { hero.lastNoAnchor = hero.time; emit('noAnchor'); }
-      return false;
-    }
-    hero.pendingWeb = { anchor: a, t: tune.webTravel };
-    emit('thwip', { x: a.x, y: a.y, z: a.z });
+    const cam = { x: intent.camPos.x, y: intent.camPos.y, z: intent.camPos.z, fx: intent.camFwd.x, fy: intent.camFwd.y, fz: intent.camFwd.z };
+    const hit = findAimPoint(world, body, cam);
+    if (!hit) { emit('miss'); return false; }
+    const t = tune.webTravel + hit.dist / tune.webSpeed;
+    hero.pendingWeb = { anchor: hit, t, travel: t };
+    emit('thwip', { x: hit.x, y: hit.y, z: hit.z });
     return true;
   }
 
@@ -251,6 +245,13 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       return;
     }
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
+    if (intent.swingPressed && shootWeb(intent)) {
+      // From the ground: jump and let the web catch.
+      push(0, tune.jumpSpeed - Math.max(0, v.y), 0, 'jump');
+      hero.state = 'air'; hero.airTime = 0;
+      move(dt);
+      return;
+    }
     move(dt);
     if (touch.wall && intent.swing && m > 0.3) {
       // Parkour into a wall: run up it.
@@ -266,19 +267,15 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   // Air ------------------------------------------------------------------------------------
   function airStep(intent, dt) {
     hero.airTime += dt;
-    hero.webRetry -= dt;
     airForces(intent, dt);
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
-    // Holding swing chains webs: the next one fires near the top of the flight.
-    const wantShot = intent.swingPressed || hero.shootNow || (intent.swing && hero.airTime > tune.chainDelay && body.v.y < tune.chainApexVy);
-    if (wantShot && !hero.pendingWeb && hero.webRetry <= 0) shootWeb(intent);
+    if ((intent.swingPressed || hero.shootNow) && !hero.pendingWeb) shootWeb(intent);
     hero.shootNow = false;
     if (hero.pendingWeb) {
       hero.pendingWeb.t -= dt;
       if (!intent.swing) hero.pendingWeb = null;
       else if (hero.pendingWeb.t <= 0) {
-        const a = hero.pendingWeb.anchor;
-        swing.attach(a, a.hx, a.hz);
+        swing.attach(hero.pendingWeb.anchor, body);
         hero.pendingWeb = null;
         hero.state = 'swing';
         emit('attach');
@@ -301,41 +298,33 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   // Swing ----------------------------------------------------------------------------------
   function swingStep(intent, dt) {
     hero.airTime += dt;
-    applyGravity(body, g(), dt);
-    applyDrag(body, dragK(g(), tune.swingTerminal), dt);
-    const m = Math.hypot(intent.moveX, intent.moveZ);
-    if (m > 0.05) swing.steer(body, intent.moveX, intent.moveZ, m, dt);
+    airForces(intent, dt, 0.5);
     const p = body.p, v = body.v;
-    swing.step(body, dt, world.groundHeight(p.x, p.y - 0.9, p.z));
+    swing.preStep(body, dt, world.groundHeight(p.x, p.y - 0.9, p.z));
     const before = hero.speed;
     move(dt);
+    swing.postStep(body, world);
     if (swingContacts(before)) return;
-    const ang = swing.angle(p);
     if (intent.jumpPressed) {
-      // Swing-jump: off the line with a big push forward and up.
+      // Swing-jump: off the line with a push forward and up.
       swing.release();
-      swingJump(body, swing.hx, swing.hz);
+      swingJump(body);
       toAir();
       emit('swingJump');
       return;
     }
     if (!intent.swing) {
-      // Let go by hand: a bigger boost inside the sweet window.
+      // Let go: a boost on the rise, a bigger one inside the sweet window.
+      const ang = swing.angle(p, v);
       const perfect = ang >= tune.perfectMin && ang <= tune.perfectMax && v.y > 0;
       swing.release();
-      if (ang > 0) releaseBoost(body, perfect);
+      if (ang > 0 && v.y > 0) releaseBoost(body, perfect);
       toAir();
       emit(perfect ? 'perfect' : 'release');
       return;
     }
-    // Holding: let go at the sweet spot, or when the arc has run out.
-    const spent = swing.t > 0.5 && v.y < -1 && ang > 5;
-    if ((ang >= tune.releaseAngle && v.y > 0) || spent || swing.t > 2.6) {
-      swing.release();
-      if (ang > 0) releaseBoost(body, false);
-      toAir();
-      emit('release');
-    }
+    // A new press while swinging re-aims: let go of this web and fire the next.
+    if (intent.swingPressed) { swing.release(); toAir(); hero.shootNow = true; }
   }
 
   function toAir() {
@@ -421,6 +410,13 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       return;
     }
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
+    if (intent.swingPressed && shootWeb(intent)) {
+      // Fire from the wall: kick off it and let the web catch.
+      push(nx * 3, 2 - Math.min(0, v.y), nz * 3, 'kick off for a web');
+      hero.state = 'air'; hero.airTime = 0.1; hero.wallMomentum = false;
+      move(dt);
+      return;
+    }
 
     const vn = v.x * nx + v.z * nz;
     if (hero.wallMomentum) {

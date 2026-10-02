@@ -1,12 +1,14 @@
-// Deterministic swing simulation in Node over the real test city: the same hero controller and
-// anchor search the game runs, driven by a bot that plays like a person holding swing (the
-// game chains the arcs), holding forward, and nudging away from walls. No browser, no latency, so
+// Deterministic swing simulation in Node over the real test city: the same hero controller the
+// game runs, driven by a bot that plays like a skilled player: it aims each web at the building
+// point that gives the best swing (the predictive anchor search), presses, holds, lets go on the
+// rise, and steers back toward its line. No browser, no latency, so
 // the numbers are reproducible and tuning changes can be compared exactly.
 //   node scripts/swing-sim.mjs [trials] [seconds] [gravity] [seed]
 import { buildTestCity } from '../src/world/testCity.js';
 import { createWorld } from '../src/physics/world.js';
 import { createHero, emptyIntent } from '../src/hero/controller.js';
-import { STEP } from '../src/physics/constants.js';
+import { STEP, G } from '../src/physics/constants.js';
+import { findAnchor } from '../src/physics/anchors.js';
 import { createRng } from '../src/core/rng.js';
 
 export function makeWorld() {
@@ -21,9 +23,10 @@ export const MIDTOWN = { minX: -235, maxX: 235, minZ: -415, maxZ: 115 };
 
 // One run: start mid-air heading along `heading` (0 = +z) and swing for `seconds` (or until the
 // hero leaves the course).
-export function runBot(world, { x, y, z, heading, speed = 18, seconds = 20, gravity = 'comic', bounds = MIDTOWN }) {
+// turn: { z, dir } swaps to a street heading east (dir 1) or west (-1) once the hero passes z.
+export function runBot(world, { x, y, z, heading, speed = 18, seconds = 20, gravity = 'comic', bounds = MIDTOWN, releaseAt = 25, turn = null }) {
   const hero = createHero(world, { gravity });
-  const hx = Math.sin(heading), hz = Math.cos(heading);
+  let hx = Math.sin(heading), hz = Math.cos(heading);
   hero.place(x, y, z, hx * speed, 0, hz * speed, 'air');
   const it = emptyIntent();
   it.camFwd = { x: hx, y: -0.15, z: hz };
@@ -31,26 +34,49 @@ export function runBot(world, { x, y, z, heading, speed = 18, seconds = 20, grav
   let sum = 0, sum2 = 0, n = 0, altSum = 0, arcLo = Infinity, arcHi = -Infinity;
   const arcs = [];
   const centre = { x, z };
+  let sinceRelease = 1, turned = false;
   const steps = Math.round(seconds / STEP);
   for (let i = 0; i < steps; i++) {
     const b = hero.body, v = b.v;
     if (bounds && (b.p.x < bounds.minX || b.p.x > bounds.maxX || b.p.z < bounds.minZ || b.p.z > bounds.maxZ)) break;
     t += STEP;
+    if (turn && !turned && b.p.z >= turn.z - 12) { turned = true; hx = turn.dir; hz = 0; centre.x = b.p.x; centre.z = turn.z; }
     // Hold forward, leaning back toward the start line when drifting off it.
     const off = (b.p.x - centre.x) * hz - (b.p.z - centre.z) * hx;
     const latV = v.x * hz - v.z * hx;
     const steer = Math.max(-0.8, Math.min(0.8, -off * 0.05 - latV * 0.04));
     it.moveX = hx + steer * hz; it.moveZ = hz - steer * hx;
     const ml = Math.hypot(it.moveX, it.moveZ); it.moveX /= ml; it.moveZ /= ml;
-    it.camPos = { x: b.p.x - hx * 5, y: b.p.y + 1.5, z: b.p.z - hz * 5 };
     const prevJump = it.jump, prevSwing = it.swing;
     if (hero.state === 'wall') {
       if (lastState !== 'wall') walls++;
-      it.swing = true; it.jump = !prevJump; // kick off the wall and keep swinging
+      it.swing = false; it.jump = !prevJump; // kick off the wall
     } else if (hero.state === 'ground') {
       grounded++;
-      it.swing = true; it.jump = !prevJump;
-    } else { it.swing = true; it.jump = false; }
+      it.swing = false; it.jump = !prevJump;
+    } else {
+      it.jump = false;
+      if (hero.state === 'swing') {
+        // Let go on the rise past the bottom, or early if the arc is carrying us into a wall.
+        const ang = hero.swing.angle(b.p, v);
+        const outward = Math.sign(off) * latV;
+        if ((ang > releaseAt && v.y > 0) || (Math.abs(off) > 8 && outward > 5) || hero.swing.t > 3) { it.swing = false; sinceRelease = 0; }
+      } else if (!hero.pendingWeb && !it.swing) {
+        sinceRelease += STEP;
+        // Aim like a skilled player: put the crosshair on the building point that gives the best
+        // swing toward where we want to go, then press.
+        if (sinceRelease > 0.15 && (v.y < 2 || b.p.y < 20)) {
+          const a = findAnchor(world, b, { dirX: it.moveX, dirZ: it.moveZ, assist: 'high', g: G[gravity] });
+          if (a) {
+            const cx = b.p.x, cy = b.p.y + 0.6, cz = b.p.z;
+            const dx = a.x - cx, dy = a.y - cy, dz = a.z - cz, l = Math.hypot(dx, dy, dz);
+            it.camPos = { x: cx, y: cy, z: cz };
+            it.camFwd = { x: dx / l, y: dy / l, z: dz / l };
+            it.swing = true;
+          }
+        }
+      }
+    }
     it.swingPressed = it.swing && !prevSwing; it.swingReleased = !it.swing && prevSwing;
     it.jumpPressed = it.jump && !prevJump; it.jumpReleased = !it.jump && prevJump;
     if (hero.state === 'swing' && lastState !== 'swing') {
@@ -77,7 +103,7 @@ export function runBot(world, { x, y, z, heading, speed = 18, seconds = 20, grav
   const sd = n ? Math.sqrt(Math.max(0, sum2 / n - mean * mean)) : 0;
   const per16 = 16 / Math.max(1, t);
   const arc = arcs.length ? arcs.reduce((a, c) => a + c, 0) / arcs.length : 0;
-  return { dist, avg: dist / Math.max(1, t), time: t, mean, sd, maxSpeed, minY, groundSteps: grounded, walls: walls * per16, swings: swings * per16, alt: n ? altSum / n : 0, arc };
+  return { hero, dist, avg: dist / Math.max(1, t), time: t, mean, sd, maxSpeed, minY, groundSteps: grounded, walls: walls * per16, swings: swings * per16, alt: n ? altSum / n : 0, arc };
 }
 
 // The standard battery: avenues heading north through Midtown, streets heading east.

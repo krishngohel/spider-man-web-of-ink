@@ -152,56 +152,37 @@ export function findZipPoint(world, hero, cam) {
   return null;
 }
 
-// Swing anchor (spec 4.3): the pivot goes where a good arc needs it, ahead of and above the hero
-// on his heading, and the strand sticks to the nearest real building at that height (rays from
-// the ideal pivot to both sides, ahead and diagonally ahead). No building in reach: fall back to
-// the raycast fan (park trees, odd spots), with the pivot moved into the heading's plane. Nothing
-// at all: null (open lawns and water can't be swung over).
-const SWING_RAY = { ground: false };
-export function findSwingAnchor(world, hero, { dirX = 0, dirZ = 1, g = 19.62 } = {}) {
-  const p = hero.p, v = hero.v;
-  const speed = Math.hypot(v.x, v.y, v.z);
-  const sh = Math.hypot(v.x, v.z);
-  let hx = dirX, hz = dirZ;
-  if (sh > 4) { hx += (v.x / sh) * 0.35; hz += (v.z / sh) * 0.35; }
-  const hl = Math.hypot(hx, hz) || 1;
-  hx /= hl; hz /= hl;
-  const L = Math.max(tune.swingLenMin, Math.min(tune.swingLenMax, tune.swingLenBase + tune.swingLenPerSpeed * speed));
-  // Altitude hold: above the working height the arc starts steeper and dips more, below it the
-  // arc is flatter, so a chain of swings settles around altTarget over the ground.
-  const floor0 = world.groundHeight(p.x, p.y - 0.9, p.z);
-  const alt = p.y - floor0;
-  const thDeg = Math.max(30, Math.min(80, tune.swingStartAngle + tune.altGain * (alt - tune.altTarget)));
-  const th = thDeg * DEG;
-  let px = p.x + hx * L * Math.sin(th), py = p.y + L * Math.cos(th), pz = p.z + hz * L * Math.sin(th);
-  // An ideal pivot inside a building: pull it back toward the hero to that building's face.
-  for (let i = 0; i < 12 && world.pointInside(px, py, pz); i++) { px -= hx * 2; pz -= hz * 2; }
-  const sx = -hz, sz = hx;
-  const dirs = [
-    [sx, sz], [-sx, -sz], [hx, hz],
-    [(hx + sx) * Math.SQRT1_2, (hz + sz) * Math.SQRT1_2], [(hx - sx) * Math.SQRT1_2, (hz - sz) * Math.SQRT1_2],
-  ];
-  let R = null;
-  for (let level = 0; level < 5 && !R; level++) {
-    const y = py - level * 6;
-    if (y < p.y + 4) break;
-    let best = null;
-    for (const [dx, dz] of dirs) {
-      const hit = world.raycast(px, y, pz, dx, 0, dz, tune.swingReach, SWING_RAY);
-      if (hit && hit.box && (!best || hit.t < best.t)) best = hit;
-    }
-    if (best) { R = best; py = y; }
+// Aimed web (spec 4.3): the web goes exactly where the crosshair points. The camera ray must hit a
+// building, tree or prop (not the street) within web range of the hero. A tiny cone (1.2 degrees)
+// forgives a pixel's miss on an edge; beyond that a miss is a miss.
+const AIM_RAY = { ground: false };
+const AIM_TOL = 1.2;
+function aimHit(world, hero, cam, fx, fy, fz) {
+  const toHero = Math.hypot(cam.x - hero.p.x, cam.y - hero.p.y, cam.z - hero.p.z);
+  const hit = world.raycast(cam.x, cam.y, cam.z, fx, fy, fz, tune.webMax + toHero + 2, AIM_RAY);
+  if (!hit || !hit.box) return null;
+  const d = Math.hypot(hit.x - hero.p.x, hit.y - (hero.p.y + 0.6), hit.z - hero.p.z);
+  if (d > tune.webMax || d < 3) return null;
+  hit.dist = d;
+  return hit;
+}
+export function findAimPoint(world, hero, cam) {
+  const direct = aimHit(world, hero, cam, cam.fx, cam.fy, cam.fz);
+  if (direct) return direct;
+  const f = [cam.fx, cam.fy, cam.fz];
+  const up = Math.abs(f[1]) > 0.95 ? [1, 0, 0] : [0, 1, 0];
+  let rx = up[1] * f[2] - up[2] * f[1], ry = up[2] * f[0] - up[0] * f[2], rz = up[0] * f[1] - up[1] * f[0];
+  const rl = Math.hypot(rx, ry, rz); rx /= rl; ry /= rl; rz /= rl;
+  const ux = f[1] * rz - f[2] * ry, uy = f[2] * rx - f[0] * rz, uz = f[0] * ry - f[1] * rx;
+  const t = Math.tan(AIM_TOL * DEG);
+  for (let k = 0; k < 8; k++) {
+    const a = (k / 8) * Math.PI * 2;
+    let dx = f[0] + (rx * Math.cos(a) + ux * Math.sin(a)) * t;
+    let dy = f[1] + (ry * Math.cos(a) + uy * Math.sin(a)) * t;
+    let dz = f[2] + (rz * Math.cos(a) + uz * Math.sin(a)) * t;
+    const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
+    const hit = aimHit(world, hero, cam, dx, dy, dz);
+    if (hit) return hit;
   }
-  if (!R) {
-    const a = findAnchor(world, hero, { dirX: hx, dirZ: hz, assist: 'high', g });
-    if (!a) return null;
-    R = a;
-    // Into the heading's plane, at the strand's height.
-    const off = (a.x - p.x) * sx + (a.z - p.z) * sz;
-    px = a.x - sx * off; pz = a.z - sz * off; py = a.y;
-  }
-  const floor = world.groundHeight(p.x, p.y - 0.9, p.z);
-  if (py - floor - tune.groundClear < 5) return null;
-  const len = Math.hypot(px - p.x, py - p.y, pz - p.z);
-  return { P: { x: px, y: py, z: pz }, R: { x: R.x, y: R.y, z: R.z }, L: len, hx, hz, x: R.x, y: R.y, z: R.z };
+  return null;
 }
