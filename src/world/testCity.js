@@ -51,6 +51,7 @@ export function buildTestCity() {
 
   for (const d of DISTRICTS) {
     const rng = createRng(d.seed);
+    d.clutterRng = createRng(d.seed * 7919 + 13);
     const mine = allBlocks.filter((b) => districtAt(b.cx, b.cz) === d);
     if (d.id === 'park') { buildPark(d, mine, rng, add); continue; }
     for (const b of mine) {
@@ -97,7 +98,30 @@ function buildBlock(b, d, rng, add) {
   }
 }
 
+// Rooftop clutter: a stair bulkhead, air-conditioning units, a vent stack, sometimes an antenna.
+// Drawn from the district's clutter generator (not the building one), so adding clutter never moves
+// a building.
+function roofClutter(x0, x1, z0, z1, h, d, add) {
+  const rng = d.clutterRng;
+  if (x1 - x0 < 8 || z1 - z0 < 8) return;
+  const pick = (a, b) => rng.range(a, b);
+  // Stair bulkhead near a corner.
+  if (rng.chance(0.75)) {
+    const cx = rng.chance(0.5) ? x0 + 2.8 : x1 - 2.8, cz = rng.chance(0.5) ? z0 + 2.8 : z1 - 2.8;
+    add([cx - 1.6, h, cz - 1.6], [cx + 1.6, h + 2.6, cz + 1.6], 'prop', d.id, 15);
+  }
+  // Air-conditioning units in a row.
+  const n = rng.int(1, 3);
+  const ax = pick(x0 + 3, x1 - 5), az = pick(z0 + 3, z1 - 3);
+  for (let i = 0; i < n; i++) add([ax + i * 2.2, h, az - 0.7], [ax + i * 2.2 + 1.6, h + 1.3, az + 0.7], 'prop', d.id, 14);
+  // A vent stack.
+  if (rng.chance(0.6)) { const vx = pick(x0 + 2, x1 - 2), vz = pick(z0 + 2, z1 - 2); add([vx - 0.35, h, vz - 0.35], [vx + 0.35, h + 1.8, vz + 0.35], 'prop', d.id, 14); }
+  // A thin antenna on the taller ones.
+  if (h > 80 && rng.chance(0.45)) { const tx = pick(x0 + 3, x1 - 3), tz = pick(z0 + 3, z1 - 3); add([tx - 0.12, h, tz - 0.12], [tx + 0.12, h + rng.range(8, 16), tz + 0.12], 'prop', d.id, 16); }
+}
+
 function roofProp(x0, x1, z0, z1, h, d, rng, add) {
+  roofClutter(x0, x1, z0, z1, h, d, add);
   if (!rng.chance(d.roofProps) || x1 - x0 < 10 || z1 - z0 < 10) return;
   // A water tower: a tank on a short stand (one box keeps the collision simple).
   const cx = rng.range(x0 + 4, x1 - 4), cz = rng.range(z0 + 4, z1 - 4);

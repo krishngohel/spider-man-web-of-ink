@@ -13,6 +13,7 @@ const CHUNK = 240;
 const STYLE_COLORS = {
   0: PALETTE.brick, 1: PALETTE.sandstone, 2: PALETTE.glass, 3: PALETTE.concrete,
   7: PALETTE.limestone, 8: PALETTE.deco, 10: PALETTE.crane, 13: PALETTE.limestone,
+  14: PALETTE.metal, 15: PALETTE.bulkhead, 16: PALETTE.metal,
 };
 
 const shared = { night: { value: 0 } };
@@ -83,6 +84,12 @@ vec3 facade(vec3 base, float style, float seed) {
 
   // Building edges: a strong ink line down each corner and along the roof line.
   gInk = max(gInk, hline(du, 0.0, pw, 2.2));
+  // Props, cranes and cornice slabs: flat colour, inked edges, nothing else.
+  if (style > 8.5) {
+    gInk = max(gInk, hline(top, 0.0, pw, 1.8));
+    if (style > 13.5 && style < 14.5) col = mix(base, base * 0.75, step(0.5, fract(v / 0.25)) * gNear * 0.5); // AC grille
+    return col;
+  }
 
   // Glass curtain wall.
   if (style > 1.5 && style < 2.5) {
@@ -366,13 +373,16 @@ function buildGround(city) {
       uGrid: { value: new THREE.Vector4(GRID.minX, GRID.minZ, GRID.avenueEvery, GRID.streetEvery) },
       uBounds: { value: new THREE.Vector4(GRID.minX, GRID.minZ, GRID.maxX, GRID.maxZ) },
       uWaterZ: { value: city.waterZ },
+      uInkG: { value: c(PALETTE.ink) },
     });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform vec3 uAsphalt, uSidewalk, uLane, uCross, uGrass, uGrassDark, uPath, uWater, uPier;
+uniform vec3 uAsphalt, uSidewalk, uLane, uCross, uGrass, uGrassDark, uPath, uWater, uPier, uInkG;
+float gInkG = 0.0;
+float inkAt(float d, float pw, float px) { return 1.0 - smoothstep(pw * px * 0.5, pw * (px * 0.5 + 1.0), abs(d)); }
 uniform vec4 uGrid, uBounds;
 uniform float uWaterZ;
 varying vec3 vWPos;
@@ -382,15 +392,25 @@ float band(float x, float a, float b) { return step(a, x) * step(x, b); }
 {
   vec2 w = vWPos.xz;
   vec3 col;
+  float pw = max(length(fwidth(w)), 1e-4);
+  float near = 1.0 - smoothstep(0.04, 0.2, pw);
   bool outside = w.x < uBounds.x - 30.0 || w.x > uBounds.z + 30.0 || w.y < uBounds.y - 30.0 || w.y > uBounds.w + 30.0;
   bool harborWater = w.y > uWaterZ + 6.0 && w.x > -240.0;
   bool park = w.x > 240.0 && w.y < 120.0 && w.x < uBounds.z + 30.0 && w.y > uBounds.y - 30.0;
   if (outside || harborWater) {
-    float ripple = sin(w.x * 0.35 + w.y * 0.12) * sin(w.y * 0.31 - w.x * 0.07);
-    col = uWater * (0.92 + 0.08 * step(0.6, ripple));
+    // Comic water: flat blue with rows of little inked wave strokes.
+    col = uWater;
+    vec2 q = vec2(w.x / 7.0 + floor(w.y / 4.0) * 0.5, w.y / 4.0);
+    vec2 f = fract(q);
+    float wave = abs(f.y - 0.5 - 0.12 * sin(f.x * 6.2831)) * 4.0;
+    float stroke = (1.0 - smoothstep(0.08, 0.2, wave)) * step(0.25, f.x) * step(f.x, 0.75);
+    col = mix(col, col * 1.35 + vec3(0.05, 0.08, 0.1), stroke * (0.5 + 0.5 * near));
   } else if (park) {
     float paths = max(band(abs(sin(w.x * 0.021 + sin(w.y * 0.013) * 1.4)), 0.0, 0.035), band(abs(sin(w.y * 0.017 + cos(w.x * 0.011))), 0.0, 0.03));
     col = mix(mix(uGrass, uGrassDark, step(0.55, fract(sin(dot(floor(w / 9.0), vec2(12.9, 78.2))) * 43758.5))), uPath, paths);
+    // Grass strokes up close.
+    float gs = fract((w.x * 0.9 + w.y * 0.4) / 0.9);
+    col = mix(col, col * 0.8, step(0.85, gs) * step(0.5, fract(w.y / 1.3 + w.x * 0.05)) * near * 0.7);
   } else {
     float ax = mod(w.x - uGrid.x, uGrid.z);
     float sz = mod(w.y - uGrid.y, uGrid.w);
@@ -410,16 +430,47 @@ float band(float x, float a, float b) { return step(a, x) * step(x, b); }
         if (da > 12.0 && da < 15.0 && fract(w.y / 1.4) < 0.5) col = uCross;
       }
       if (w.y > uWaterZ - 2.0 && w.y < uWaterZ + 6.0 && w.x > -240.0) col = uPier;
+      // Worn asphalt: darker patches and tyre tracks.
+      float wear = fract(sin(dot(floor(w / 5.0), vec2(12.9, 78.2))) * 43758.5);
+      col *= 0.94 + 0.08 * step(0.7, wear);
+      // Manholes down the avenues.
+      if (avenue && !street) {
+        vec2 mh = vec2(da - 7.0, mod(w.y, 37.0) - 18.5);
+        float r = length(mh);
+        col = mix(col, col * 0.7, 1.0 - smoothstep(0.55, 0.6, r));
+        gInkG = max(gInkG, inkAt(r - 0.6, pw, 1.2) * near);
+      }
+      // The curb: an ink line where the road meets the sidewalk.
+      if (avenue) gInkG = max(gInkG, inkAt(da - 15.0, pw, 1.6));
+      if (street) gInkG = max(gInkG, inkAt(ds - 9.0, pw, 1.6));
     } else if (walkA || walkS) {
-      col = uSidewalk * (0.94 + 0.06 * step(0.5, fract(w.x / 2.0 + floor(w.y / 2.0) * 0.5)));
+      col = uSidewalk;
+      // Paving slabs with inked joints, and the curb line.
+      vec2 sl = w / 1.6;
+      float joint = max(inkAt(fract(sl.x + 0.5) - 0.5, pw / 1.6, 1.0), inkAt(fract(sl.y + 0.5) - 0.5, pw / 1.6, 1.0));
+      gInkG = max(gInkG, joint * 0.35 * near);
+      float da2 = min(ax, uGrid.z - ax), ds2 = min(sz, uGrid.w - sz);
+      if (walkA) gInkG = max(gInkG, inkAt(da2 - 15.0, pw, 1.6));
+      if (walkS) gInkG = max(gInkG, inkAt(ds2 - 9.0, pw, 1.6));
     } else {
       col = uSidewalk * 0.9;
     }
   }
   diffuseColor.rgb = col;
-}`);
+}`)
+      .replace('#include <opaque_fragment>', `{
+  // Comic shading (shared look with the buildings): three flat tones with cool shadows.
+  float lum = dot(outgoingLight, vec3(0.299, 0.587, 0.114));
+  float alb = max(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114)), 1e-3);
+  float ratio = lum / alb;
+  float t1 = smoothstep(0.5, 0.56, ratio), t2 = smoothstep(0.86, 0.92, ratio);
+  vec3 shade = mix(vec3(0.42, 0.47, 0.72), vec3(0.78, 0.8, 0.9), t1);
+  shade = mix(shade, vec3(1.06, 1.02, 0.94), t2);
+  outgoingLight = mix(diffuseColor.rgb * shade, uInkG, gInkG);
+}
+#include <opaque_fragment>`);
   };
-  mat.customProgramCacheKey = () => 'city-ground-v1';
+  mat.customProgramCacheKey = () => 'city-ground-v2';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';
