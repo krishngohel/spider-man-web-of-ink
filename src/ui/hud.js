@@ -22,10 +22,14 @@ export function createHud(root, getSettings) {
   const toast = el('div', { class: 'toast hidden' }, [toastText, el('button', { class: 'chip', onclick: () => toast.classList.add('hidden') }, COPY.ok)]);
   const help = el('div', { class: 'help hidden' });
   const words = el('div', { class: 'words' });
+  const fader = el('div', { class: 'fader' });
+  const caption = el('div', { class: 'caption hidden' });
+  let captionT = 0;
   const hud = el('div', { class: 'hud hidden' }, [lines, words, reticle, dot, noAnchor, speedo, fps, stateLabel, tip, lockHint, help]);
   const wordPool = Array.from({ length: 6 }, () => { const w = el('div', { class: 'word' }); words.append(w); return { el: w, t: 0 }; });
   let wordNext = 0;
-  root.append(hud, toast);
+  root.append(hud, toast, fader);
+  hud.append(caption);
   const lctx = lines.getContext('2d');
 
   let tipIndex = 0;
@@ -81,6 +85,10 @@ export function createHud(root, getSettings) {
 
   return {
     show(on) { hud.classList.toggle('hidden', !on); if (on) showTip(); },
+    // A full-screen fade to black (a fall into the river, a subway ride).
+    fade(on) { fader.classList.toggle('on', on); },
+    // A comic caption box at the top left (a district name as you enter it).
+    caption(text, secs = 2.6) { caption.textContent = text; caption.classList.remove('hidden'); void caption.offsetWidth; caption.classList.add('show'); captionT = secs; },
     setLockHint(on) { lockHint.classList.toggle('hidden', !on); },
     toggleHelp() { renderHelp(); help.classList.toggle('hidden'); },
     get helpOpen() { return !help.classList.contains('hidden'); },
@@ -123,6 +131,7 @@ export function createHud(root, getSettings) {
       speedNum.textContent = String(Math.round(speed * 3.6));
       stateLabel.textContent = dev ? state : '';
       noAnchorT -= dt;
+      if (captionT > 0) { captionT -= dt; if (captionT <= 0) caption.classList.remove('show'); }
       noAnchor.classList.toggle('show', noAnchorT > 0);
       reticle.classList.toggle('valid', !!(anchor && anchor.valid));
       reticle.classList.toggle('invalid', !!anchor && !anchor.valid);

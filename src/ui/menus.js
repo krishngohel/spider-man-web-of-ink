@@ -82,6 +82,8 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       slider(C.renderScale[0], 0.5, 1, 0.05, () => getSettings().renderScale, (v) => update({ renderScale: v })),
       toggle(C.dynamicRes[0], 'dynamicRes', C.dynamicRes[1]),
       toggle(C.showFps[0], 'showFps'),
+      choice(C.timeOfDay[0], C.timeOfDay[1], ['cycle', 'day', 'golden', 'night'], 'timeOfDay', C.timeValues),
+      choice(C.weather[0], null, ['cycle', 'clear', 'overcast', 'rain'], 'weather', C.weatherValues),
       el('h3', {}, C.sections.audio),
       slider(C.master[0], 0, 1, 0.05, () => getSettings().volume.master, (v) => update({ volume: { ...getSettings().volume, master: v } })),
       slider(C.sfx[0], 0, 1, 0.05, () => getSettings().volume.sfx, (v) => update({ volume: { ...getSettings().volume, sfx: v } })),

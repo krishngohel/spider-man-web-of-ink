@@ -16,6 +16,9 @@ export function createSky(scene, radius = 1900) {
     uCloud: { value: new THREE.Color(0xffffff) },
     uCloudShade: { value: new THREE.Color(0xc9d6ea) },
     uTime: { value: 0 },
+    uNight: { value: 0 },
+    uMoon: { value: 0 },
+    uCover: { value: 0 },
   };
   const mat = new THREE.ShaderMaterial({
     uniforms,
@@ -31,7 +34,7 @@ export function createSky(scene, radius = 1900) {
       }`,
     fragmentShader: /* glsl */ `
       uniform vec3 uTop, uMid, uHorizon, uSun, uSunDir, uInk, uCloud, uCloudShade;
-      uniform float uTime;
+      uniform float uTime, uNight, uMoon, uCover;
       varying vec3 vDir;
       float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float n2(vec2 p) {
@@ -46,26 +49,40 @@ export function createSky(scene, radius = 1900) {
         // Three flat-ish bands with soft joins: horizon glow, mid blue, deep top.
         vec3 c = mix(uHorizon, uMid, smoothstep(0.0, 0.16, y));
         c = mix(c, uTop, smoothstep(0.22, 0.6, y));
-        // Sun: an inked disc with comic rays around it.
+        // Stars at night: a sprinkle of crosses and dots, fading at the horizon.
+        if (uNight > 0.01 && y > 0.05) {
+          vec2 sp = vec2(atan(d.z, d.x) * 60.0, asin(y) * 60.0);
+          vec2 cell = floor(sp), f = fract(sp) - 0.5;
+          float r = h(cell);
+          float star = step(0.93, r) * (1.0 - smoothstep(0.04, 0.09 + 0.05 * step(0.985, r), length(f)));
+          c = mix(c, vec3(1.0, 0.97, 0.88), star * uNight * smoothstep(0.05, 0.3, y) * (1.0 - uCover));
+        }
+        // Sun (rays, inked disc) by day; a pale moon with an inked rim by night.
         float s = dot(d, uSunDir);
         float ang = atan(d.z - uSunDir.z, d.x - uSunDir.x);
-        float rays = step(0.5, fract(ang * 3.0)) * smoothstep(0.955, 0.988, s) * (1.0 - smoothstep(0.988, 0.993, s));
+        float rays = step(0.5, fract(ang * 3.0)) * smoothstep(0.955, 0.988, s) * (1.0 - smoothstep(0.988, 0.993, s)) * (1.0 - uMoon) * (1.0 - uCover);
         c = mix(c, mix(c, uSun, 0.45), rays);
-        float disc = smoothstep(0.9968, 0.9974, s);
-        c = mix(c, uSun, disc);
-        float rim = smoothstep(0.996, 0.9965, s) * (1.0 - disc);
+        float disc = smoothstep(0.9968, 0.9974, s) * (1.0 - uCover * 0.85);
+        vec3 discCol = mix(uSun, vec3(0.93, 0.94, 0.98), uMoon);
+        // The moon's seas: a few soft grey patches.
+        if (uMoon > 0.5) discCol = mix(discCol, discCol * 0.78, step(0.62, h(floor((d.xz - uSunDir.xz) * 900.0))) * 0.6);
+        c = mix(c, discCol, disc);
+        float rim = smoothstep(0.996, 0.9965, s) * (1.0 - disc) * (1.0 - uCover * 0.85);
         c = mix(c, uInk, rim * 0.9);
         // Clouds: flat cartoon shapes on a plane above the city, shaded underneath, inked edges.
         if (y > 0.015) {
           vec2 uv = d.xz / (y + 0.12) * 1.6 + vec2(uTime * 0.012, uTime * 0.004);
           float f = fbm(uv * 0.55);
-          float th = 0.58 - 0.08 * smoothstep(0.05, 0.5, y);
+          float th = 0.58 - 0.08 * smoothstep(0.05, 0.5, y) - 0.22 * uCover;
           // Crisp, pixel-width ink: the edge is measured in screen pixels, not in noise units.
           float fw = max(fwidth(f), 1e-4);
           float cloud = smoothstep(th - fw, th + fw, f);
           float bf = fbm(uv * 0.55 + vec2(0.0, 0.18));
           float belly = 1.0 - smoothstep(th + 0.05 - fw, th + 0.05 + fw, bf);
           vec3 cc = mix(uCloud, uCloudShade, belly);
+          // Night clouds: dark blue-grey with a moonlit edge; overcast clouds: heavy and grey.
+          cc = mix(cc, cc * vec3(0.32, 0.36, 0.5), uNight);
+          cc = mix(cc, cc * vec3(0.72, 0.74, 0.8), uCover);
           float edge = 1.0 - smoothstep(fw * 1.0, fw * 2.4, abs(f - th));
           float fade = smoothstep(0.015, 0.09, y);
           c = mix(c, cc, cloud * fade);

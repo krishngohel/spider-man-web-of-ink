@@ -128,3 +128,11 @@ button { font: inherit; }
   .row { grid-template-columns: minmax(0, 1fr); }
   .speedo b { font-size: 34px; }
 }
+
+/* Fade to black (river falls, subway rides). */
+.fader { position: fixed; inset: 0; background: var(--ink); opacity: 0; transition: opacity 0.35s ease; pointer-events: none; z-index: 30; }
+.fader.on { opacity: 1; }
+/* Comic caption box: the district you just entered. */
+.caption { position: absolute; left: 22px; top: 22px; padding: 8px 14px; background: #f7e36a; border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink);
+  font-family: var(--head); font-size: 26px; letter-spacing: 1px; transform: translateY(-12px) rotate(-1.5deg); opacity: 0; transition: transform 0.25s ease, opacity 0.25s ease; }
+.caption.show { opacity: 1; transform: translateY(0) rotate(-1.5deg); }

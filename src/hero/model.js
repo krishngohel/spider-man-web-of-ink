@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { toonGradient } from '../render/toon.js';
 import { PALETTE } from '../render/palette.js';
-import { COMIC_SHADE, SHADOW_ALPHA } from '../render/comicShade.js';
+import { COMIC_SHADE, SHADOW_ALPHA, addShadeUniforms } from '../render/comicShade.js';
 
 // The hero: Quaternius's CC0 superhero body (T-pose, facing +z, 1.81 m) wearing a classic suit
 // painted by a shader from each fragment's bind-pose position: red head, chest, shoulders,
@@ -82,6 +82,7 @@ function suitMaterial(suit) {
   };
   mat.userData.suit = uniforms;
   mat.onBeforeCompile = (shader) => {
+    addShadeUniforms(shader);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vBind;')

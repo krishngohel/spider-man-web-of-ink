@@ -40,6 +40,16 @@ export const PALETTE = {
   leaves: 0x3f8a3c,
   water: 0x2f74b8,
   pier: 0x8b6b4e,
+  plaza: 0xcdb99a,
+  brownstone: 0x7a4535,
+  warehouse: 0x7f8c93,
+  house: 0xd9c7a0,
+  classical: 0xe6ddc8,
+  industrial: 0x8a4430,
+  darkGlass: 0x2c3a52,
+  steel: 0x8a96a3,
+  container: 0xc44a2c,
+  kiosk: 0x2e7d4f,
 };
 
 export const hex = (n) => '#' + n.toString(16).padStart(6, '0');

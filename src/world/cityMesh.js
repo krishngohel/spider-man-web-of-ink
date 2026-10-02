@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { PALETTE } from '../render/palette.js';
 import { toonGradient } from '../render/toon.js';
-import { GRID } from './testCity.js';
-import { COMIC_SHADE, SHADOW_ALPHA, comicToon } from '../render/comicShade.js';
+import { ISLAND, QUEENS, RESERVOIR, BRIDGE } from './city.js';
+import { COMIC_SHADE, SHADOW_ALPHA, comicToon, addShadeUniforms } from '../render/comicShade.js';
 
 // Draws the blockout city. Buildings are merged into one mesh per 240 m chunk (so frustum culling
 // still drops what's behind the camera) with one shared toon material; facade windows, storefronts
@@ -15,6 +15,8 @@ const STYLE_COLORS = {
   0: PALETTE.brick, 1: PALETTE.sandstone, 2: PALETTE.glass, 3: PALETTE.concrete,
   7: PALETTE.limestone, 8: PALETTE.deco, 10: PALETTE.crane, 13: PALETTE.limestone,
   14: PALETTE.metal, 15: PALETTE.bulkhead, 16: PALETTE.metal,
+  17: PALETTE.brownstone, 18: PALETTE.ink, 19: PALETTE.warehouse, 21: PALETTE.house, 22: PALETTE.classical,
+  23: PALETTE.industrial, 24: PALETTE.darkGlass, 25: PALETTE.steel, 26: PALETTE.container, 27: PALETTE.kiosk,
 };
 
 const shared = { night: { value: 0 } };
@@ -24,6 +26,7 @@ export function setNight(v) { shared.night.value = v; }
 function buildingMaterial() {
   const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() });
   mat.onBeforeCompile = (shader) => {
+    addShadeUniforms(shader);
     shader.uniforms.uNight = shared.night;
     shader.uniforms.uWinDark = { value: new THREE.Color(PALETTE.windowDark) };
     shader.uniforms.uWinLit = { value: new THREE.Color(PALETTE.windowLit) };
@@ -86,15 +89,52 @@ vec3 facade(vec3 base, float style, float seed) {
 
   // Building edges: a strong ink line down each corner and along the roof line.
   gInk = max(gInk, hline(du, 0.0, pw, 2.2));
-  // Props, cranes and cornice slabs: flat colour, inked edges, nothing else.
-  if (style > 8.5) {
+  // Giant signs (Neon Square, the Bugle): bold colour panels with blocks of "lettering", lit.
+  if (style > 17.5 && style < 18.5) {
+    float h = fract(seed * 13.7);
+    vec3 sc = h < 0.17 ? vec3(0.98, 0.82, 0.18) : h < 0.34 ? vec3(0.9, 0.2, 0.25) : h < 0.5 ? vec3(0.2, 0.75, 0.9) : h < 0.67 ? vec3(0.95, 0.35, 0.75) : h < 0.84 ? vec3(0.35, 0.85, 0.4) : vec3(0.98, 0.55, 0.15);
+    vec2 sp = vec2((u - u0) / max(u1 - u0, 0.1), (v - y0) / max(y1 - y0, 0.1));
+    col = sc;
+    // Lettering: two rows of blocky bars with gaps, and a border.
+    float row = step(0.22, sp.y) * step(sp.y, 0.44) + step(0.56, sp.y) * step(sp.y, 0.78);
+    float letter = step(0.35, fract(sp.x * (5.0 + floor(h * 4.0)) + h)) * step(0.08, sp.x) * step(sp.x, 0.92);
+    col = mix(col, vec3(0.98, 0.96, 0.9), row * letter);
+    float border = 1.0 - step(0.05, min(min(sp.x, 1.0 - sp.x), min(sp.y, 1.0 - sp.y)));
+    col = mix(col, vec3(0.08), border);
+    gEmit = max(gEmit, 0.25 + 0.75 * uNight);
     gInk = max(gInk, hline(top, 0.0, pw, 1.8));
-    if (style > 13.5 && style < 14.5) col = mix(base, base * 0.75, step(0.5, fract(v / 0.25)) * gNear * 0.5); // AC grille
     return col;
   }
+  // Shipping containers: a colour per box, corrugated.
+  if (style > 25.5 && style < 26.5) {
+    float h = fract(seed * 7.9);
+    col = h < 0.25 ? vec3(0.75, 0.25, 0.18) : h < 0.5 ? vec3(0.2, 0.42, 0.7) : h < 0.75 ? vec3(0.28, 0.55, 0.32) : vec3(0.85, 0.55, 0.18);
+    col = mix(col, col * 0.78, step(0.5, fract(u / 0.6)) * gNear * 0.7);
+    gInk = max(gInk, hline(top, 0.0, pw, 1.6));
+    gInk = max(gInk, hline(mod(v, 2.6), 0.0, pw, 1.2));
+    return col;
+  }
+  // Props, cranes, bridge steel, kiosks and cornice slabs: flat colour, inked edges, nothing else.
+  if ((style > 8.5 && style < 16.5) || style > 19.5 && style < 20.5 || style > 24.5) {
+    gInk = max(gInk, hline(top, 0.0, pw, 1.8));
+    if (style > 13.5 && style < 14.5) col = mix(base, base * 0.75, step(0.5, fract(v / 0.25)) * gNear * 0.5); // AC grille
+    if (style > 24.5 && style < 25.5) col = mix(base, base * 0.82, step(0.5, fract(v / 1.2)) * gNear * 0.5); // bridge plates
+    if (style > 26.5) { col = mix(base, vec3(0.95, 0.9, 0.7), step(2.3, v - y0) * 0.8); } // kiosk: lit sign band on top
+    return col;
+  }
+  // Queens houses: pastel siding, a colour per house.
+  if (style > 20.5 && style < 21.5) {
+    float h = fract(seed * 5.3);
+    base = h < 0.25 ? vec3(0.86, 0.8, 0.62) : h < 0.5 ? vec3(0.7, 0.8, 0.86) : h < 0.75 ? vec3(0.88, 0.72, 0.66) : vec3(0.78, 0.86, 0.7);
+    col = mix(base, base * 0.9, step(0.5, fract(v / 0.3)) * gNear * 0.5);
+  }
+  // Warehouses: vertical corrugation.
+  if (style > 18.5 && style < 19.5) col = mix(base, base * 0.82, step(0.5, fract(u / 0.7)) * gNear * 0.6);
+  // Classical fronts: fluted columns.
+  if (style > 21.5 && style < 22.5) col = mix(base, base * 0.86, step(0.7, fract(u / 1.1)) * gNear * 0.7);
 
-  // Glass curtain wall.
-  if (style > 1.5 && style < 2.5) {
+  // Glass curtain wall (24: the dark glass of Oscorp and Fisk).
+  if ((style > 1.5 && style < 2.5) || (style > 23.5 && style < 24.5)) {
     vec2 cell = vec2(1.6, 3.6);
     vec2 g = (p - vec2(u0, y0)) / cell;
     vec2 f = fract(g), id = floor(g);
@@ -102,6 +142,7 @@ vec3 facade(vec3 base, float style, float seed) {
     // at night, when some light up.
     float hgt = clamp((v - y0) / max(y1 - y0, 1.0), 0.0, 1.0);
     vec3 tint = uWinDark * (1.25 + 0.35 * fract(seed * 5.3)) + vec3(0.04, 0.07, 0.12);
+    if (style > 23.5) tint = base * 1.1;
     col = mix(tint, tint * 1.45 + vec3(0.06, 0.08, 0.1), smoothstep(0.35, 1.0, hgt));
     float r = h21(id + seed * 13.1);
     gEmit = max(gEmit, step(1.0 - uNight * 0.55, r) * uNight);
@@ -153,14 +194,19 @@ vec3 facade(vec3 base, float style, float seed) {
   }
 
   // Windows in bays and floors.
-  float floorH = style < 0.5 ? 3.3 : style < 1.5 ? 3.8 : style < 3.5 ? 3.6 : 4.2;
-  float bayW = style < 0.5 ? 2.8 : style < 1.5 ? 3.2 : style < 3.5 ? 6.0 : 1.8;
+  float floorH = style < 0.5 ? 3.3 : style < 1.5 ? 3.8 : style < 3.5 ? 3.6 : style < 8.5 ? 4.2 : style < 17.5 ? 3.6 : style < 19.5 ? 5.0 : style < 21.5 ? 3.0 : style < 22.5 ? 6.0 : 6.0;
+  float bayW = style < 0.5 ? 2.8 : style < 1.5 ? 3.2 : style < 3.5 ? 6.0 : style < 8.5 ? 1.8 : style < 17.5 ? 2.6 : style < 19.5 ? 4.0 : style < 21.5 ? 3.0 : style < 22.5 ? 4.4 : 5.0;
   float vStart = streetLevel ? y0 + 4.6 : y0;
   vec2 cellP = vec2(u - u0 - pil, v - vStart);
   vec2 g = cellP / vec2(bayW, floorH);
   vec2 f = fract(g), id = floor(g);
   vec2 wlo, whi;
   if (style > 2.5 && style < 3.5) { wlo = vec2(0.02, 0.32); whi = vec2(0.98, 0.78); }      // ribbon windows
+  else if (style > 22.5) { wlo = vec2(0.14, 0.3); whi = vec2(0.86, 0.86); }               // industrial: big
+  else if (style > 21.5) { wlo = vec2(0.36, 0.16); whi = vec2(0.64, 0.84); }              // classical: tall, narrow
+  else if (style > 20.5) { wlo = vec2(0.3, 0.34); whi = vec2(0.7, 0.76); }                // house
+  else if (style > 18.5) { wlo = vec2(0.16, 0.66); whi = vec2(0.84, 0.86); }              // warehouse: a high band
+  else if (style > 16.5) { wlo = vec2(0.28, 0.2); whi = vec2(0.72, 0.84); }               // brownstone
   else if (style > 6.5) { wlo = vec2(0.3, 0.1); whi = vec2(0.7, 0.86); }                  // deco: narrow, tall
   else if (style > 0.5) { wlo = vec2(0.24, 0.2); whi = vec2(0.76, 0.84); }                // sandstone: tall
   else { wlo = vec2(0.22, 0.26); whi = vec2(0.78, 0.8); }                                 // brick
@@ -175,8 +221,8 @@ vec3 facade(vec3 base, float style, float seed) {
   } else {
     // Deco piers: vertical ribs between the window columns.
     if (style > 6.5) col = mix(base, base * 1.12, step(0.86, f.x) + step(f.x, 0.14));
-    // Brick coursing, up close only.
-    if (style < 0.5) col = mix(col, col * 0.82, (1.0 - smoothstep(0.0, fwidth(v / 0.3) * 1.2, min(fract(v / 0.3), 1.0 - fract(v / 0.3)))) * gNear * 0.6);
+    // Brick coursing, up close only (brick, brownstone, industrial).
+    if (style < 0.5 || (style > 16.5 && style < 17.5) || style > 22.5) col = mix(col, col * 0.82, (1.0 - smoothstep(0.0, fwidth(v / 0.3) * 1.2, min(fract(v / 0.3), 1.0 - fract(v / 0.3)))) * gNear * 0.6);
     // Sill under each window.
     if (fp.y < lo.y && fp.y > lo.y - 0.22 && fp.x > lo.x - 0.1 && fp.x < hi.x + 0.1) col = mix(col, uStone, 0.75);
   }
@@ -196,7 +242,8 @@ vec3 facade(vec3 base, float style, float seed) {
 {
   float style = floor(vStyle.x + 0.5), seed = floor(vStyle.y * 997.0 + 0.5) / 997.0;
   vec3 base = diffuseColor.rgb;
-  if (vWNrm.y > 0.5 && style < 8.5) {
+  bool propStyle = (style > 8.5 && style < 16.5) || style > 17.5 && style < 18.5 || style > 19.5 && style < 20.5 || style > 24.5;
+  if (vWNrm.y > 0.5 && !propStyle) {
     // Roof: tar paper with a few seams, the parapet edge inked.
     base = uRoof * (0.85 + 0.3 * fract(seed * 7.3));
     float pw = max(length(fwidth(vWPos.xz)), 1e-4);
@@ -220,7 +267,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v3';
+  mat.customProgramCacheKey = () => 'city-building-v4';
   return mat;
 }
 
@@ -249,7 +296,7 @@ function pushQuadBox(arr, b, style, seed, col, yBase, yTop, withBottom) {
   }
 }
 
-const MASONRY = new Set([0, 1, 3, 7]);
+const MASONRY = new Set([0, 1, 3, 7, 17, 22, 23]);
 function pushBox(b, seed, arr) {
   const col = new THREE.Color(STYLE_COLORS[b.style] ?? PALETTE.concrete);
   // A little per-building variation, kept inside the style's family.
@@ -339,9 +386,42 @@ export function buildCityMeshes(city, scene, quality) {
     group.add(tm);
   }
 
+  if (city.kind === 'full') group.add(buildBridgeCables(quality));
   group.add(buildGround(city));
   scene.add(group);
   return group;
+}
+
+// The bridge's main cables (a sag between the towers, straight down to the anchorages) and the
+// vertical suspenders. Visual only: the collision is the deck and the towers.
+function buildBridgeCables(quality) {
+  const B = BRIDGE, parts = [];
+  const top = B.towerH - 5, [t0, t1] = B.towers;
+  for (const s of [-1, 1]) {
+    const z = B.z + s * (B.width / 2 + 1);
+    const pts = [];
+    pts.push(new THREE.Vector3(B.x0 - 30, B.deckY, z));
+    pts.push(new THREE.Vector3(t0, top, z));
+    for (let i = 1; i < 12; i++) {
+      const x = t0 + (t1 - t0) * (i / 12);
+      const k = (x - t0) / (t1 - t0);
+      pts.push(new THREE.Vector3(x, top - 4 * (top - B.deckY - 6) * k * (1 - k), z));
+    }
+    pts.push(new THREE.Vector3(t1, top, z));
+    pts.push(new THREE.Vector3(B.x1 + 30, B.deckY, z));
+    const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.1);
+    parts.push(new THREE.TubeGeometry(curve, 80, 0.45, 6, false));
+    for (let x = t0 + 8; x < t1 - 4; x += 8) {
+      const k = (x - t0) / (t1 - t0);
+      const y = top - 4 * (top - B.deckY - 6) * k * (1 - k);
+      const g = new THREE.CylinderGeometry(0.12, 0.12, y - B.deckY, 4);
+      g.translate(x, (y + B.deckY) / 2, z);
+      parts.push(g);
+    }
+  }
+  const mesh = new THREE.Mesh(mergeGeometries(parts), comicToon({ color: PALETTE.steel }));
+  mesh.castShadow = quality.shadows;
+  return mesh;
 }
 
 function mergeGeometries(list) {
@@ -358,34 +438,55 @@ function mergeGeometries(list) {
 }
 
 function buildGround(city) {
-  const size = 3000;
+  const size = 9000;
   const geo = new THREE.PlaneGeometry(size, size, 1, 1);
   geo.rotateX(-Math.PI / 2);
+  geo.translate(400, 0, 0);
   const mat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: toonGradient() });
   const c = (h) => new THREE.Color(h);
+  const L = city.land;
+  const landTex = new THREE.DataTexture(L.data, L.w, L.h, THREE.RedFormat, THREE.UnsignedByteType);
+  landTex.minFilter = THREE.NearestFilter; landTex.magFilter = THREE.NearestFilter;
+  landTex.needsUpdate = true;
+  const g = city.grid;
   mat.onBeforeCompile = (shader) => {
+    addShadeUniforms(shader);
     Object.assign(shader.uniforms, {
       uAsphalt: { value: c(PALETTE.asphalt) }, uSidewalk: { value: c(PALETTE.sidewalk) },
       uLane: { value: c(PALETTE.laneMark) }, uCross: { value: c(PALETTE.crosswalk) },
       uGrass: { value: c(PALETTE.grass) }, uGrassDark: { value: c(PALETTE.grassDark) },
       uPath: { value: c(PALETTE.path) }, uWater: { value: c(PALETTE.water) }, uPier: { value: c(PALETTE.pier) },
-      uGrid: { value: new THREE.Vector4(GRID.minX, GRID.minZ, GRID.avenueEvery, GRID.streetEvery) },
-      uBounds: { value: new THREE.Vector4(GRID.minX, GRID.minZ, GRID.maxX, GRID.maxZ) },
-      uWaterZ: { value: city.waterZ },
+      uPlaza: { value: c(PALETTE.plaza) },
+      uGrid: { value: new THREE.Vector4(g.minX, g.minZ, g.avenueEvery, g.streetEvery) },
+      uIsland: { value: new THREE.Vector4(ISLAND.minX, ISLAND.minZ, ISLAND.maxX, ISLAND.maxZ) },
+      uQueens: { value: new THREE.Vector4(QUEENS.minX, QUEENS.minZ, QUEENS.maxX, QUEENS.maxZ) },
+      uCorners: { value: new THREE.Vector2(ISLAND.corner, QUEENS.corner) },
+      uRes: { value: new THREE.Vector4(RESERVOIR.cx, RESERVOIR.cz, RESERVOIR.rx, RESERVOIR.rz) },
+      uLand: { value: landTex },
+      uLandBox: { value: new THREE.Vector4(L.minX, L.minZ, L.w * L.cell, L.h * L.cell) },
       uInkG: { value: c(PALETTE.ink) },
+      uNightG: shared.night,
     });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
-uniform vec3 uAsphalt, uSidewalk, uLane, uCross, uGrass, uGrassDark, uPath, uWater, uPier, uInkG;
+uniform vec3 uAsphalt, uSidewalk, uLane, uCross, uGrass, uGrassDark, uPath, uWater, uPier, uPlaza, uInkG;
+uniform vec4 uGrid, uIsland, uQueens, uRes, uLandBox;
+uniform vec2 uCorners;
+uniform float uNightG;
+uniform sampler2D uLand;
 float gInkG = 0.0;
 float inkAt(float d, float pw, float px) { return 1.0 - smoothstep(pw * px * 0.5, pw * (px * 0.5 + 1.0), abs(d)); }
-uniform vec4 uGrid, uBounds;
-uniform float uWaterZ;
 varying vec3 vWPos;
 float band(float x, float a, float b) { return step(a, x) * step(x, b); }
+// Signed distance to a rounded rectangle (negative inside).
+float sdRound(vec2 p, vec4 r, float c) {
+  vec2 ctr = (r.xy + r.zw) * 0.5, h = (r.zw - r.xy) * 0.5 - c;
+  vec2 q = abs(p - ctr) - h;
+  return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0) - c;
+}
 ${COMIC_SHADE}`)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
@@ -393,23 +494,46 @@ ${COMIC_SHADE}`)
   vec3 col;
   float pw = max(length(fwidth(w)), 1e-4);
   float near = 1.0 - smoothstep(0.04, 0.2, pw);
-  bool outside = w.x < uBounds.x - 30.0 || w.x > uBounds.z + 30.0 || w.y < uBounds.y - 30.0 || w.y > uBounds.w + 30.0;
-  bool harborWater = w.y > uWaterZ + 6.0 && w.x > -240.0;
-  bool park = w.x > 240.0 && w.y < 120.0 && w.x < uBounds.z + 30.0 && w.y > uBounds.y - 30.0;
-  if (outside || harborWater) {
-    // Comic water: flat blue with rows of little inked wave strokes.
+  float sdI = sdRound(w, uIsland, uCorners.x), sdQ = sdRound(w, uQueens, uCorners.y);
+  float coast = min(sdI, sdQ);
+  vec2 luv = (w - uLandBox.xy) / uLandBox.zw;
+  float t = (luv.x < 0.0 || luv.y < 0.0 || luv.x > 1.0 || luv.y > 1.0) ? 0.0 : floor(texture2D(uLand, luv).r * 255.0 + 0.5);
+  float res = length((w - uRes.xy) / uRes.zw);
+  bool water = (coast > 0.0 && t < 3.5) || (coast > 0.0 && t > 4.5) || (res < 1.0 && sdI < 0.0);
+  bool pier = t > 3.5 && t < 4.5;
+  if (water && !pier) {
+    // Comic water: flat blue with rows of little inked wave strokes, a pale band along the shore.
     col = uWater;
     vec2 q = vec2(w.x / 7.0 + floor(w.y / 4.0) * 0.5, w.y / 4.0);
     vec2 f = fract(q);
     float wave = abs(f.y - 0.5 - 0.12 * sin(f.x * 6.2831)) * 4.0;
     float stroke = (1.0 - smoothstep(0.08, 0.2, wave)) * step(0.25, f.x) * step(f.x, 0.75);
     col = mix(col, col * 1.35 + vec3(0.05, 0.08, 0.1), stroke * (0.5 + 0.5 * near));
-  } else if (park) {
+    float shoreD = res < 1.0 ? (1.0 - res) * uRes.w : coast;
+    col = mix(col, col * 1.25 + vec3(0.08), (1.0 - smoothstep(0.0, 6.0, shoreD)) * 0.6);
+  } else if (pier) {
+    // Wooden piers: planks across, inked joints.
+    col = uPier * (0.92 + 0.12 * step(0.5, fract(sin(floor(w.y / 0.9) * 12.9) * 43758.5)));
+    gInkG = max(gInkG, inkAt(fract(w.y / 0.9 + 0.5) - 0.5, pw / 0.9, 1.0) * 0.5 * near);
+  } else if (coast > -4.0 && coast <= 0.0) {
+    // The seawall: a stone edge with a strong ink line where it meets the water.
+    col = uSidewalk * 0.85;
+    gInkG = max(gInkG, inkAt(coast, pw, 2.2));
+  } else if (t > 1.5 && t < 2.5) {
     float paths = max(band(abs(sin(w.x * 0.021 + sin(w.y * 0.013) * 1.4)), 0.0, 0.035), band(abs(sin(w.y * 0.017 + cos(w.x * 0.011))), 0.0, 0.03));
-    col = mix(mix(uGrass, uGrassDark, step(0.55, fract(sin(dot(floor(w / 9.0), vec2(12.9, 78.2))) * 43758.5))), uPath, paths);
-    // Grass strokes up close.
+    // Two greens in soft drifts (a hard 9 m checker read as pixels from the air).
+    float drift = smoothstep(0.35, 0.65, sin(w.x * 0.013 + sin(w.y * 0.009) * 2.0) * 0.5 + 0.5);
+    col = mix(mix(uGrass, uGrassDark, drift * 0.7), uPath, paths);
     float gs = fract((w.x * 0.9 + w.y * 0.4) / 0.9);
     col = mix(col, col * 0.8, step(0.85, gs) * step(0.5, fract(w.y / 1.3 + w.x * 0.05)) * near * 0.7);
+    if (res < 1.08) { col = uSidewalk; gInkG = max(gInkG, inkAt((res - 1.0) * uRes.w, pw, 1.8)); }
+  } else if (t > 2.5 && t < 3.5) {
+    // Plazas: big warm paving slabs.
+    col = uPlaza;
+    vec2 sl = w / 3.0;
+    float joint = max(inkAt(fract(sl.x + 0.5) - 0.5, pw / 3.0, 1.0), inkAt(fract(sl.y + 0.5) - 0.5, pw / 3.0, 1.0));
+    col = mix(col, col * 0.9, step(0.5, fract(sin(dot(floor(sl), vec2(7.1, 3.7))) * 437.5)) * 0.6);
+    gInkG = max(gInkG, joint * 0.4 * near);
   } else {
     float ax = mod(w.x - uGrid.x, uGrid.z);
     float sz = mod(w.y - uGrid.y, uGrid.w);
@@ -417,34 +541,31 @@ ${COMIC_SHADE}`)
     bool street = sz < 9.0 || sz > uGrid.w - 9.0;
     bool walkA = (ax >= 15.0 && ax < 18.0) || (ax > uGrid.z - 18.0 && ax <= uGrid.z - 15.0);
     bool walkS = (sz >= 9.0 && sz < 12.0) || (sz > uGrid.w - 12.0 && sz <= uGrid.w - 9.0);
+    bool suburb = t > 5.5 && t < 6.5;
     if (avenue || street) {
       col = uAsphalt;
       float da = min(ax, uGrid.z - ax), ds = min(sz, uGrid.w - sz);
-      // Centre lines: double yellow down the avenues, dashed white along the streets.
       if (avenue && !street && abs(da) < 0.5 && abs(da) > 0.15) col = uLane;
       if (street && !avenue && ds < 0.18 && fract(w.x / 6.0) < 0.5) col = uLane;
-      // Crosswalk stripes where a street meets an avenue.
       if (avenue && street) {
         if (ds > 6.0 && ds < 9.0 && fract(w.x / 1.4) < 0.5) col = uCross;
         if (da > 12.0 && da < 15.0 && fract(w.y / 1.4) < 0.5) col = uCross;
       }
-      if (w.y > uWaterZ - 2.0 && w.y < uWaterZ + 6.0 && w.x > -240.0) col = uPier;
-      // Worn asphalt: darker patches and tyre tracks.
       float wear = fract(sin(dot(floor(w / 5.0), vec2(12.9, 78.2))) * 43758.5);
       col *= 0.94 + 0.08 * step(0.7, wear);
-      // Manholes down the avenues.
       if (avenue && !street) {
         vec2 mh = vec2(da - 7.0, mod(w.y, 37.0) - 18.5);
         float r = length(mh);
         col = mix(col, col * 0.7, 1.0 - smoothstep(0.55, 0.6, r));
         gInkG = max(gInkG, inkAt(r - 0.6, pw, 1.2) * near);
       }
-      // The curb: an ink line where the road meets the sidewalk.
       if (avenue) gInkG = max(gInkG, inkAt(da - 15.0, pw, 1.6));
       if (street) gInkG = max(gInkG, inkAt(ds - 9.0, pw, 1.6));
+    } else if (suburb) {
+      // Queens: lawns, a strip of sidewalk along the road.
+      col = (walkA || walkS) ? uSidewalk : mix(uGrass, uGrassDark, step(0.6, fract(sin(dot(floor(w / 7.0), vec2(12.9, 78.2))) * 43758.5)));
     } else if (walkA || walkS) {
       col = uSidewalk;
-      // Paving slabs with inked joints, and the curb line.
       vec2 sl = w / 1.6;
       float joint = max(inkAt(fract(sl.x + 0.5) - 0.5, pw / 1.6, 1.0), inkAt(fract(sl.y + 0.5) - 0.5, pw / 1.6, 1.0));
       gInkG = max(gInkG, joint * 0.35 * near);
@@ -464,7 +585,7 @@ ${COMIC_SHADE}`)
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-ground-v3';
+  mat.customProgramCacheKey = () => 'city-ground-v4';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';

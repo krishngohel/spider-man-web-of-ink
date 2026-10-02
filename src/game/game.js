@@ -12,9 +12,12 @@ import { loadSettings, saveSettings } from '../core/settings.js';
 import { STEP, MAX_SUBSTEPS, G, tune } from '../physics/constants.js';
 import { createWorld } from '../physics/world.js';
 import { findAimPoint, findZipPoint, findAnchor } from '../physics/anchors.js';
-import { buildTestCity } from '../world/testCity.js';
+import { buildCity } from '../world/city.js';
 import { buildCityMeshes, setNight } from '../world/cityMesh.js';
 import { createSky } from '../world/sky.js';
+import { env as envAt, createClock, PRESETS, WEATHERS } from '../world/timeWeather.js';
+import { createRain } from '../world/rain.js';
+import { SHADE_UNIFORMS } from '../render/comicShade.js';
 import { buildStreetProps, carBoxes } from '../world/streetProps.js';
 import { buildStreetMeshes } from '../world/streetMesh.js';
 import { createHero, emptyIntent } from '../hero/controller.js';
@@ -58,14 +61,55 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   setNight(0);
 
   // World ------------------------------------------------------------------------------------
-  const city = buildTestCity();
+  const city = buildCity();
   const world = createWorld();
   for (const b of city.boxes) world.addBox(b);
   const street = buildStreetProps(city);
   for (const b of carBoxes(street)) world.addBox(b);
   world.build();
   buildCityMeshes(city, scene, quality);
-  buildStreetMeshes(street, scene, quality);
+  const streetGroup = buildStreetMeshes(street, scene, quality);
+  const rain = createRain(scene);
+  // Time of day and weather: free roam cycles unless the settings (or a mission) hold them.
+  const clock = createClock({ hour: PRESETS.day, cycle: true });
+  const weatherState = { from: 'clear', to: 'clear', k: 1, next: 240 };
+  const C4 = new THREE.Color();
+  let shadeFreeze = false;
+  const mixC = (a, b, t, out) => out.setHex(a).lerp(C4.setHex(b), t);
+  function applyEnv(dt) {
+    if (settings.timeOfDay === 'cycle') { clock.cycle = true; clock.update(dt); } else { clock.cycle = false; clock.set(PRESETS[settings.timeOfDay]); }
+    if (settings.weather === 'cycle') {
+      weatherState.next -= dt;
+      if (weatherState.next <= 0) {
+        const r = Math.random();
+        weatherState.from = weatherState.to; weatherState.to = r < 0.6 ? 'clear' : r < 0.85 ? 'overcast' : 'rain';
+        weatherState.k = 0; weatherState.next = 180 + Math.random() * 240;
+      }
+    } else if (weatherState.to !== settings.weather) { weatherState.from = weatherState.to; weatherState.to = settings.weather; weatherState.k = 0; }
+    weatherState.k = Math.min(1, weatherState.k + dt / 12);
+    const a = envAt(clock.hour, weatherState.from), b = envAt(clock.hour, weatherState.to), t = weatherState.k;
+    const u = sky.uniforms;
+    mixC(a.skyTop, b.skyTop, t, u.uTop.value); mixC(a.skyMid, b.skyMid, t, u.uMid.value); mixC(a.horizon, b.horizon, t, u.uHorizon.value);
+    mixC(a.sun, b.sun, t, u.uSun.value);
+    u.uNight.value = a.night; u.uMoon.value = a.moon ? 1 : 0; u.uCover.value = a.cloud + (b.cloud - a.cloud) * t;
+    sunDir.set(a.sunDir[0], a.sunDir[1], a.sunDir[2]).normalize();
+    u.uSunDir.value.copy(sunDir);
+    mixC(a.sun, b.sun, t, sun.color); sun.intensity = a.sunI + (b.sunI - a.sunI) * t;
+    mixC(a.hemiSky, b.hemiSky, t, hemi.color); mixC(a.hemiGround, b.hemiGround, t, hemi.groundColor); hemi.intensity = a.hemiI + (b.hemiI - a.hemiI) * t;
+    mixC(a.fog, b.fog, t, scene.fog.color); scene.fog.near = a.fogNear + (b.fogNear - a.fogNear) * t;
+    setNight(a.night);
+    streetGroup.userData.setNight?.(a.night);
+    rain.setAmount(a.rain + (b.rain - a.rain) * t);
+    // The light of the hour for the comic shading: its level and its colour.
+    // Only partly lifted: a night stays mostly in shade, just not all of it.
+    const lvl = Math.max(0.55, (sun.intensity * 0.55 + hemi.intensity * 0.45) / (1.9 * 0.55 + 1.25 * 0.45));
+    if (shadeFreeze) return;
+    SHADE_UNIFORMS.uLightLevel.value = lvl;
+    const nightK = a.night, warm = Math.max(0, 1 - Math.abs(clock.hour - 18.4) / 1.6) + Math.max(0, 1 - Math.abs(clock.hour - 6.6) / 1.2);
+    SHADE_UNIFORMS.uTint.value.setRGB(1, 1, 1)
+      .lerp(C4.setRGB(1.08, 0.94, 0.8), Math.min(1, warm) * (1 - nightK))
+      .lerp(C4.setRGB(0.34, 0.38, 0.62), nightK);
+  }
   onProgress(0.15);
 
   const assets = await loadHeroAssets('./assets/', (f) => onProgress(0.15 + f * 0.7));
@@ -288,6 +332,46 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     return { x: (wp.x * 0.5 + 0.5) * innerWidth, y: (-wp.y * 0.5 + 0.5) * innerHeight, front: wp.z < 1 };
   }
   let lastThwipWord = -10, lastWhipWord = -10;
+  // Entering a district shows its name in a caption box.
+  let lastDistrict = null;
+  function districtCheck() {
+    const p = hero.body.p;
+    const d = city.districts.find((q) => p.x >= q.minX && p.x < q.maxX && p.z >= q.minZ && p.z < q.maxZ);
+    const id = d ? d.id : null;
+    if (id && id !== lastDistrict && lastDistrict !== null) hud.caption(d.name.toUpperCase());
+    if (id) lastDistrict = id;
+  }
+  // The river: the last place the hero stood on something, and a splash that brings him back.
+  const lastSafe = { x: spawn.x, y: spawn.y, z: spawn.z, t: 0 };
+  let splashT = -1;
+  function riverCheck(dt) {
+    const p = hero.body.p;
+    if (splashT >= 0) {
+      splashT += dt;
+      if (splashT > 0.9) {
+        hero.place(lastSafe.x, lastSafe.y, lastSafe.z, 0, 0, 0, 'ground');
+        prevP.x = renderP.x = lastSafe.x; prevP.y = renderP.y = lastSafe.y; prevP.z = renderP.z = lastSafe.z;
+        rig.focus.x = lastSafe.x; rig.focus.y = lastSafe.y + 0.55; rig.focus.z = lastSafe.z;
+        splashT = -1;
+        hud.fade(false);
+      }
+      return;
+    }
+    const wet = p.y < 1.6 && city.isWater(p.x, p.z);
+    if (wet) {
+      splashT = 0;
+      fx.ring(p.x, 0.05, p.z, 1.2);
+      const s = screenOf(p.x, p.y + 1, p.z);
+      if (s.front) hud.word('SPLASH!', s.x, s.y - 60, 'hit');
+      sfx.event({ type: 'land', hard: true, impact: 20 });
+      hud.fade(true);
+      return;
+    }
+    if ((hero.state === 'ground' || hero.state === 'wall') && hero.speed < 12) {
+      lastSafe.t += dt;
+      if (lastSafe.t > 0.4) { lastSafe.x = p.x; lastSafe.y = p.y + (hero.state === 'wall' ? 0 : 0.01); lastSafe.z = p.z; lastSafe.t = 0; if (hero.state === 'wall') { lastSafe.x += hero.wall.nx * 0.4; lastSafe.z += hero.wall.nz * 0.4; } }
+    }
+  }
   function worldEvent(e) {
     const p = hero.body.p;
     switch (e.type) {
@@ -367,6 +451,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       prof('physics', Tp);
       events.push(...hero.events);
       hero.events.length = 0;
+      riverCheck(dt);
+      districtCheck();
       for (const e of events) { sfx.event(e); hud.onEvent(e); worldEvent(e); }
       interpolate();
       rig.update(dt, locked() || input.device === 'pad' ? input.look : NO_LOOK, view, world, settings);
@@ -395,7 +481,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       // Test hook: a fixed offset from the hero, looking at him (filming poses from the side).
       // side: metres to the hero's left of travel (negative: right); up: metres above; fov.
       const o = camOverride;
-      if (o.at) {
+      if (o.pos) {
+        // Absolute camera (tours and screenshots of the city).
+        camera.position.set(o.pos[0], o.pos[1], o.pos[2]);
+        camera.lookAt(o.look[0], o.look[1], o.look[2]);
+        if (camera.fov !== (o.fov ?? 60)) { camera.fov = o.fov ?? 60; camera.updateProjectionMatrix(); }
+      } else if (o.at) {
         // Absolute offset from the hero (close-ups).
         camera.position.set(renderP.x + o.at[0], renderP.y + o.at[1], renderP.z + o.at[2]);
         camera.lookAt(renderP.x, renderP.y + (o.lookY ?? 0), renderP.z);
@@ -430,6 +521,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }
     if (!camOverride && Math.abs(camera.fov - rig.fov) > 0.01) { camera.fov = rig.fov; camera.updateProjectionMatrix(); }
     sky.follow(camera, time);
+    applyEnv(mode === 'play' ? dt : 0);
+    rain.update(camera, time);
     // The camera crammed right up against the hero (a tight corner): hide him rather than fill the
     // screen with his back.
     heroModel.root.visible = camOverride || rig.closeness > 0.9;
@@ -516,6 +609,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     stopTrace() { const t = trace; trace = null; return t; },
     setSetting(k, v) { applySettings({ ...settings, [k]: v }); },
     get settings() { return settings; },
+    setShade(l, r, g, b) { shadeFreeze = true; SHADE_UNIFORMS.uLightLevel.value = l; SHADE_UNIFORMS.uTint.value.setRGB(r, g, b); },
+    clock: () => ({ hour: clock.hour, weather: weatherState.to, light: SHADE_UNIFORMS.uLightLevel.value, tint: SHADE_UNIFORMS.uTint.value.toArray() }),
+    setTime(h) { settings = { ...settings, timeOfDay: 'cycle' }; clock.set(h); },
+    setWeather(w) { if (WEATHERS.includes(w)) { weatherState.from = w; weatherState.to = w; weatherState.k = 1; weatherState.next = 1e9; } },
     play: () => enterPlay(),
     get frameTimes() { return Array.from(frameTimes.slice(0, Math.min(frameIdx, frameTimes.length))); },
     get workTimes() { return Array.from(workTimes.slice(0, Math.min(frameIdx, workTimes.length))); },

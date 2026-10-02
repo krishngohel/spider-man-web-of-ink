@@ -8,15 +8,23 @@ import { toonGradient } from './toon.js';
 // can lay Ben-Day dots and hatching inside the real shadow shapes. Alpha below 0.5 stays reserved
 // for "no ink here" (the suit's lenses).
 
+// The light of the hour, shared by every material: how bright the world is (so a dark night still
+// reads in three tones instead of falling wholly into shadow) and the colour of the light (warm at
+// golden hour, blue at night). Set once a frame by the game; each material adds these uniforms.
+export const SHADE_UNIFORMS = { uLightLevel: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) } };
+export const addShadeUniforms = (shader) => Object.assign(shader.uniforms, SHADE_UNIFORMS);
+
 export const COMIC_SHADE = /* glsl */ `
+uniform float uLightLevel;
+uniform vec3 uTint;
 float gShadow = 0.0;
 vec3 comicShade(vec3 alb, vec3 lit, vec3 shadowTone, vec3 midTone, vec3 lightTone) {
   const vec3 W = vec3(0.299, 0.587, 0.114);
-  float ratio = dot(lit, W) / max(dot(alb, W), 1e-3);
+  float ratio = dot(lit, W) / max(dot(alb, W), 1e-3) / max(uLightLevel, 0.05);
   float t1 = smoothstep(0.5, 0.56, ratio), t2 = smoothstep(0.86, 0.92, ratio);
   gShadow = 1.0 - t1;
   vec3 shade = mix(shadowTone, midTone, t1);
-  return alb * mix(shade, lightTone, t2);
+  return alb * mix(shade, lightTone, t2) * uTint;
 }
 vec3 comicShade(vec3 alb, vec3 lit) {
   return comicShade(alb, lit, vec3(0.56, 0.5, 0.68), vec3(0.86, 0.86, 0.9), vec3(1.07, 1.03, 0.96));
@@ -31,6 +39,7 @@ export const SHADOW_ALPHA = /* glsl */ `
 export function comicToon(params) {
   const mat = new THREE.MeshToonMaterial({ ...params, gradientMap: toonGradient() });
   mat.onBeforeCompile = (shader) => {
+    addShadeUniforms(shader);
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${COMIC_SHADE}`)
       .replace('#include <opaque_fragment>', 'outgoingLight = comicShade(diffuseColor.rgb, outgoingLight);\n#include <opaque_fragment>')

@@ -20,6 +20,8 @@ export const DEFAULT_SETTINGS = {
   renderScale: 1,
   dynamicRes: true,
   showFps: true,
+  timeOfDay: 'cycle',
+  weather: 'cycle',
   volume: { master: 0.8, music: 0.6, sfx: 0.9 },
 };
 
@@ -72,6 +74,8 @@ export function sanitizeSettings(raw = {}) {
     renderScale: num(r.renderScale, 0.5, 1, d.renderScale),
     dynamicRes: bool(r.dynamicRes, d.dynamicRes),
     showFps: bool(r.showFps, d.showFps),
+    timeOfDay: oneOf(r.timeOfDay, ['cycle', 'day', 'golden', 'night'], d.timeOfDay),
+    weather: oneOf(r.weather, ['cycle', 'clear', 'overcast', 'rain'], d.weather),
     volume: {
       master: num(v.master, 0, 1, d.volume.master),
       music: num(v.music, 0, 1, d.volume.music),

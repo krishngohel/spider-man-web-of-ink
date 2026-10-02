@@ -106,6 +106,35 @@ export function buildStreetMeshes(props, scene, quality) {
   add(carGeometry(), props.cars, (c) => { p.set(c.x, 0, c.z); q.setFromAxisAngle(up, c.yaw); s.set(1, 1, 1); }, (c) => c.color, true);
   add(treeGeometry(), props.trees, (t) => { p.set(t.x, 0, t.z); q.setFromAxisAngle(up, t.x * 0.37); s.setScalar(t.s); }, null, true);
   add(hydrantGeometry(), props.hydrants, (h) => { p.set(h.x, 0, h.z); q.identity(); s.set(1, 1, 1); });
+  // Night: bulbs light up and throw a comic cone of light (additive, no real light: cheap).
+  const glow = { value: 0 };
+  if (props.lamps.length) {
+    const cone = new THREE.ConeGeometry(2.6, 5.9, 12, 1, true);
+    cone.translate(0, 5.95 / 2, 0);
+    cone.translate(0, 0, 1.5);
+    const coneMat = new THREE.ShaderMaterial({
+      uniforms: { uGlow: glow, uCol: { value: new THREE.Color(0xffd98a) } },
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+      vertexShader: `varying float vH; void main() { vH = position.y / 5.95; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform float uGlow; uniform vec3 uCol; varying float vH; void main() { gl_FragColor = vec4(uCol * uGlow * 0.22 * (1.0 - vH * 0.85), 1.0); }`,
+    });
+    const cones = new THREE.InstancedMesh(cone, coneMat, props.lamps.length);
+    const bulbMat = new THREE.ShaderMaterial({
+      uniforms: { uGlow: glow },
+      vertexShader: `void main() { gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
+      fragmentShader: `uniform float uGlow; void main() { gl_FragColor = vec4(mix(vec3(0.95, 0.92, 0.8), vec3(1.0, 0.9, 0.55) * 1.6, uGlow), 1.0); }`,
+    });
+    const bulbGeo = new THREE.BoxGeometry(0.36, 0.08, 0.6); bulbGeo.translate(0, 5.94, 1.5);
+    const bulbs = new THREE.InstancedMesh(bulbGeo, bulbMat, props.lamps.length);
+    props.lamps.forEach((l, i) => {
+      p.set(l.x, 0, l.z); q.setFromAxisAngle(up, l.facing > 0 ? Math.PI / 2 : -Math.PI / 2); s.set(1, 1, 1);
+      m4.compose(p, q, s); cones.setMatrixAt(i, m4); bulbs.setMatrixAt(i, m4);
+    });
+    cones.visible = false;
+    cones.renderOrder = 4;
+    group.add(cones, bulbs);
+    group.userData.setNight = (n) => { glow.value = n; cones.visible = n > 0.05; };
+  }
   scene.add(group);
   return group;
 }

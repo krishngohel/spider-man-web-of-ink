@@ -63,6 +63,8 @@ export function buildTestCity() {
   }
 
   const city = {
+    kind: 'test',
+    grid: GRID,
     boxes,
     districts: DISTRICTS,
     landmark: LANDMARK,
