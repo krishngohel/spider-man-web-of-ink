@@ -17,12 +17,19 @@ const MIN_RISE = 5;
 // Where a swing from this anchor would take the hero over the next `T` seconds, with the same
 // physics as the real thing (gravity, drag, the SHAKE line) at a coarser step. Returns when it
 // would first hit something (Infinity if clear), and where it ends up.
-const PREDICT_T = 1.1, PREDICT_DT = 1 / 60;
+// Scoring weights (tuned with scripts/swing-tune.mjs against the swing-sim battery).
+export const SCORE = {
+  velLean: 0.41, idealBase: 37.7, idealPerSpeed: 0.02, idealMax: 53.8,
+  dist: 1.41, clear: 1.0, vel: 1.04,
+  survive: 2.52, progress: 0, heading: 1.64, keep: 0.13,
+  predicted: 10, horizon: 1.8,
+};
+const PREDICT_DT = 1 / 45;
 export function predictSwing(world, p0, v0, a, g, k) {
   let px = p0.x, py = p0.y, pz = p0.z, vx = v0.x, vy = v0.y, vz = v0.z;
   let L = Math.hypot(px - a.x, py - a.y, pz - a.z);
   const dt = PREDICT_DT;
-  for (let t = dt; t <= PREDICT_T + 1e-9; t += dt) {
+  for (let t = dt; t <= SCORE.horizon + 1e-9; t += dt) {
     vy -= g * dt;
     const s = Math.hypot(vx, vy, vz), f = Math.min(1, k * s * dt);
     vx -= vx * f; vy -= vy * f; vz -= vz * f;
@@ -54,13 +61,13 @@ export function findAnchor(world, hero, { dirX = 0, dirZ = 1, assist = 'normal',
   let px = dirX, pz = dirZ;
   if (sh > 4) {
     // Lean the fan toward the way we're already going, less so the more the player steers.
-    const k = 0.5 / fan.aim;
+    const k = SCORE.velLean / fan.aim;
     px += (v.x / sh) * k; pz += (v.z / sh) * k;
   }
   const pl = Math.hypot(px, pz) || 1;
   px /= pl; pz /= pl;
   const vhx = sh > 1 ? v.x / sh : px, vhz = sh > 1 ? v.z / sh : pz;
-  const ideal = Math.max(30, Math.min(60, 30 + 0.5 * speed));
+  const ideal = Math.max(SCORE.idealBase, Math.min(SCORE.idealMax, SCORE.idealBase + SCORE.idealPerSpeed * speed));
   const floor = world.groundHeight(p.x, p.y - 0.9, p.z);
 
   const cands = [];
@@ -81,8 +88,8 @@ export function findAnchor(world, hero, { dirX = 0, dirZ = 1, assist = 'normal',
       const velScore = (rx * vhx + rz * vhz) / rl;
       const distScore = 1 - Math.abs(dist - ideal) / 30;
       const clearance = hit.y - dist - (floor + 2);
-      const clearScore = clearance >= 0 ? 0.3 : clearance * 0.15;
-      const score = fan.aim * dirScore + 0.8 * distScore + clearScore + 0.4 * velScore;
+      const clearScore = clearance >= 0 ? SCORE.clear : clearance * 0.15;
+      const score = fan.aim * dirScore + SCORE.dist * distScore + clearScore + SCORE.vel * velScore;
       cands.push({ x: hit.x, y: hit.y, z: hit.z, nx: hit.nx, ny: hit.ny, nz: hit.nz, box: hit.box, dist, score });
     }
   }
@@ -92,23 +99,23 @@ export function findAnchor(world, hero, { dirX = 0, dirZ = 1, assist = 'normal',
   // its pole) loses to one whose arc stays clear and carries you the way you want to go.
   cands.sort((a, b) => b.score - a.score);
   const k = g / (tune.terminal * tune.terminal);
-  const scale = Math.max(10, speed) * PREDICT_T;
+  const T = SCORE.horizon;
+  const scale = Math.max(10, speed) * T;
   let best = null;
-  for (const c of cands.slice(0, PREDICTED)) {
+  for (const c of cands.slice(0, SCORE.predicted)) {
     const r = predictSwing(world, p, v, c, g, k);
-    const survive = Math.min(r.hit, PREDICT_T) / PREDICT_T;
+    const survive = Math.min(r.hit, T) / T;
     const progress = ((r.x - p.x) * px + (r.z - p.z) * pz) / scale;
     // Where the swing leaves you heading, and how much speed it keeps.
     const eh = Math.hypot(r.vx, r.vz) || 1;
     const heading = (r.vx * px + r.vz * pz) / eh;
     const keep = Math.min(1.5, Math.hypot(r.vx, r.vy, r.vz) / Math.max(10, speed));
     c.predict = r;
-    c.score += 2.2 * survive + 0.8 * progress + 1.4 * heading + 0.5 * keep;
+    c.score += SCORE.survive * survive + SCORE.progress * progress + SCORE.heading * heading + SCORE.keep * keep;
     if (!best || c.score > best.score) best = c;
   }
   return best;
 }
-const PREDICTED = 10;
 
 // Zip target: the first building surface along the camera ray (within zipRange of the hero), or
 // failing that the best anchor within 15 degrees of it.

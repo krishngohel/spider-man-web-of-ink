@@ -247,7 +247,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Loop -------------------------------------------------------------------------------------------
   const fixed = createFixedStep({ step: STEP, maxSteps: MAX_SUBSTEPS });
   const hand = new THREE.Vector3();
-  const frameTimes = new Float32Array(600);
+  const frameTimes = new Float32Array(4000);
+  const workTimes = new Float32Array(4000);
+  const gpuTimes = new Float32Array(4000);
   let frameIdx = 0, frame = 0, fps = 60, last = performance.now(), time = 0;
   const events = [];
 
@@ -312,6 +314,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     const scriptMs = performance.now() - t0;
     dynRes.update(dtMs);
     if (capDetector.frame(dtMs, scriptMs)) { hud.lowPower(); dynRes.capTo(30); }
+    workTimes[frameIdx % workTimes.length] = scriptMs;
+    gpuTimes[frameIdx % gpuTimes.length] = ink.gpuMs ?? -1;
     frameTimes[frameIdx++ % frameTimes.length] = dtMs;
     if (frame === 3) { performance.mark('boot:firstFrame'); state.ready = true; }
   }
@@ -340,7 +344,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     setSetting(k, v) { applySettings({ ...settings, [k]: v }); },
     get settings() { return settings; },
     play: () => enterPlay(),
-    get frameTimes() { return Array.from(frameTimes.slice(0, Math.min(frame, frameTimes.length))); },
+    get frameTimes() { return Array.from(frameTimes.slice(0, Math.min(frameIdx, frameTimes.length))); },
+    get workTimes() { return Array.from(workTimes.slice(0, Math.min(frameIdx, workTimes.length))); },
+    get gpuTimes() { return Array.from(gpuTimes.slice(0, Math.min(frameIdx, gpuTimes.length))).filter((v) => v >= 0); },
+    resetTimes() { frameTimes.fill(0); workTimes.fill(0); gpuTimes.fill(-1); frameIdx = 0; },
     events: () => events.map((e) => e.type),
     city, spawn, tune,
     dynRes: () => ({ scale: dynRes.scale, refresh: dynRes.refreshHz }),

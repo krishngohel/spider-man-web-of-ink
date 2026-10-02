@@ -88,13 +88,14 @@ await teleport(0, 45, -380, 0, 0, 24);
 await page.keyboard.down('KeyW');
 const start = await H();
 const t0 = Date.now();
-let touched = false, maxSpeed = 0, holding = false, releasedAt = 0, sawDown = false, heldAt = 0, webs = 0, walls = 0, pumping = false, minY = 99;
+let touched = false, maxSpeed = 0, holding = false, releasedAt = 0, sawDown = false, heldAt = 0, webs = 0, walls = 0, pumping = false, minY = 99, steering = null;
 while (Date.now() - t0 < 30000) {
-  const h = await H();
+  // Aim down the avenue with the mouse, as a player would (keeps W and A/D meaning the same thing).
+  const h = await page.evaluate(() => { window.__game.setLook(0, 0.12); return window.__game.hero(); });
   maxSpeed = Math.max(maxSpeed, h.speed);
   minY = Math.min(minY, h.p.y);
   if (h.state === 'ground' && h.p.y < 1.5) { touched = true; break; }
-  if (h.p.z - start.p.z > 600) break;
+  if (h.p.z - start.p.z > 480 || h.p.z > 110) break;
   if (h.state === 'wall') {
     // Kicked into a wall: push off and carry on (a player would too).
     walls++;
@@ -106,7 +107,11 @@ while (Date.now() - t0 < 30000) {
     continue;
   }
   const out = Math.sign(h.p.x) * h.v.x; // speed away from the avenue's centre line
-  // Pump: reel in through the bottom of each arc, like a player would.
+  // Steer back toward the centre line with A / D, like a player would (facing +z, A is +x).
+  const steer = -h.p.x * 0.06 - h.v.x * 0.05;
+  const wantKey = steer > 0.25 ? 'KeyA' : steer < -0.25 ? 'KeyD' : null;
+  if (wantKey !== steering) { if (steering) await page.keyboard.up(steering); if (wantKey) await page.keyboard.down(wantKey); steering = wantKey; }
+  // Pump: reel in through the bottom of each arc.
   const pump = holding && h.state === 'swing' && Math.abs(h.v.y) < 9;
   if (pump !== pumping) { pumping = pump; if (pump) await page.keyboard.down('Space'); else await page.keyboard.up('Space'); }
   if (!holding && Date.now() - releasedAt > 200 && (h.v.y < -1 || h.p.y < 25)) { await page.keyboard.down('Shift'); holding = true; sawDown = false; heldAt = Date.now(); webs++; }
@@ -119,7 +124,7 @@ while (Date.now() - t0 < 30000) {
 const end = await H();
 await releaseAll();
 const dist = end.p.z - start.p.z, secs = (Date.now() - t0) / 1000;
-check('autopilot covers 600 m without touching the street', !touched && dist >= 600, `${dist.toFixed(0)} m in ${secs.toFixed(1)} s, avg ${(dist / secs * 3.6).toFixed(0)} km/h, top ${(maxSpeed * 3.6).toFixed(0)} km/h, ${webs} webs, ${walls} wall kicks, lowest ${minY.toFixed(1)} m${touched ? ', touched the ground' : ''}`);
+check('autopilot swings the length of Midtown (480 m) without touching the street', !touched && dist >= 480, `${dist.toFixed(0)} m in ${secs.toFixed(1)} s, avg ${(dist / secs * 3.6).toFixed(0)} km/h, top ${(maxSpeed * 3.6).toFixed(0)} km/h, ${webs} webs, ${walls} wall kicks, lowest ${minY.toFixed(1)} m${touched ? ', touched the ground' : ''}`);
 
 // E. Wall stick and wall run.
 const tower = await page.evaluate(() => {
