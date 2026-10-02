@@ -13,6 +13,7 @@ export function padActions(pad, out = new Set()) {
   const btn = (i) => { const b = pad.buttons[i]; return !!b && (b.pressed || b.value > TRIGGER); };
   if (btn(PAD.jump)) out.add('jump');
   if (btn(PAD.dive)) out.add('dive');
+  if (btn(PAD.hang)) out.add('hang');
   if (btn(PAD.help)) out.add('help');
   if (btn(PAD.pause)) out.add('pause');
   // LT + RT is a zip; RT alone is swing.

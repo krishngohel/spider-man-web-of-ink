@@ -38,6 +38,7 @@ export function createHud(root, getSettings) {
     return {
       swing: bindingLabel(b, 'swing'), jump: bindingLabel(b, 'jump'), zip: bindingLabel(b, 'zip'),
       dive: bindingLabel(b, 'dive'), help: bindingLabel(b, 'help'), pause: bindingLabel(b, 'pause'),
+      hang: bindingLabel(b, 'hang'), forward: bindingLabel(b, 'forward'), back: bindingLabel(b, 'back'),
       move: ['forward', 'left', 'back', 'right'].map((a) => bindingLabel(b, a)).join(' '),
     };
   };

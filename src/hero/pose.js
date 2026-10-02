@@ -73,6 +73,7 @@ export function createPoser(heroModel) {
   let variant = 0;          // which swing pose set this swing uses (A, B, C)
   let lastHeading = 0, bank = 0, flutter = 0, perchT = 0, idleT = 0;
   let swings = 0;
+  let inverted = false;     // hanging upside down: the web runs from the feet
   const webWorld = new THREE.Vector3();
   const webHand = { side: 'r', world: webWorld };
 
@@ -105,6 +106,12 @@ export function createPoser(heroModel) {
     get webHand() { return webSide; },
     get trick() { return trick ? trick.name : null; },
     handWorld(out) { return model.getObjectByName(webSide === 'r' ? 'hand_r' : 'hand_l').getWorldPosition(out); },
+    // Where the web leaves the body: the web hand, or the feet when hanging upside down.
+    lineWorld(out) {
+      if (!inverted) return this.handWorld(out);
+      model.getObjectByName('foot_l').getWorldPosition(out);
+      return out.add(model.getObjectByName('foot_r').getWorldPosition(shoulder)).multiplyScalar(0.5);
+    },
 
     // at: where to draw the body (the game passes a position interpolated between physics steps).
     update(hero, dt, events, at = hero.body.p) {
@@ -116,6 +123,8 @@ export function createPoser(heroModel) {
       const st = hero.state;
       const swinging = st === 'swing' && hero.swing.active;
       const zipping = st === 'zip' && hero.rope.active;
+      const hanging = st === 'hang' && hero.swing.active;
+      inverted = hanging && hero.hangInverted;
       const grip = swinging ? hero.swing.R : zipping ? hero.rope.pivots[0] : null;
       if ((swinging || zipping) && !wasRope && grip) {
         webSide = sideOf(hero, grip.x, grip.z);
@@ -178,6 +187,27 @@ export function createPoser(heroModel) {
         offTarget.set(nx * WALL_OFFSET, 0, nz * WALL_OFFSET);
         if (b.v.y > 4 || hero.wallMomentum) play('Sprint_Loop', { timeScale: 1.1 });
         else play(Math.hypot(b.v.x, b.v.y, b.v.z) > 0.6 ? 'Crouch_Fwd_Loop' : 'Crouch_Idle_Loop');
+      } else if (hanging) {
+        // Along the line. Upright: head toward the pivot, hands on the line. Upside down: feet
+        // toward it, the web running from them.
+        const P = hero.swing.P;
+        tmp2.set(P.x - b.p.x, P.y - b.p.y, P.z - b.p.z).normalize();
+        if (inverted) tmp2.negate();
+        basis(tmp2, tmp, qBase);
+        if (inverted) target.set(POSES.hangInv);
+        else {
+          target.set(choose('hang'));
+          shoulderOf();
+          handTarget.set(P.x, P.y, P.z).sub(shoulder).normalize().multiplyScalar(0.47).add(shoulder);
+          webWorld.copy(handTarget);
+          webHand.side = webSide;
+          pin = webHand;
+        }
+        // A slow breathing sway so a still hang never freezes.
+        flutter += dt;
+        const s = Math.sin(flutter * 1.7);
+        target[LAYOUT.footR + 2] += s * 0.04; target[LAYOUT.footL + 2] -= s * 0.03;
+        target[LAYOUT.spine + 2] += s * 0.04;
       } else if (swinging || zipping) {
         // Up along the line toward the pivot, facing the way we're travelling.
         const P = swinging ? hero.swing.P : hero.rope.pivot;

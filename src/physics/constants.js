@@ -48,6 +48,14 @@ export const DEFAULTS = {
   airAccel: 6,             // m/s^2 toward the stick when slow in the air
   wallRunKeep: 0.85,       // share of speed kept turning a swing into a wall run
   wallRunFriction: 4,
+  // Hanging on a web (the hang key): climb and slide along the line, sway, flip upside down.
+  hangClimb: 5,            // m/s up the line
+  hangSlide: 7,            // m/s down the line
+  rappelSpeed: 18,         // m/s down the line holding dive
+  hangSway: 6,             // m/s^2 sideways from the stick
+  hangDamp: 1.4,           // 1/s: about critical damping for a 20 to 35 m line
+  hangTop: 1.4,            // m: the shortest the line climbs to
+  hangInvertAfter: 1,      // s of hanging nearly still (under 3 m/s) before flipping upside down
   // Aerodynamics. Body lift is the skydiver's "tracking": a lean turns the velocity without
   // changing its size. Glide is the web-wing polar.
   bodyLift: 0.0045,

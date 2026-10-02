@@ -95,6 +95,25 @@ const sj1 = await H();
 await releaseAll();
 check('swing-jump leaps off the web', sj0.swing.active && !sj1.swing.active && sj1.v.y > sj0.v.y + 4, `vy ${sj0.v.y.toFixed(1)} -> ${sj1.v.y.toFixed(1)}`);
 
+// D2. Web hang: E grabs the line mid-swing (no button held after), W climbs, S slides, E lets go.
+await teleport(0, 50, -330, 0, 0, 14);
+await aimAndHold();
+await until((h) => h.swing.active, 1500);
+await sleep(200);
+await page.keyboard.press('KeyE');
+await page.keyboard.up('Shift');
+await sleep(400);
+const hg0 = await H();
+await page.keyboard.down('KeyW'); await sleep(800); await page.keyboard.up('KeyW');
+const hg1 = await H();
+await page.keyboard.down('KeyS'); await sleep(800); await page.keyboard.up('KeyS');
+const hg2 = await H();
+await page.keyboard.press('KeyE');
+await sleep(100);
+const hg3 = await H();
+await releaseAll();
+check('hang grabs the line, climbs, slides and lets go', hg0.state === 'hang' && hg1.swing.L < hg0.swing.L - 2.5 && hg2.swing.L > hg1.swing.L + 3 && hg3.state === 'air', `${hg0.state}, L ${hg0.swing.L.toFixed(1)} -> ${hg1.swing.L.toFixed(1)} -> ${hg2.swing.L.toFixed(1)}, then ${hg3.state}`);
+
 // E2. A skilled run down the avenue: aim each web, hold, let go on the rise, steer back toward
 // the centre line. Covers the length of Midtown without touching the street.
 await teleport(0, 45, -400, 0, 0, 18);

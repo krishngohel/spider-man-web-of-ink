@@ -23,7 +23,7 @@ function run(hero, intent, seconds, each) {
   const n = Math.round(seconds / dt);
   for (let i = 0; i < n; i++) {
     hero.step(intent, dt);
-    intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false;
+    intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false; intent.hangPressed = false;
     if (each) each(i);
   }
 }
@@ -303,12 +303,13 @@ describe('physics rule', () => {
           const was = i.swing; i.swing = rng.chance(0.6); i.swingPressed = i.swing && !was; i.swingReleased = !i.swing && was;
           const wj = i.jump; i.jump = rng.chance(0.3); i.jumpPressed = i.jump && !wj; i.jumpReleased = !i.jump && wj;
           i.zipPressed = rng.chance(0.05); i.dive = rng.chance(0.2);
+          i.hangPressed = rng.chance(0.1); i.climb = rng.range(-1, 1);
           const yaw = rng.range(0, Math.PI * 2);
           i.camFwd = { x: Math.sin(yaw) * 0.9, y: 0.3, z: Math.cos(yaw) * 0.9 };
           i.camPos = { x: h.body.p.x - i.camFwd.x * 5, y: h.body.p.y + 1, z: h.body.p.z - i.camFwd.z * 5 };
         }
         h.step(i, dt);
-        i.swingPressed = false; i.swingReleased = false; i.jumpPressed = false; i.jumpReleased = false; i.zipPressed = false;
+        i.swingPressed = false; i.swingReleased = false; i.jumpPressed = false; i.jumpReleased = false; i.zipPressed = false; i.hangPressed = false;
         expect(Number.isFinite(h.body.p.x + h.body.p.y + h.body.p.z)).toBe(true);
         expect(w.pointInside(h.body.p.x, h.body.p.y, h.body.p.z, 0.05)).toBe(false);
       }
@@ -318,5 +319,124 @@ describe('physics rule', () => {
       expect(sum.y).toBeCloseTo(h.body.v.y, 6);
       expect(sum.z).toBeCloseTo(h.body.v.z, 6);
     }
+  });
+});
+
+describe('hanging on a web', () => {
+  const aim = (i, h, x, y, z) => {
+    const cx = h.body.p.x, cy = h.body.p.y + 0.6, cz = h.body.p.z;
+    const dx = x - cx, dy = y - cy, dz = z - cz, l = Math.hypot(dx, dy, dz);
+    i.camPos = { x: cx, y: cy, z: cz };
+    i.camFwd = { x: dx / l, y: dy / l, z: dz / l };
+  };
+  // Swinging on the east towers, then the hang key grabs the line.
+  function hanging() {
+    const w = city();
+    const h = createHero(w);
+    h.strict = true;
+    h.place(0, 40, 0, 0, 0, 20);
+    const i = emptyIntent();
+    aim(i, h, 15, 62, 30);
+    i.swing = true; i.swingPressed = true;
+    run(h, i, 0.3);
+    expect(h.state).toBe('swing');
+    i.hangPressed = true; i.swing = false;
+    run(h, i, dt);
+    return { w, h, i };
+  }
+
+  it('grabbing the line mid-swing hangs from it, no button held, and settles under the anchor', () => {
+    const { h, i } = hanging();
+    expect(h.state).toBe('hang');
+    run(h, i, 8);
+    expect(h.state).toBe('hang');
+    expect(h.speed).toBeLessThan(0.6);
+    const P = h.swing.P;
+    expect(Math.hypot(h.body.p.x - P.x, h.body.p.z - P.z)).toBeLessThan(1.2);
+  });
+  it('climbing shortens the line, sliding lengthens it, C rappels fast', () => {
+    const { h, i } = hanging();
+    run(h, i, 3);
+    let L0 = h.swing.L;
+    i.climb = 1; run(h, i, 1);
+    expect(L0 - h.swing.L).toBeCloseTo(tune.hangClimb, 0);
+    L0 = h.swing.L;
+    i.climb = -1; run(h, i, 1);
+    // From climbing to sliding takes a beat to reverse.
+    expect(h.swing.L - L0).toBeGreaterThan(tune.hangSlide * 0.85);
+    expect(h.swing.L - L0).toBeLessThan(tune.hangSlide + 0.1);
+    L0 = h.swing.L;
+    i.climb = 0; i.dive = true; run(h, i, 0.5);
+    expect(h.swing.L - L0).toBeGreaterThan(tune.hangSlide * 0.5 + 2);
+  });
+  it('sliding all the way down puts the hero on the street, never through it', () => {
+    const { h, i } = hanging();
+    i.climb = -1; i.dive = true;
+    run(h, i, 8, () => expect(h.body.p.y).toBeGreaterThan(0.85));
+    expect(h.state).toBe('ground');
+    expect(h.body.p.y).toBeCloseTo(0.9, 1);
+  });
+  it('jumping off the line launches up and away', () => {
+    const { h, i } = hanging();
+    run(h, i, 2);
+    i.jumpPressed = true;
+    run(h, i, dt);
+    expect(h.state).toBe('air');
+    expect(h.swing.active).toBe(false);
+    expect(h.body.v.y).toBeGreaterThan(8);
+  });
+  it('the hang key again lets go', () => {
+    const { h, i } = hanging();
+    run(h, i, 1);
+    i.hangPressed = true;
+    run(h, i, dt);
+    expect(h.state).toBe('air');
+    expect(h.swing.active).toBe(false);
+  });
+  it('the hang key in the air fires a web that hangs straight away', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(0, 40, 0, 0, 0, 5);
+    const i = emptyIntent();
+    aim(i, h, 15, 62, 10);
+    i.hangPressed = true;
+    run(h, i, 0.3);
+    expect(h.state).toBe('hang');
+    expect(h.swing.R.y).toBeCloseTo(62, 0);
+  });
+  it('a hang web on a miss does nothing', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(0, 40, 0, 0, 0, 5);
+    const i = emptyIntent();
+    i.camPos = { x: 0, y: 41, z: -5 }; i.camFwd = { x: 0, y: 0.3, z: 0.954 };
+    i.hangPressed = true;
+    run(h, i, 0.3);
+    expect(h.state).toBe('air');
+  });
+  it('climbing to the top of a web stuck under a roof edge pulls the hero up onto the roof', () => {
+    const w = city();
+    const h = createHero(w);
+    h.strict = true;
+    h.place(-140, 8, 0, 0, 0, 0);
+    const i = emptyIntent();
+    aim(i, h, -150, 19.3, 0); // the low building's east face, just under its 20 m roof
+    i.hangPressed = true;
+    run(h, i, 0.1);
+    expect(h.state).toBe('hang');
+    i.climb = 1;
+    let vaulted = false;
+    run(h, i, 6, () => { if (h.events.some((e) => e.type === 'vault')) vaulted = true; });
+    expect(vaulted).toBe(true);
+    expect(h.state).toBe('ground');
+    expect(h.body.p.y).toBeCloseTo(20.9, 1);
+    expect(h.body.p.x).toBeLessThan(-150.2);
+  });
+  it('hangs upside down after holding still a moment, and turns upright to climb', () => {
+    const { h, i } = hanging();
+    run(h, i, 8);
+    expect(h.hangInverted).toBe(true);
+    i.climb = 1; run(h, i, 0.1);
+    expect(h.hangInverted).toBe(false);
   });
 });

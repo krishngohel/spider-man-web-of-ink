@@ -224,10 +224,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     intent.jumpPressed = intent.jumpPressed || input.pressed('jump');
     intent.jumpReleased = !jump && consumedJump;
     intent.zipPressed = intent.zipPressed || input.pressed('zip');
+    intent.hangPressed = intent.hangPressed || input.pressed('hang');
+    intent.climb = input.move.y;
     intent.dive = input.down('dive');
   }
   const clearEdges = () => {
-    intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false;
+    intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false; intent.hangPressed = false;
     consumedSwing = intent.swing; consumedJump = intent.jump;
   };
   const resetIntent = () => { clearEdges(); intent.swing = false; intent.jump = false; consumedSwing = false; consumedJump = false; swingLatch = false; };
@@ -375,7 +377,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     const Tpose = performance.now();
     poser.update(hero, dt, events, renderP);
     prof('pose', Tpose);
-    poser.handWorld(hand);
+    poser.lineWorld(hand);
     webLine.update(hand, hero.swing, hero.rope, hero.pendingWeb, tune.webTravel);
     sfx.setSpeed(mode === 'play' ? hero.speed : 0, dt);
 
@@ -462,7 +464,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       p: { ...hero.body.p }, v: { ...hero.body.v }, state: hero.state, speed: hero.speed,
       rope: { active: hero.rope.active || hero.swing.active, length: hero.swing.active ? hero.swing.L : hero.rope.length, pivots: hero.rope.pivots.length, tension: hero.swing.active ? hero.swing.tension : hero.rope.tension, stalled: hero.rope.stalled },
       swing: { active: hero.swing.active, L: hero.swing.L, angle: hero.swing.active ? hero.swing.angle(hero.body.p, hero.body.v) : 0 },
-      facing: { ...hero.facing },
+      facing: { ...hero.facing }, hangInverted: hero.hangInverted,
     }),
     camera: () => ({ yaw: rig.yaw, pitch: rig.pitch, pos: { ...rig.pos }, fwd: { ...rig.fwd }, fov: rig.fov }),
     teleport(x, y, z, vx = 0, vy = 0, vz = 0, st = 'air', yaw = null) {

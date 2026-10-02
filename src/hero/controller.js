@@ -39,6 +39,7 @@ export function emptyIntent() {
     swing: false, swingPressed: false, swingReleased: false,
     jump: false, jumpPressed: false, jumpReleased: false,
     zipPressed: false, dive: false,
+    hangPressed: false, climb: 0,
   };
 }
 
@@ -69,6 +70,8 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     landing: null,
     contactAge: 0,
     wallMomentum: false,
+    hangInverted: false,
+    hangStill: 0,
     // Tests turn this on: a surface push with nothing to push against throws.
     strict: false,
     events: [],
@@ -77,7 +80,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       placeBody(body, x, y, z, vx, vy, vz);
       rope.release();
       swing.release();
-      this.wallMomentum = false;
+      this.wallMomentum = false; this.hangInverted = false; this.hangStill = 0;
       this.pendingWeb = null; this.zip = null;
       this.state = state;
       this.airTime = 0; this.ungrounded = 0; this.wallLost = 0;
@@ -96,6 +99,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
         case 'zip': zipStep(intent, dt); break;
         case 'wall': wallStep(intent, dt); break;
         case 'glide': glideStep(intent, dt); break;
+        case 'hang': hangStep(intent, dt); break;
       }
       capSpeed();
       updateFacing(intent);
@@ -157,12 +161,12 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   }
 
   // Fires a web where the crosshair points. Returns false on a miss.
-  function shootWeb(intent) {
+  function shootWeb(intent, hang = false) {
     const cam = { x: intent.camPos.x, y: intent.camPos.y, z: intent.camPos.z, fx: intent.camFwd.x, fy: intent.camFwd.y, fz: intent.camFwd.z };
     const hit = findAimPoint(world, body, cam);
     if (!hit) { emit('miss'); return false; }
     const t = tune.webTravel + hit.dist / tune.webSpeed;
-    hero.pendingWeb = { anchor: hit, t, travel: t };
+    hero.pendingWeb = { anchor: hit, t, travel: t, hang };
     emit('thwip', { x: hit.x, y: hit.y, z: hit.z });
     return true;
   }
@@ -245,7 +249,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       return;
     }
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
-    if (intent.swingPressed && shootWeb(intent)) {
+    if ((intent.swingPressed && shootWeb(intent)) || (intent.hangPressed && shootWeb(intent, true))) {
       // From the ground: jump and let the web catch.
       push(0, tune.jumpSpeed - Math.max(0, v.y), 0, 'jump');
       hero.state = 'air'; hero.airTime = 0;
@@ -271,16 +275,19 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
     // A fresh press re-aims, even with a web still in flight; a held button never refires.
     if (intent.swingPressed) { hero.pendingWeb = null; shootWeb(intent); }
+    else if (intent.hangPressed) { hero.pendingWeb = null; shootWeb(intent, true); }
     else if (hero.shootNow && !hero.pendingWeb) shootWeb(intent);
     hero.shootNow = false;
     if (hero.pendingWeb) {
       hero.pendingWeb.t -= dt;
-      if (!intent.swing) hero.pendingWeb = null;
+      // A swing web needs the button held; a hang web does not.
+      if (!intent.swing && !hero.pendingWeb.hang) hero.pendingWeb = null;
       else if (hero.pendingWeb.t <= 0) {
-        const a = hero.pendingWeb.anchor;
+        const a = hero.pendingWeb.anchor, hang = hero.pendingWeb.hang;
         swing.attach(a, body);
         hero.pendingWeb = null;
-        hero.state = 'swing';
+        hero.state = hang ? 'hang' : 'swing';
+        if (hang) startHang();
         emit('attach', { x: a.x, y: a.y, z: a.z, nx: a.nx, ny: a.ny, nz: a.nz });
         const before = hero.speed;
         move(dt);
@@ -308,6 +315,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     move(dt);
     swing.postStep(body, world);
     if (swingContacts(before)) return;
+    if (intent.hangPressed) { hero.state = 'hang'; startHang(); return; }
     if (intent.jumpPressed) {
       // Swing-jump: off the line with a push forward and up.
       swing.release();
@@ -328,6 +336,91 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     }
     // A new press while swinging re-aims: let go of this web and fire the next.
     if (intent.swingPressed) { swing.release(); toAir(); hero.shootNow = true; }
+  }
+
+  // Hang -------------------------------------------------------------------------------------
+  // Hanging on the line, no button held. Climb up and slide down it, rappel with dive, sway with
+  // the stick, jump off, or let go with the hang key. A body hanging still settles under the
+  // anchor and, after a moment, flips upside down. Climbing to the top of a line that comes over a
+  // roof edge (or is stuck just under one) pulls the hero up onto the roof.
+  function startHang() {
+    hero.hangStill = 0; hero.hangInverted = false;
+    emit('hang');
+  }
+
+  function hangStep(intent, dt) {
+    hero.airTime += dt;
+    applyGravity(body, g(), dt);
+    applyDrag(body, dragK(g(), tune.terminal), dt);
+    const v = body.v, p = body.p;
+    const rope = swing.rope;
+    const P = rope.pivot;
+    const rx = p.x - P.x, ry = p.y - P.y, rz = p.z - P.z, d = Math.hypot(rx, ry, rz) || 1;
+    const ux = rx / d, uy = ry / d, uz = rz / d;
+    const vr = v.x * ux + v.y * uy + v.z * uz;
+    // Settle: the sway (motion across the line) dies away, the body held still on it.
+    const k = Math.min(1, tune.hangDamp * dt);
+    applyDv(body, 'assist', -(v.x - vr * ux) * k, -(v.y - vr * uy) * k, -(v.z - vr * uz) * k);
+    // Sway from the stick.
+    const m = Math.hypot(intent.moveX, intent.moveZ);
+    if (m > 0.05) applyDv(body, 'assist', (intent.moveX / Math.max(1, m)) * tune.hangSway * dt, 0, (intent.moveZ / Math.max(1, m)) * tune.hangSway * dt);
+    // Along the line.
+    const climb = intent.climb ?? 0;
+    const rate = intent.dive ? tune.rappelSpeed : climb > 0.2 ? -tune.hangClimb * climb : climb < -0.2 ? tune.hangSlide * -climb : 0;
+    const floor = world.groundHeight(p.x, p.y - 0.9, p.z);
+    const maxL = Math.min(tune.webMax, P.y - floor - 0.9);
+    if (rate > 0) {
+      // Paying out: the line follows the body down at up to the slide speed, and the hands let it
+      // run (a quick push down the line toward that speed).
+      if (vr < rate) { const a = Math.min(rate - vr, 80 * dt); applyDv(body, 'assist', ux * a, uy * a, uz * a); }
+      rope.length = Math.min(maxL, d + rate * dt);
+    } else rope.length = Math.min(maxL, Math.max(tune.hangTop, rope.length + rate * dt));
+    // Upside down when still; upright to move along the line.
+    if (Math.abs(rate) > 0 || m > 0.05) { hero.hangStill = 0; hero.hangInverted = false; }
+    else if (hero.speed < 3) { hero.hangStill += dt; if (hero.hangStill > tune.hangInvertAfter) hero.hangInverted = true; }
+
+    rope.preStep(body, dt);
+    move(dt);
+    rope.postStep(body, world);
+
+    if (touch.ground && v.y <= 0.5) { land(); return; }
+    // Slid to the bottom of the line: drop off it onto the street.
+    if (rate > 0 && rope.length >= maxL - 0.02) { swing.release(); toAir(); emit('release'); return; }
+    // Climbed to the top: over a roof edge, pull up onto the roof.
+    if (climb > 0.2 && rope.length <= tune.hangTop + 0.05 && pullUp()) return;
+    if (intent.jumpPressed) {
+      swing.release();
+      const d = wantedHeading(intent);
+      applyDv(body, 'assist', d.x * 5, 11 - Math.min(0, v.y), d.z * 5);
+      toAir();
+      emit('swingJump');
+      return;
+    }
+    if (intent.hangPressed) { swing.release(); toAir(); emit('release'); return; }
+    if (intent.swingPressed) { swing.release(); toAir(); hero.shootNow = true; }
+  }
+
+  // At the top of the line: up and over the roof edge it comes over (or is stuck just under).
+  // Returns true when it vaulted.
+  function pullUp() {
+    const rope = swing.rope, w = rope.pivot, a = rope.pivots[0];
+    let ix, iz, top;
+    if (rope.pivots.length > 1 && w.roof) {
+      ix = a.x - w.x; iz = a.z - w.z; top = w.y;
+    } else if (rope.pivots.length === 1 && a.box && Math.abs(a.ny) < 0.5 && a.box.maxY - a.y < 1.6) {
+      ix = -a.nx; iz = -a.nz; top = a.box.maxY;
+    } else return false;
+    const il = Math.hypot(ix, iz) || 1;
+    const v = body.v, p = body.p;
+    // Enough to rise a body height over the edge.
+    const rise = Math.max(0.5, top + 1.3 - p.y);
+    const vy = Math.sqrt(2 * g() * rise);
+    swing.release();
+    push((ix / il) * 3.5 - v.x, vy - v.y, (iz / il) * 3.5 - v.z, 'pull up over the edge', true);
+    hero.state = 'air'; hero.airTime = 0.2;
+    hero.launchUntil = hero.time + tune.launchWindow + 0.4;
+    emit('vault');
+    return true;
   }
 
   function toAir() {

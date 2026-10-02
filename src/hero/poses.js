@@ -188,6 +188,22 @@ export const POSES = {
     hl: [0.03, 0.45, 0.12], gl: 'grab', hr: [-0.03, 0.45, 0.12], gr: 'grab',
     fl: [0.1, -0.5, 0.25], kl: [0, 0.2, 1], fr: [-0.1, -0.56, 0.18], kr: [0, 0.2, 1], toe: [0.8, 0.8],
   }),
+  // Hanging on the line: right hand high on it (pinned by IK), left hand gripping just below, body
+  // long, legs together and a little crossed.
+  hang: pose({
+    spine: [0.04, 0, 0.05], head: [-0.12, 0.1],
+    hl: [0.02, 0.4, 0.12], el: [1, 0, 0.2], gl: 'grab',
+    hr: [-0.03, 0.47, 0.04], er: [-1, 0, 0.2], gr: 'grab', wrist: [0.2, 0.2],
+    fl: [0.03, -0.85, 0.06], kl: [0, 0, 1], fr: [-0.09, -0.8, 0.14], kr: [0, 0, 1], toe: [0.55, 0.45],
+  }),
+  // Upside down on the line (the classic): the web runs from the feet, one leg straight up the
+  // line, the other hooked round it, arms hanging loose past the head.
+  hangInv: pose({
+    spine: [-0.08, 0, 0], head: [0.15, 0],
+    hl: [0.16, 0.36, 0.14], el: [1, 0, 0.3], gl: 'relaxed',
+    hr: [-0.1, 0.4, 0.2], er: [-1, 0, 0.3], gr: 'relaxed',
+    fl: [0.0, -0.87, 0.02], kl: [0, 0, 1], fr: [0.06, -0.52, -0.3], kr: [-0.4, 0, -1], toe: [0.9, 0.7],
+  }),
   // Superhero landing: crouched low, right knee down, right fist on the ground, left arm out.
   land: pose({
     spine: [0.95, 0, -0.2], head: [-0.85, 0], drop: 0.6,

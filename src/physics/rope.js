@@ -35,6 +35,7 @@ export function createRope() {
       // Lift the pivot 5 cm off its surface, so the line can wrap around the building it is
       // stuck to (a wrap ray starting inside the box would never see it).
       const off = anchor.body ? 0 : 0.05;
+      const hitBox = anchor.box ?? null, anx = anchor.nx ?? 0, any = anchor.ny ?? 0, anz = anchor.nz ?? 0;
       anchor = { x: anchor.x + (anchor.nx ?? 0) * off, y: anchor.y + (anchor.ny ?? 0) * off, z: anchor.z + (anchor.nz ?? 0) * off, body: anchor.body };
       this.anchorBody = anchor.body ?? null;
       if (this.anchorBody) {
@@ -42,7 +43,7 @@ export function createRope() {
         this.anchorOffset.y = anchor.y - this.anchorBody.p.y;
         this.anchorOffset.z = anchor.z - this.anchorBody.p.z;
       }
-      this.pivots = [{ x: anchor.x, y: anchor.y, z: anchor.z, ax: 0, ay: 0, az: 0, seg: 0, roof: false }];
+      this.pivots = [{ x: anchor.x, y: anchor.y, z: anchor.z, ax: 0, ay: 0, az: 0, seg: 0, roof: false, box: hitBox, nx: anx, ny: any, nz: anz }];
       this.length = Math.hypot(body.p.x - anchor.x, body.p.y - anchor.y, body.p.z - anchor.z);
       this.tension = 0; this.reelRate = 0; this.stalled = false;
     },

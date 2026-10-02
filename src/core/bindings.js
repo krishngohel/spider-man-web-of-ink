@@ -7,6 +7,7 @@ export const ACTIONS = [
   { id: 'swing', label: 'Web at the crosshair and swing (hold), parkour run and wall run', group: 'Move' },
   { id: 'jump', label: 'Jump. While swinging: swing-jump. In the air: web wings', group: 'Move' },
   { id: 'zip', label: 'Web zip to where the camera points', group: 'Move' },
+  { id: 'hang', label: 'Hang on the web (climb with forward and back), press again to let go', group: 'Move' },
   { id: 'dive', label: 'Dive (hold in the air)', group: 'Move' },
   { id: 'help', label: 'Controls help', group: 'Other' },
   { id: 'pause', label: 'Pause and settings', group: 'Other' },
@@ -20,6 +21,7 @@ export const DEFAULT_BINDINGS = {
   swing: ['ShiftLeft'],
   jump: ['Space'],
   zip: ['KeyQ'],
+  hang: ['KeyE'],
   dive: ['KeyC'],
   help: ['KeyH'],
   pause: ['Escape', 'KeyP'],
@@ -29,6 +31,7 @@ export const DEFAULT_BINDINGS = {
 export const PAD = {
   jump: 0,      // A / Cross
   dive: 1,      // B / Circle
+  hang: 3,      // Y / Triangle
   zipHold: 6,   // LT / L2 (with RT: zip)
   swing: 7,     // RT / R2
   help: 8,      // Back / Share
