@@ -14,6 +14,7 @@ export const CAM = {
   wallClear: 0.3, groundClear: 0.6,
   look: 0.0024,
   shoulder: 0.85, shoulderUp: 0.25,
+  minDist: 1.8,
 };
 
 const RAY = { ground: true };
@@ -39,6 +40,8 @@ export function createCameraRig() {
     pos: { x: 0, y: 0, z: -5 },
     fwd: { x: 0, y: 0, z: 1 },
     shake: 0,
+    side: 0.85,
+    closeness: 5,
 
     // look: { dx, dy } in mouse pixels. world: needs raycast and groundHeight.
     update(dt, look, hero, world, settings = {}) {
@@ -53,7 +56,13 @@ export function createCameraRig() {
       const speed = Math.hypot(v.x, v.y, v.z);
       const hs = Math.hypot(v.x, v.z);
       const flying = hero.state !== 'ground' && hero.state !== 'wall';
-      if (rig.sinceLook > CAM.followDelay && hs > 10 && flying) {
+      if (hero.state === 'wall' && hero.wall && rig.sinceLook > 0.3) {
+        // On a wall: swing round to face the wall from the open side, looking slightly up it.
+        const want = Math.atan2(-hero.wall.nx, -hero.wall.nz);
+        const k = 1 - Math.exp(-dt * 3);
+        rig.yaw = wrapAngle(rig.yaw + wrapAngle(want - rig.yaw) * k);
+        rig.pitch += (-0.15 - rig.pitch) * k;
+      } else if (rig.sinceLook > CAM.followDelay && hs > 10 && flying) {
         const want = Math.atan2(v.x, v.z);
         const k = 1 - Math.exp(-dt * CAM.followRate * Math.min(1, hs / 30));
         rig.yaw = wrapAngle(rig.yaw + wrapAngle(want - rig.yaw) * k);
@@ -70,7 +79,8 @@ export function createCameraRig() {
 
       // Focus: the hero, followed tightly (a small lag reads as weight without losing the hero).
       const p = hero.body.p;
-      const kf = 1 - Math.exp(-dt * 18);
+      // A swing trails a little more (weight), a fall or run follows tightly.
+      const kf = 1 - Math.exp(-dt * (hero.state === 'swing' ? 11 : 18));
       rig.focus.x += (p.x - rig.focus.x) * kf;
       rig.focus.y += (p.y + CAM.focusHeight - rig.focus.y) * kf;
       rig.focus.z += (p.z - rig.focus.z) * kf;
@@ -93,21 +103,36 @@ export function createCameraRig() {
     // Right of the view direction (y up, right-handed): f x up.
     const hl = Math.hypot(d.x, d.z) || 1;
     const rx = -d.z / hl, rz = d.x / hl;
-    let side = CAM.shoulder;
+    // Shoulder: the right one unless a wall is in the way there and the left has more room.
+    let want = CAM.shoulder;
     if (world) {
-      const hit = world.raycast(f.x, f.y, f.z, rx, 0, rz, side + CAM.wallClear, RAY);
-      if (hit) side = Math.max(0, hit.t - CAM.wallClear);
+      const right = world.raycast(f.x, f.y, f.z, rx, 0, rz, CAM.shoulder + CAM.wallClear, RAY);
+      const rightRoom = right ? right.t - CAM.wallClear : CAM.shoulder;
+      if (rightRoom < CAM.shoulder * 0.6) {
+        const left = world.raycast(f.x, f.y, f.z, -rx, 0, -rz, CAM.shoulder + CAM.wallClear, RAY);
+        const leftRoom = left ? left.t - CAM.wallClear : CAM.shoulder;
+        want = leftRoom > rightRoom ? -Math.max(0, leftRoom) : Math.max(0, rightRoom);
+      }
     }
-    sh.x = f.x + rx * side; sh.y = f.y + CAM.shoulderUp; sh.z = f.z + rz * side;
+    // Ease between shoulders instead of popping.
+    rig.side += (want - rig.side) * 0.18;
+    sh.x = f.x + rx * rig.side; sh.y = f.y + CAM.shoulderUp; sh.z = f.z + rz * rig.side;
     let dist = rig.dist;
     // Back along -fwd from the shoulder point; stop short of anything in between.
     if (world) {
       const hit = world.raycast(sh.x, sh.y, sh.z, -d.x, -d.y, -d.z, dist + CAM.wallClear, RAY);
       if (hit) dist = Math.max(0.4, hit.t - CAM.wallClear);
     }
+    // Cramped (a wall right behind): rise over the hero rather than crowd into him.
+    let lift = 0;
+    if (dist < CAM.minDist && world) {
+      const up = world.raycast(sh.x, sh.y, sh.z, 0, 1, 0, 2.2, RAY);
+      lift = Math.min(up ? Math.max(0, up.t - CAM.wallClear) : 2, (CAM.minDist - dist) * 1.4);
+    }
     rig.pos.x = sh.x - d.x * dist;
-    rig.pos.y = sh.y - d.y * dist;
+    rig.pos.y = sh.y - d.y * dist + lift;
     rig.pos.z = sh.z - d.z * dist;
+    rig.closeness = Math.hypot(rig.pos.x - f.x, rig.pos.y - f.y, rig.pos.z - f.z);
     if (world) {
       const under = world.groundHeight(rig.pos.x, rig.pos.y, rig.pos.z);
       rig.pos.y = Math.max(rig.pos.y, under + CAM.groundClear);

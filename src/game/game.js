@@ -354,6 +354,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }
     if (!camOverride && Math.abs(camera.fov - rig.fov) > 0.01) { camera.fov = rig.fov; camera.updateProjectionMatrix(); }
     sky.follow(camera);
+    // The camera crammed right up against the hero (a tight corner): hide him rather than fill the
+    // screen with his back.
+    heroModel.root.visible = camOverride || rig.closeness > 0.9;
     const hp = hero.body.p;
     sun.target.position.set(Math.round(hp.x / 8) * 8, 0, Math.round(hp.z / 8) * 8);
     sun.position.copy(sun.target.position).addScaledVector(sunDir, 400);

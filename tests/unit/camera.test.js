@@ -60,4 +60,27 @@ describe('camera rig', () => {
     for (let i = 0; i < 300; i++) rig.update(1 / 60, still, hero, null);
     expect(rig.yaw).toBeCloseTo(1, 5);
   });
+  it('on a wall it turns to face the wall from the open side', () => {
+    const w = createWorld();
+    w.addBox({ min: [10, 0, -20], max: [30, 80, 20] });
+    w.build();
+    const rig = createCameraRig();
+    rig.yaw = -1.2;
+    const hero = heroAt(9.6, 20, 0, 0, 0, 0, 'wall');
+    hero.wall = { nx: -1, nz: 0 };
+    for (let i = 0; i < 120; i++) rig.update(1 / 60, still, hero, w);
+    expect(rig.fwd.x).toBeGreaterThan(0.85); // looking +x, into the wall
+    expect(rig.pos.x).toBeLessThan(9.6);     // from the open side
+  });
+  it('switches to the left shoulder when a wall blocks the right', () => {
+    const w = createWorld();
+    // Facing +z, the right side is -x: a wall just there.
+    w.addBox({ min: [-6, 0, -30], max: [-0.6, 80, 30] });
+    w.build();
+    const rig = createCameraRig();
+    rig.yaw = 0; rig.pitch = 0.1;
+    const hero = heroAt(0, 10, 0, 0, 0, 0, 'ground');
+    for (let i = 0; i < 60; i++) rig.update(1 / 60, still, hero, w);
+    expect(rig.side).toBeLessThan(0);
+  });
 });
