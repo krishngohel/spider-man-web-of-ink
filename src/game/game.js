@@ -162,6 +162,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     splat: (hit) => fx.splat(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz),
     boom: (p) => { fx.ring(p.x, p.y, p.z, 1.6); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.6); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('KA-BOOM!', s.x, s.y, 'hit'); sfx.event({ type: 'land', hard: true, impact: 30 }); },
     sense: (e, unblockable, ranged) => { combatHud.sense(e, unblockable, ranged); sfx.event({ type: 'sense' }); },
+    senseRed: (e, heavy, ranged) => { combatHud.red(e, heavy, ranged); sfx.event({ type: 'senseRed', heavy }); },
     shot: () => sfx.event({ type: 'shot' }),
     event: (e) => combatEvent(e),
   } });
@@ -175,7 +176,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const sfx = createSfx(() => settings.volume);
   const uiRoot = el('div', { class: 'ui-layer' });
   document.body.append(uiRoot);
-  const combatHud = createCombatHud(uiRoot, { get combat() { return combat; }, getSettings: () => settings });
+  const combatHud = createCombatHud(uiRoot, { get combat() { return combat; }, get hero() { return hero; }, getSettings: () => settings });
+  {
+    const sv = new THREE.Vector3();
+    combat.setOnScreen((e) => { sv.set(e.body.p.x, e.body.p.y + 0.5, e.body.p.z).project(camera); return sv.z < 1 && Math.abs(sv.x) < 1 && Math.abs(sv.y) < 1; });
+  }
   const hud = createHud(uiRoot, () => settings);
   const devPanel = createDevPanel(uiRoot);
   if (dev) devPanel.show();

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickTarget, canAttack, hitDamage, isActive, ARCHETYPES, MAX_ATTACKERS } from '../../src/combat/enemies.js';
+import { pickTarget, canAttack, hitDamage, isActive, windupFor, ARCHETYPES, MAX_ATTACKERS } from '../../src/combat/enemies.js';
 import { GADGETS } from '../../src/combat/gadgets.js';
 
 const E = (id, x, z, state = 'engage', arch = 'brawler') => ({ id, arch, A: ARCHETYPES[arch], state, alive: true, body: { p: { x, y: 0.9, z } }, facing: 0, shieldBroken: false });
@@ -33,6 +33,11 @@ describe('combat rules', () => {
     expect(hitDamage(b, 10, true)).toBe(10);
     b.state = 'down';
     expect(hitDamage(b, 10, true)).toBeGreaterThan(10);
+  });
+  it('light attacks wind up 0.6 s, heavies 0.9 s, guns keep their own', () => {
+    expect(windupFor(ARCHETYPES.brawler)).toBe(0.6);
+    expect(windupFor(ARCHETYPES.brute)).toBe(0.9);
+    expect(windupFor(ARCHETYPES.gunner)).toBe(ARCHETYPES.gunner.windup);
   });
   it('every gadget has three levels of charges that never shrink', () => {
     expect(GADGETS.length).toBe(7);

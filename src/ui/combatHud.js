@@ -5,8 +5,10 @@ import { GADGETS } from '../combat/gadgets.js';
 import { isActive } from '../combat/enemies.js';
 
 // The fight on the HUD: health and focus in a comic panel, the combo count, the spider-sense
-// (squiggles round the crosshair and an arc pointing at the attacker), the locked target with its
-// health, the gadget in hand, and the gadget wheel.
+// (squiggles over Spidey's head, white while an attack winds up and red for the last 120 ms, the
+// perfect-dodge window; a ring round the attacker for a heavy one, yellow then red; an arc at the
+// screen edge pointing at an attacker out of view), the locked target with its health, the gadget
+// in hand, and the gadget wheel.
 
 export function createCombatHud(root, opts) {
   const hpFill = el('i'), hpBar = el('div', { class: 'cb-hp' }, [hpFill]);
@@ -17,6 +19,7 @@ export function createCombatHud(root, opts) {
   const sense = el('div', { class: 'cb-sense' });
   const arcs = Array.from({ length: 4 }, () => { const a = el('div', { class: 'cb-arc' }); sense.append(a); return { el: a, t: 0 }; });
   const squig = el('div', { class: 'cb-squig' });
+  const rings = Array.from({ length: 3 }, () => { const r = el('div', { class: 'cb-ring' }); return { el: r, t: 0, e: null }; });
   const target = el('div', { class: 'cb-target hidden' }, [el('i'), el('div', { class: 'cb-thp' }, [el('i')])]);
   const gadget = el('div', { class: 'cb-gadget' }, [el('b'), el('span')]);
   const wheel = el('div', { class: 'cb-wheel hidden' });
@@ -28,7 +31,7 @@ export function createCombatHud(root, opts) {
     return { g, el: s, a };
   });
   const flash = el('div', { class: 'cb-flash' });
-  const box = el('div', { class: 'cb hidden' }, [panel, combo, sense, squig, target, gadget, flash, wheel]);
+  const box = el('div', { class: 'cb hidden' }, [panel, combo, sense, squig, ...rings.map((r) => r.el), target, gadget, flash, wheel]);
   root.append(box);
   let squigT = 0, flashT = 0, shownCombo = 0, wheelOpen = false, wheelPick = null, wheelVec = { x: 0, y: 0 };
   const v = new THREE.Vector3();
@@ -36,12 +39,23 @@ export function createCombatHud(root, opts) {
 
   return {
     // An attack is winding up: the spider-sense goes off.
-    sense(e, unblockable, ranged) {
-      squigT = 0.6;
-      squig.classList.toggle('red', !!unblockable);
+    sense(e, heavy, ranged) {
+      squigT = Math.max(squigT, Math.min(1.8, (e.strikeAt ?? 0.6) + 0.15));
+      squig.classList.remove('red');
+      if (heavy) {
+        const r = rings.find((q) => q.t <= 0 || q.e === e) ?? rings[0];
+        r.e = e; r.t = Math.min(2, (e.strikeAt ?? 0.9) + 0.2); r.el.classList.remove('red');
+      }
       const a = arcs[arcNext]; arcNext = (arcNext + 1) % arcs.length;
-      a.t = 0.9; a.e = e; a.red = !!unblockable; a.ranged = !!ranged;
-      a.el.classList.toggle('red', !!unblockable);
+      a.t = 0.9; a.e = e; a.red = false; a.ranged = !!ranged;
+      a.el.classList.remove('red');
+    },
+    // The last 120 ms: dodge now.
+    red(e, heavy) {
+      squig.classList.add('red');
+      squigT = Math.max(squigT, 0.3);
+      if (heavy) { const r = rings.find((q) => q.e === e); if (r) r.el.classList.add('red'); }
+      for (const a of arcs) if (a.e === e) a.el.classList.add('red');
     },
     hurt() { flashT = 0.35; },
     ko() {},
@@ -72,6 +86,23 @@ export function createCombatHud(root, opts) {
       pips.forEach((p, i) => { p.firstChild.style.width = `${Math.max(0, Math.min(1, c.focus - i)) * 100}%`; p.classList.toggle('full', c.focus >= i + 1); });
       if (c.combo !== shownCombo) { shownCombo = c.combo; combo.firstChild.textContent = `x${c.combo}`; combo.classList.toggle('hidden', c.combo < 2); if (c.combo >= 2) { combo.classList.remove('pop'); void combo.offsetWidth; combo.classList.add('pop'); } }
       squigT -= dt; squig.classList.toggle('show', squigT > 0);
+      // Over the hero's head.
+      const hero = opts.hero;
+      if (squigT > 0 && hero) {
+        v.set(hero.body.p.x, hero.body.p.y + 1.25, hero.body.p.z).project(camera);
+        squig.style.left = `${(v.x * 0.5 + 0.5) * 100}%`; squig.style.top = `${(-v.y * 0.5 + 0.5) * 100}%`;
+      }
+      for (const r of rings) {
+        r.t -= dt;
+        const live = r.t > 0 && r.e && r.e.alive && r.e.state === 'windup';
+        if (!live) { r.el.style.opacity = '0'; continue; }
+        v.set(r.e.body.p.x, r.e.body.p.y + 0.2, r.e.body.p.z).project(camera);
+        if (v.z > 1) { r.el.style.opacity = '0'; continue; }
+        const d = Math.max(2, Math.hypot(r.e.body.p.x - camera.position.x, r.e.body.p.y - camera.position.y, r.e.body.p.z - camera.position.z));
+        r.el.style.opacity = '1';
+        r.el.style.left = `${(v.x * 0.5 + 0.5) * 100}%`; r.el.style.top = `${(-v.y * 0.5 + 0.5) * 100}%`;
+        r.el.style.width = r.el.style.height = `${Math.min(260, 900 / d)}px`;
+      }
       flashT -= dt; flash.style.opacity = String(Math.max(0, flashT / 0.35) * 0.55);
       // Sense arcs: an inked wedge at the screen edge in the attacker's direction.
       for (const a of arcs) {

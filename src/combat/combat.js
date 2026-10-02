@@ -5,6 +5,7 @@ import { createHeroCombat } from './heroCombat.js';
 import { createGadgets } from './gadgets.js';
 import { createRng } from '../core/rng.js';
 import { LAND } from '../world/city.js';
+import { TUNE } from './tuning.js';
 
 // The combat director: owns the enemies, projectiles, gadgets and the hero's combat state, turns
 // their events into feedback (spider-sense, words, sounds, shakes, impact frames), and runs the
@@ -32,6 +33,9 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   let encounter = null, encounterCooldown = 25;
   let authority = null; // multiplayer: only the host runs the world
   let occupation = null; // a faction holding the whole city (Sable in Act 4)
+  let onScreen = null;   // (e) => is this enemy in view (off-screen guns wind up longer)
+  // Windups in flight (thugs and bosses alike): the spider-sense turns red for the last 120 ms.
+  const winding = new Map();
 
   function heroHit(h) { return heroCombat.takeHit(h); }
   const heroInvuln = () => heroCombat.c.iframes > 0;
@@ -46,7 +50,11 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   function step(dt) {
     const s = getSettings();
     const targets = targetsFn ? targetsFn() : null;
-    enemies.step(dt, { hero, heroInvuln, difficulty: s.difficulty ?? 'amazing', gravity: s.gravity, heroHit, targets });
+    enemies.step(dt, { hero, heroInvuln, difficulty: s.difficulty ?? 'amazing', gravity: s.gravity, heroHit, targets, onScreen });
+    for (const [e, w] of winding) {
+      if (!e.alive || e.state !== 'windup') { winding.delete(e); continue; }
+      if (!w.red && e.strikeAt - e.t <= TUNE.redWindow) { w.red = true; emit({ type: 'enemyRed', e, heavy: w.heavy, ranged: w.ranged }); }
+    }
     gadgets.step(dt);
     // Gunners aim with a laser while they wind up.
     for (const e of enemies.list) {
@@ -110,7 +118,8 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
 
   function handle(e) {
     switch (e.type) {
-      case 'enemyWindup': feedback.sense(e.e, e.unblockable, e.ranged); break;
+      case 'enemyWindup': winding.set(e.e, { red: false, heavy: !!e.unblockable, ranged: !!e.ranged }); feedback.sense(e.e, e.unblockable, e.ranged); break;
+      case 'enemyRed': feedback.senseRed?.(e.e, e.heavy, e.ranged); break;
       case 'enemyShoot': {
         const p = e.e.body.p, h = e.to ?? hero.body.p, v = e.to ? { x: 0, y: 0, z: 0 } : hero.body.v;
         // A little lead: shots aim where the hero will be.
@@ -182,6 +191,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     spawnGang,
     setTargets(fn) { targetsFn = fn; },
     setAuthority(fn) { authority = fn; },
+    setOnScreen(fn) { onScreen = fn; },
     // A new host picks up the gang the old one was running.
     restoreEncounter(enc) {
       if (!enc) return;

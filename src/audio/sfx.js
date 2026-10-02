@@ -115,6 +115,11 @@ export function createSfx(getVolume) {
           tone({ freq: 1320, freq2: 1760, dur: 0.12, gain: 0.07, type: 'triangle' });
           tone({ freq: 1980, freq2: 1500, dur: 0.14, gain: 0.05, type: 'sine' });
           break;
+        case 'senseRed':
+          // The perfect-dodge window: a sharp double tick; heavies get a low sting under it.
+          tone({ freq: 2640, freq2: 2400, dur: 0.05, gain: 0.08, type: 'square' });
+          if (e.heavy) tone({ freq: 180, freq2: 120, dur: 0.16, gain: 0.18, type: 'sawtooth' });
+          break;
         case 'shot': burst({ freq: 2400, freq2: 300, q: 0.7, dur: 0.07, gain: 0.3 }); tone({ freq: 220, freq2: 80, dur: 0.06, gain: 0.18, type: 'square' }); break;
         case 'dodge': burst({ freq: 800, freq2: 2600, q: 0.8, dur: 0.18, gain: 0.22 }); break;
         case 'uppercut': burst({ freq: 300, freq2: 1600, q: 0.9, dur: 0.22, gain: 0.35 }); break;

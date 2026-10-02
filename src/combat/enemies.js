@@ -4,10 +4,13 @@ import { applyGravity } from '../physics/aero.js';
 import { G } from '../physics/constants.js';
 import { buildEnemyModel } from './enemyModel.js';
 import { perceive, patrolWant, takedownKind } from './stealth.js';
+import { TUNE } from './tuning.js';
+import { createTokens, airSafe } from './tokens.js';
 
 // Enemies (spec 8.1): a body each on the same collision world as the hero, a state machine per
-// archetype, and a director that limits how many attack at once. Attacks wind up visibly (the
-// spider-sense cue fires at the start) and land at a fixed moment, so a dodge can beat them.
+// archetype, and a director (tokens.js) that lets one fist and a few guns go at a time. Attacks
+// wind up visibly: a slow, readable anticipation pose while the spider-sense is white, then a fast
+// snap through the last 120 ms (red, the perfect-dodge window), landing at a fixed moment.
 
 export const ARCHETYPES = {
   brawler: { hp: 55, speed: 4.2, reach: 1.9, windup: 0.5, recover: 0.6, dmg: 8, ranged: false, mass: 80, clip: 'Punch_Cross' },
@@ -42,6 +45,12 @@ export function pickTarget(heroP, camFwd, enemies, maxDist = 14) {
   return best;
 }
 
+// How long an attack winds up (spec 1.2): light 0.6 s, heavy 0.9 s; guns keep their own.
+export function windupFor(A) {
+  if (A.ranged) return A.windup;
+  return A.heavy ? TUNE.windupHeavy : TUNE.windupLight;
+}
+
 export const isActive = (e) => e.alive && !['out', 'webbed', 'pinned', 'away'].includes(e.state);
 
 // May this enemy start an attack now? The director hands out at most `max` attack slots.
@@ -61,6 +70,7 @@ let nextId = 1;
 
 export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
   const list = [];
+  const tokens = createTokens();
   const tmp = new THREE.Vector3();
   const C = {};
 
@@ -98,7 +108,15 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     switch (s) {
       case 'idle': a.play('Idle_Loop'); break;
       case 'engage': break; // locomotion picks walk or jog each frame
-      case 'windup': a.play(e.disarmed ? 'Punch_Jab' : e.A.clip, { once: true, timeScale: 0.9 / Math.max(0.35, e.A.windup) * 0.55 }); break;
+      case 'windup': {
+        // Anticipation: 40% of the clip spread over the white part of the windup, held and
+        // readable; the red part snaps through the rest (see snapWindup).
+        const act = a.play(e.disarmed ? 'Punch_Jab' : e.A.clip, { once: true, fade: 0.08, timeScale: 1 });
+        const dur = act.getClip().duration, white = Math.max(0.05, (e.strikeAt || TUNE.windupLight) - TUNE.redWindow);
+        act.timeScale = (dur * 0.4) / white;
+        e.windAction = act;
+        break;
+      }
       case 'stagger': a.play(Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head', { once: true, fade: 0.05, timeScale: 1.3 }); break;
       case 'air': a.play('Hit_Knockback', { once: true, fade: 0.05 }); break;
       case 'down': case 'out': case 'webbed': case 'pinned': a.play('Death01', { once: true, fade: 0.1 }); break;
@@ -152,7 +170,14 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     const targets = ctx.targets ?? [{ body: hero.body, invuln: heroInvuln, hit: heroHit }];
     const nearest = (p) => { let best = targets[0], bd = Infinity; for (const t of targets) { const d = Math.hypot(t.body.p.x - p.x, t.body.p.z - p.z); if (d < bd) { bd = d; best = t; } } return best; };
     const g = G[gravity] ?? G.comic;
-    const maxA = MAX_ATTACKERS[difficulty] ?? 2;
+    const groundUnder = (q) => world.groundHeight(q.x, q.y, q.z);
+    // The director: who may swing and who may shoot (bosses and puppets run themselves).
+    {
+      const hp0 = targets[0].body.p;
+      tokens.update(dt, list.filter((e) => e.alive && !e.boss && !e.puppet && !e.isPlayer && e.alerted), hp0, {
+        difficulty, groundBelow: groundUnder(hp0), dist: (e) => Math.hypot(e.body.p.x - hp0.x, e.body.p.z - hp0.z),
+      });
+    }
     // Puppets (enemies the host runs, other players) only follow what they are told.
     for (const e of list) if (e.puppet) puppetStep(e, dt);
     // Alerts spread: anyone near an alerted ally joins in.
@@ -202,11 +227,14 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           wantVx = (ux * want + sx * 0.35) * A.speed; wantVz = (uz * want + sz * 0.35) * A.speed;
           if (Math.random() < dt * 0.3) e.strafe = -e.strafe;
           const inRange = A.ranged && !e.disarmed ? dist < A.reach && lineOfSight(e, hero) : dist < A.reach * 1.05 && Math.abs(hp.y - p.y) < 2.2;
-          if (inRange && e.cooldown <= 0 && canAttack(list, maxA)) {
+          const gun = A.ranged && !e.disarmed;
+          if (inRange && e.cooldown <= 0 && (gun ? tokens.mayRanged(e) : tokens.mayMelee(e))) {
+            // Off-screen shooters take longer, so the spider-sense gives more warning (PUB).
+            e.strikeAt = (gun ? A.windup : windupFor(A)) + (gun && ctx.onScreen?.(e) === false ? TUNE.offscreenDelay : 0);
+            e.red = false;
             setState(e, 'windup');
-            e.strikeAt = A.windup;
             e.hitThisAttack = false;
-            onEvent({ type: 'enemyWindup', e, at: A.windup, ranged: A.ranged && !e.disarmed, unblockable: !!A.unblockable });
+            onEvent({ type: 'enemyWindup', e, at: e.strikeAt, ranged: gun, unblockable: !!A.unblockable });
           }
           const moving = Math.hypot(wantVx, wantVz);
           e.model.animator.play(moving > 3.6 ? 'Jog_Fwd_Loop' : moving > 0.4 ? 'Walk_Loop' : 'Idle_Loop', { timeScale: Math.max(0.7, moving / 3.2) });
@@ -214,13 +242,21 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
         }
         case 'windup':
           face = Math.atan2(ux, uz);
+          if (!e.red && e.strikeAt - e.t <= TUNE.redWindow) {
+            // The snap: the rest of the swing in 0.18 s.
+            e.red = true;
+            const act = e.windAction;
+            if (act) act.timeScale = (act.getClip().duration * 0.6) / 0.18;
+          }
           if (e.t >= e.strikeAt) {
             setState(e, 'strike');
             if (A.ranged && !e.disarmed) onEvent({ type: 'enemyShoot', e, kind: A.shot, dmg: A.dmg * (DIFFICULTY_DMG[difficulty] ?? 1), to: hero.body === heroCtl.body ? null : { x: hp.x, y: hp.y, z: hp.z } });
             else {
               // Melee lands if the hero is still in reach and in front, and not dodging.
               const reach = e.disarmed ? 1.9 : A.reach;
-              if (dist < reach + 0.4 && Math.abs(hp.y - p.y) < 2.4 && !heroInvuln()) {
+              // Fists cannot reach a hero in the air (spec 1.1, the air is safe); whips can.
+              const up = airSafe(hp.y, groundUnder(hp)) && e.arch !== 'whip';
+              if (!up && dist < reach + 0.4 && Math.abs(hp.y - p.y) < 2.4 && !heroInvuln()) {
                 heroHit({ dmg: A.dmg * (DIFFICULTY_DMG[difficulty] ?? 1), dir: { x: ux, z: uz }, from: e, unblockable: !!A.unblockable });
               } else onEvent({ type: 'enemyMiss', e });
             }
@@ -230,7 +266,12 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           if (e.t > 0.15) { setState(e, 'recover'); }
           break;
         case 'recover':
-          if (e.t > A.recover) { e.cooldown = 0.7 + Math.random() * 1.1; setState(e, 'engage'); }
+          if (e.t > A.recover) {
+            // Guns fire a burst every 3 to 4 s each (spec 1.2); fists wait for the token anyway.
+            const [lo, hi] = TUNE.rifleEvery;
+            e.cooldown = A.ranged && !e.disarmed ? Math.max(0.3, lo + Math.random() * (hi - lo) - A.windup - A.recover) : 0.4 + Math.random() * 0.6;
+            setState(e, 'engage');
+          }
           break;
         case 'stagger':
           if (e.t > 0.45) setState(e, e.hp <= 0 ? 'out' : 'engage');
@@ -364,6 +405,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
   }
   void tmp;
   const api = {
+    tokens,
     takedown,
     // The guard nearest the hero open to a takedown, and which kind.
     takedownTarget(heroCtl) {
