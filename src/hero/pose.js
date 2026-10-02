@@ -71,7 +71,7 @@ export function createPoser(heroModel) {
   let lastTrick = '';
   let trickN = 0;
   let variant = 0;          // which swing pose set this swing uses (A, B, C)
-  let lastHeading = 0, bank = 0, flutter = 0;
+  let lastHeading = 0, bank = 0, flutter = 0, perchT = 0, idleT = 0;
   let swings = 0;
   const webWorld = new THREE.Vector3();
   const webHand = { side: 'r', world: webWorld };
@@ -127,9 +127,12 @@ export function createPoser(heroModel) {
       for (const e of events) {
         if (e.type === 'thwip') { webSide = sideOf(hero, e.x, e.z); shot = { t: 0, x: e.x, y: e.y, z: e.z }; trick = null; }
         else if (e.type === 'release' || e.type === 'perfect' || e.type === 'swingJump') startTrick(e.type, hero);
+        else if (e.type === 'launch') { trick = { def: TRICKS.frontflip, name: 'frontflip', t: 0 }; perchT = 0; }
+        else if (e.type === 'vault') { trick = { def: TRICKS.sideflip, name: 'sideflip', t: 0 }; }
+        else if (e.type === 'perch') perchT = 0.9;
         else if (e.type === 'land') {
           trick = null;
-          if (e.hard && hs < 10) landT = 0.55;
+          if (e.hard && hs < 10) landT = 0.6;
           else if (e.hard) { once = 'Roll'; onceT = 0.55; animator.play('Roll', { once: true, fade: 0.05, timeScale: 1.3 }); }
           else if (e.impact > 6) { once = 'Jump_Land'; onceT = 0.3; animator.play('Jump_Land', { once: true, fade: 0.05, timeScale: 1.4 }); }
         }
@@ -139,6 +142,9 @@ export function createPoser(heroModel) {
       if (shot) { shot.t += dt; if (shot.t > 0.22 || swinging) shot = null; }
       if (trick) { trick.t += dt; if (trick.t >= trick.def.dur || st !== 'air') trick = null; }
       if (landT > 0) { landT -= dt; if (st !== 'ground' || hs > 3) landT = 0; }
+      if (perchT > 0) { perchT -= dt; if (st !== 'ground' || hs > 2) perchT = 0; }
+      // Standing still on a rooftop for a while: drop into a perch crouch, Spider-Man style.
+      idleT = st === 'ground' && hs < 0.3 && hero.body.p.y > 6 ? idleT + dt : 0;
 
       // Orientation and target pose for this state -------------------------------------------
       let wantProc = 1;
@@ -147,8 +153,15 @@ export function createPoser(heroModel) {
       tmp.set(hero.facing.x, 0, hero.facing.z);
       if (st === 'ground') {
         basis(UP, tmp, qBase);
-        if (landT > 0) target.set(POSES.land);
-        else {
+        if (landT > 0) {
+          target.set(POSES.land);
+          // Plant the fist: the right hand pinned to the ground just ahead of the body.
+          handTarget.set(0, 0, 0.45).applyQuaternion(orient.quaternion).add(root.position);
+          handTarget.y = root.position.y - 0.9 + 0.1;
+          webWorld.copy(handTarget); webHand.side = 'r'; pin = webHand;
+        } else if (perchT > 0 || idleT > 2.5) {
+          target.set(POSES.perch);
+        } else {
           wantProc = 0;
           if (hs < 0.4) play('Idle_Loop');
           else if (hs < 10.5) play('Jog_Fwd_Loop', { timeScale: Math.max(0.6, hs / 6.5) });
@@ -226,6 +239,10 @@ export function createPoser(heroModel) {
           }
         }
       }
+
+      // On clips the procedural target rests at a neutral air pose with no crouch, so the body drop
+      // springs back to zero (a landing's crouch once stayed sunk under the idle clip).
+      if (!wantProc) target.set(POSES.air);
 
       // Bank into turns: roll about the body's forward axis with the heading's turn rate.
       const heading = Math.atan2(b.v.x, b.v.z);

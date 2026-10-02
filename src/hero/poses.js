@@ -66,7 +66,13 @@ export function lerpPose(a, b, t, out = new Float32Array(LAYOUT.SIZE)) {
 // Swing poses are authored for the RIGHT hand on the web; mirror() gives the left-hand set.
 export const POSES = {
   // Standing tall in the air, arms loose.
-  air: pose({ spine: [0.05, 0, 0], hl: [0.12, -0.42, 0.12], hr: [-0.12, -0.42, 0.12], fl: [0.05, -0.8, -0.06], fr: [-0.04, -0.84, 0.08], toe: [0.5, 0.5] }),
+  // Freefall between webs: back a little arched, arms out and bent, one knee up, never stiff.
+  air: pose({
+    spine: [-0.12, 0.06, 0.1], head: [-0.25, 0],
+    hl: [0.38, 0.06, 0.06], el: [0.4, -1, -0.4], gl: 'open',
+    hr: [-0.36, -0.08, 0.14], er: [-0.4, -1, -0.2], gr: 'relaxed',
+    fl: [0.1, -0.56, 0.26], kl: [0.1, 0.1, 1], fr: [-0.06, -0.8, -0.14], kr: [0, 0, 1], toe: [0.6, 0.9],
+  }),
   // Web just fired: right arm straight up toward the anchor (pinned by IK), left arm swept back,
   // legs together and trailing.
   reach: pose({
@@ -132,6 +138,13 @@ export const POSES = {
     hl: [0.3, -0.3, -0.2], el: [0.6, 0, -1], gl: 'open',
     hr: [-0.12, 0.05, 0.42], er: [-1, -0.3, 0], gr: 'thwip', wrist: [0, 0.5],
     fl: [0.08, -0.8, -0.1], kl: [0, 0, 1], fr: [-0.04, -0.72, 0.06], kr: [0, 0, 1], toe: [1, 1],
+  }),
+  // Perched on a ledge after a zip, or crouched on a rooftop: deep squat, knees wide, one hand down.
+  perch: pose({
+    spine: [0.75, 0, 0.05], head: [-0.75, 0], drop: 0.55,
+    hl: [0.18, -0.4, 0.3], el: [1, 0, 0], gl: 'open',
+    hr: [-0.12, -0.45, 0.32], er: [-1, 0, 0], gr: 'open',
+    fl: [0.24, -0.4, 0.2], kl: [0.6, 0.3, 1], fr: [-0.24, -0.4, 0.16], kr: [-0.6, 0.3, 1], toe: [-0.3, -0.3],
   }),
   // Tucked for a flip: knees to chest, hands on the shins.
   tuck: pose({

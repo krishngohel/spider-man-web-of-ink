@@ -62,6 +62,8 @@ export function createCameraRig() {
       }
 
       const c = speedCurves(speed, settings.fov ?? CAM.baseFov);
+      // Looking steeply up to aim a web: pull in, so the hero stays big at the bottom of the frame.
+      c.dist *= 1 - 0.4 * smooth((-rig.pitch - 0.35) / 0.7);
       const kd = 1 - Math.exp(-dt * 3);
       rig.dist += (c.dist - rig.dist) * kd;
       rig.fov += (c.fov - rig.fov) * kd;
