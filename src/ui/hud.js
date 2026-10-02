@@ -38,7 +38,8 @@ export function createHud(root, getSettings) {
       move: ['forward', 'left', 'back', 'right'].map((a) => bindingLabel(b, a)).join(' '),
     };
   };
-  const fill = (s, k) => s.replace(/\{(\w+)\}/g, (_, n) => k[n] ?? n);
+  const esc = (t) => String(t).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+  const fill = (s, k) => s.replace(/\{(\w+)\}/g, (_, n) => esc(k[n] ?? n));
 
   function showTip() {
     if (tipIndex >= COPY.tips.length) { tip.classList.add('hidden'); return; }

@@ -7,25 +7,29 @@ const CELL = 20;
 const OFF = 4096;
 const key = (ix, iz) => (ix + OFF) * 8192 + (iz + OFF);
 
-export function rayBox(b, ox, oy, oz, dx, dy, dz) {
-  // Slab test. Returns entry/exit distances and the entry/exit face axes (0 x, 1 y, 2 z) with
-  // signs, or null when the ray's line misses the box.
+// Slab test, without allocating: fills `out` (a module scratch unless one is passed) with the
+// entry/exit distances and the entry/exit face axes (0 x, 1 y, 2 z) and signs. Returns null when
+// the ray's line misses the box.
+const SCRATCH = { tEnter: 0, tExit: 0, inAxis: -1, inSign: 0, outAxis: -1, outSign: 0 };
+export function rayBox(b, ox, oy, oz, dx, dy, dz, out = SCRATCH) {
   let tmin = -Infinity, tmax = Infinity, ain = -1, sin = 0, aout = -1, sout = 0;
-  const o = [ox, oy, oz], d = [dx, dy, dz];
-  const mn = [b.minX, b.minY, b.minZ], mx = [b.maxX, b.maxY, b.maxZ];
   for (let a = 0; a < 3; a++) {
-    if (Math.abs(d[a]) < 1e-12) {
-      if (o[a] < mn[a] || o[a] > mx[a]) return null;
+    const o = a === 0 ? ox : a === 1 ? oy : oz;
+    const d = a === 0 ? dx : a === 1 ? dy : dz;
+    const mn = a === 0 ? b.minX : a === 1 ? b.minY : b.minZ;
+    const mx = a === 0 ? b.maxX : a === 1 ? b.maxY : b.maxZ;
+    if (Math.abs(d) < 1e-12) {
+      if (o < mn || o > mx) return null;
       continue;
     }
-    let t1 = (mn[a] - o[a]) / d[a], t2 = (mx[a] - o[a]) / d[a];
-    let s1 = -1, s2 = 1;
+    let t1 = (mn - o) / d, t2 = (mx - o) / d, s1 = -1, s2 = 1;
     if (t1 > t2) { const t = t1; t1 = t2; t2 = t; s1 = 1; s2 = -1; }
     if (t1 > tmin) { tmin = t1; ain = a; sin = s1; }
     if (t2 < tmax) { tmax = t2; aout = a; sout = s2; }
     if (tmin > tmax) return null;
   }
-  return { tEnter: tmin, tExit: tmax, inAxis: ain, inSign: sin, outAxis: aout, outSign: sout };
+  out.tEnter = tmin; out.tExit = tmax; out.inAxis = ain; out.inSign = sin; out.outAxis = aout; out.outSign = sout;
+  return out;
 }
 
 export function createWorld() {
@@ -103,9 +107,8 @@ export function createWorld() {
           if (r.tEnter < 0) continue; // starting inside a box: not a hit (callers start outside)
           if (t < bestT) {
             bestT = t;
-            const n = [0, 0, 0];
-            n[r.inAxis] = r.inSign;
-            best = { t, x: ox + dx * t, y: oy + dy * t, z: oz + dz * t, nx: n[0], ny: n[1], nz: n[2], box: b };
+            const ax = r.inAxis, sg = r.inSign;
+            best = { t, x: ox + dx * t, y: oy + dy * t, z: oz + dz * t, nx: ax === 0 ? sg : 0, ny: ax === 1 ? sg : 0, nz: ax === 2 ? sg : 0, box: b };
           }
         }
       }
@@ -134,31 +137,19 @@ export function createWorld() {
     for (let pass = 0; pass < 2; pass++) {
       for (let s = -1; s <= 1; s++) {
         const cy = p.y + s * halfSeg;
-        query(p.x - radius, p.z - radius, p.x + radius, p.z + radius, (b) => {
-          if (cy + radius <= b.minY || cy - radius >= b.maxY) return;
-          const qx = Math.max(b.minX, Math.min(p.x, b.maxX));
-          const qy = Math.max(b.minY, Math.min(cy, b.maxY));
-          const qz = Math.max(b.minZ, Math.min(p.z, b.maxZ));
-          let dx = p.x - qx, dy = cy - qy, dz = p.z - qz;
-          const d2 = dx * dx + dy * dy + dz * dz;
-          let nx, ny, nz, pen;
-          if (d2 > 1e-12) {
-            if (d2 >= radius * radius) return;
-            const d = Math.sqrt(d2);
-            nx = dx / d; ny = dy / d; nz = dz / d; pen = radius - d;
-          } else {
-            // Centre inside the box: leave by the nearest face.
-            const f = [p.x - b.minX, b.maxX - p.x, cy - b.minY, b.maxY - cy, p.z - b.minZ, b.maxZ - p.z];
-            let m = 0;
-            for (let i = 1; i < 6; i++) if (f[i] < f[m]) m = i;
-            nx = m === 0 ? -1 : m === 1 ? 1 : 0;
-            ny = m === 2 ? -1 : m === 3 ? 1 : 0;
-            nz = m === 4 ? -1 : m === 5 ? 1 : 0;
-            pen = f[m] + radius;
+        stamp++;
+        const x0 = Math.floor((p.x - radius) / CELL), x1 = Math.floor((p.x + radius) / CELL);
+        const z0 = Math.floor((p.z - radius) / CELL), z1 = Math.floor((p.z + radius) / CELL);
+        for (let ix = x0; ix <= x1; ix++) for (let iz = z0; iz <= z1; iz++) {
+          const list = cells.get(key(ix, iz));
+          if (!list) continue;
+          for (let n = 0; n < list.length; n++) {
+            const b = list[n];
+            if (b.mark === stamp) continue;
+            b.mark = stamp;
+            sphereBox(body, p, cy, radius, b, out);
           }
-          p.x += nx * pen; p.y += ny * pen; p.z += nz * pen;
-          contact(body, nx, ny, nz, b, out);
-        });
+        }
       }
       const feet = p.y - halfSeg - radius;
       if (feet < 0) {
@@ -167,6 +158,37 @@ export function createWorld() {
       }
     }
     return out;
+  }
+
+  // Pushes the sphere at (p.x, cy, p.z) out of box b, if it overlaps.
+  function sphereBox(body, p, cy, radius, b, out) {
+    if (cy + radius <= b.minY || cy - radius >= b.maxY) return;
+    const qx = Math.max(b.minX, Math.min(p.x, b.maxX));
+    const qy = Math.max(b.minY, Math.min(cy, b.maxY));
+    const qz = Math.max(b.minZ, Math.min(p.z, b.maxZ));
+    const dx = p.x - qx, dy = cy - qy, dz = p.z - qz;
+    const d2 = dx * dx + dy * dy + dz * dz;
+    let nx, ny, nz, pen;
+    if (d2 > 1e-12) {
+      if (d2 >= radius * radius) return;
+      const d = Math.sqrt(d2);
+      nx = dx / d; ny = dy / d; nz = dz / d; pen = radius - d;
+    } else {
+      // Centre inside the box: leave by the nearest face.
+      const f0 = p.x - b.minX, f1 = b.maxX - p.x, f2 = cy - b.minY, f3 = b.maxY - cy, f4 = p.z - b.minZ, f5 = b.maxZ - p.z;
+      let m = 0, best = f0;
+      if (f1 < best) { best = f1; m = 1; }
+      if (f2 < best) { best = f2; m = 2; }
+      if (f3 < best) { best = f3; m = 3; }
+      if (f4 < best) { best = f4; m = 4; }
+      if (f5 < best) { best = f5; m = 5; }
+      nx = m === 0 ? -1 : m === 1 ? 1 : 0;
+      ny = m === 2 ? -1 : m === 3 ? 1 : 0;
+      nz = m === 4 ? -1 : m === 5 ? 1 : 0;
+      pen = best + radius;
+    }
+    p.x += nx * pen; p.y += ny * pen; p.z += nz * pen;
+    contact(body, nx, ny, nz, b, out);
   }
 
   function contact(body, nx, ny, nz, box, out) {
@@ -195,7 +217,8 @@ export function createWorld() {
 
   function pointInside(x, y, z, margin = 0) {
     let inside = false;
-    query(x, z, x, z, (b) => {
+    const r = Math.max(0, -margin);
+    query(x - r, z - r, x + r, z + r, (b) => {
       if (x > b.minX + margin && x < b.maxX - margin && y > b.minY + margin && y < b.maxY - margin && z > b.minZ + margin && z < b.maxZ - margin) inside = true;
     });
     return inside;

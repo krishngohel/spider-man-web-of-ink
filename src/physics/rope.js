@@ -11,6 +11,7 @@ import { tune } from './constants.js';
 // rope.postStep (position projection, wrapping).
 
 const MAX_PIVOTS = 5;
+const WRAP_RAY = { ground: false, kinds: ['building'] };
 
 export function createRope() {
   const rope = {
@@ -25,15 +26,23 @@ export function createRope() {
     stalled: false,
     minLength: 1,
 
-    attach(anchor, body) {
+    // anchor: { x, y, z } on a surface, with its outward normal (nx, ny, nz) when it has one, and
+    // `body` for a moving anchor. minLength: how close the winch can bring the hero (a zip reels
+    // right up to the wall; a swing stops a metre short).
+    attach(anchor, body, minLength = 1) {
       this.active = true;
+      this.minLength = minLength;
+      // Lift the pivot 5 cm off its surface, so the line can wrap around the building it is
+      // stuck to (a wrap ray starting inside the box would never see it).
+      const off = anchor.body ? 0 : 0.05;
+      anchor = { x: anchor.x + (anchor.nx ?? 0) * off, y: anchor.y + (anchor.ny ?? 0) * off, z: anchor.z + (anchor.nz ?? 0) * off, body: anchor.body };
       this.anchorBody = anchor.body ?? null;
       if (this.anchorBody) {
         this.anchorOffset.x = anchor.x - this.anchorBody.p.x;
         this.anchorOffset.y = anchor.y - this.anchorBody.p.y;
         this.anchorOffset.z = anchor.z - this.anchorBody.p.z;
       }
-      this.pivots = [{ x: anchor.x, y: anchor.y, z: anchor.z, ax: 0, ay: 0, az: 0, seg: 0 }];
+      this.pivots = [{ x: anchor.x, y: anchor.y, z: anchor.z, ax: 0, ay: 0, az: 0, seg: 0, roof: false }];
       this.length = Math.hypot(body.p.x - anchor.x, body.p.y - anchor.y, body.p.z - anchor.z);
       this.tension = 0; this.reelRate = 0; this.stalled = false;
     },
@@ -137,7 +146,7 @@ export function createRope() {
       const d = Math.hypot(dx, dy, dz);
       if (d < 1) return;
       const ux = dx / d, uy = dy / d, uz = dz / d;
-      const hit = world.raycast(c.x + ux * 0.2, c.y + uy * 0.2, c.z + uz * 0.2, ux, uy, uz, d - 0.9, { ground: false, kinds: ['building'] });
+      const hit = world.raycast(c.x + ux * 0.01, c.y + uy * 0.01, c.z + uz * 0.01, ux, uy, uz, d - 0.9, WRAP_RAY);
       if (!hit) return;
       const w = wrapPoint(hit.box, c, ux, uy, uz);
       if (!w) return;
@@ -150,7 +159,7 @@ export function createRope() {
       if (cl < 1e-6) return;
       cx /= cl; cy /= cl; cz /= cl;
       this.length -= seg;
-      this.pivots.push({ x: w.x, y: w.y, z: w.z, ax: cx, ay: cy, az: cz, seg });
+      this.pivots.push({ x: w.x, y: w.y, z: w.z, ax: cx, ay: cy, az: cz, seg, roof: w.roof, box: hit.box });
     },
   };
   return rope;
@@ -167,7 +176,7 @@ function pull(qx, qy, qz, q2, nx, ny, nz, L) {
 // Where a line from c along u bends around box b: a vertical edge when it cuts a corner, the
 // roof edge when it passes over the top. Pushed 5 cm clear of the box.
 export function wrapPoint(b, c, ux, uy, uz) {
-  const r = rayBox(b, c.x, c.y, c.z, ux, uy, uz);
+  const r = rayBox(b, c.x, c.y, c.z, ux, uy, uz, {});
   if (!r) return null;
   const E = 0.05;
   const enter = { x: c.x + ux * r.tEnter, y: c.y + uy * r.tEnter, z: c.z + uz * r.tEnter };
@@ -180,6 +189,7 @@ export function wrapPoint(b, c, ux, uy, uz) {
       x: side.pt.x + (side.axis === 0 ? side.sign * E : 0),
       y: b.maxY + E,
       z: side.pt.z + (side.axis === 2 ? side.sign * E : 0),
+      roof: true,
     };
   }
   if (r.inAxis === r.outAxis) return null; // straight through two opposite walls: no single edge
@@ -189,5 +199,5 @@ export function wrapPoint(b, c, ux, uy, uz) {
   const x = xAxisFace.sign > 0 ? b.maxX + E : b.minX - E;
   const z = zAxisFace.sign > 0 ? b.maxZ + E : b.minZ - E;
   const y = Math.max(b.minY + E, Math.min(b.maxY - E, (enter.y + exit.y) / 2));
-  return { x, y, z };
+  return { x, y, z, roof: false };
 }

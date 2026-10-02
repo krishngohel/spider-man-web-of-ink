@@ -55,13 +55,17 @@ export function keyLabel(code) {
 
 // Returns new bindings with `code` as the primary key of `action`. If another action used that
 // code, it gets this action's old primary key instead, so nothing is left unbound.
+// Keys the browser itself treats specially: they stay where they are.
+export const RESERVED = ['Escape'];
+
 export function rebind(bindings, action, code) {
+  if (RESERVED.includes(code)) return bindings;
   const out = {};
   const old = bindings[action]?.[0];
   for (const [a, codes] of Object.entries(bindings)) {
     const had = codes.includes(code) && a !== action;
     out[a] = codes.filter((c) => c !== code);
-    if (had && old && old !== code && !out[a].includes(old)) out[a].unshift(old);
+    if (had && old && old !== code && !RESERVED.includes(old) && !out[a].includes(old)) out[a].unshift(old);
   }
   const rest = (bindings[action] ?? []).slice(1);
   out[action] = [code, ...rest.filter((c) => c !== code)];

@@ -9,6 +9,15 @@ import { launchArgs, sleep } from './lib.mjs';
 
 let url = process.argv[2];
 let server = null;
+// Stops the preview server (and its child processes) however the script ends.
+function stopServer() {
+  if (!server) return;
+  try { execSync(process.platform === 'win32' ? `taskkill /pid ${server.pid} /T /F` : `kill ${server.pid}`, { stdio: 'ignore' }); } catch { /* already gone */ }
+  server = null;
+}
+process.on('exit', stopServer);
+process.on('uncaughtException', (e) => { console.error(e); stopServer(); process.exit(1); });
+process.on('unhandledRejection', (e) => { console.error(e); stopServer(); process.exit(1); });
 if (!url) {
   const out = path.join(tmpdir(), 'web-of-ink-dist');
   execSync(`npx vite build --outDir "${out}" --emptyOutDir`, { stdio: 'ignore' });
@@ -179,7 +188,7 @@ if (best) {
 
 check('no console errors', errors.length === 0, errors.slice(0, 3).join(' | '));
 await browser.close();
-if (server) { server.kill(); try { execSync('npx kill-port 5302', { stdio: 'ignore' }); } catch { /* best effort */ } }
+stopServer();
 const failed = results.filter((r) => !r.ok).length;
 console.log(failed ? `${failed} FAILED` : 'ALL PASS');
 process.exit(failed ? 1 : 0);

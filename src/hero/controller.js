@@ -15,9 +15,14 @@ import { findAnchor, findZipPoint } from '../physics/anchors.js';
 
 export const HALF_SEG = 0.5;
 const SUBMOVE = 0.3;
+// Coyote time: a jump is still allowed for 60 ms after the feet leave an edge. The one accepted
+// bend of the push rule (the foot was on the edge a step or two ago); push() allows it.
 const COYOTE = 0.06;
 const WALL_LOST = 0.05;
-const ZIP_ARRIVE = 1.3;
+// Hands can grab an edge this far away (a vault over a roof edge pushes off that edge).
+const REACH = 1.6;
+// A surface push needs a contact this recent (one or two physics steps of slack, plus coyote time).
+const CONTACT_FRESH = 0.07;
 const ZIP_TIMEOUT = 3;
 const WEB_RETRY = 0.12;
 const AUTO_SHOOT_AIR = 0.12;
@@ -61,6 +66,10 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     launchUntil: -1,
     diving: false,
     landing: null,
+    contactAge: 0,
+    lastNoAnchor: -10,
+    // Tests turn this on: a surface push with nothing to push against throws.
+    strict: false,
     events: [],
 
     place(x, y, z, vx = 0, vy = 0, vz = 0, state = 'air') {
@@ -68,7 +77,9 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       rope.release();
       this.pendingWeb = null; this.zip = null; this.flick = 0;
       this.state = state;
-      this.airTime = 0; this.ungrounded = 0;
+      this.airTime = 0; this.ungrounded = 0; this.wallLost = 0;
+      this.launchUntil = -1; this.webRetry = 0; this.lastJumpPress = -10; this.shootNow = false;
+      this.contactAge = state === 'ground' || state === 'wall' ? 0 : 1;
     },
 
     step(intent, dt) {
@@ -106,13 +117,24 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       if (c.ceiling) touch.ceiling = true;
       touch.impact = Math.max(touch.impact, c.impact);
     }
+    hero.contactAge = touch.ground || touch.wall ? 0 : hero.contactAge + dt;
+  }
+
+  // Every push the hero makes goes through here: legs, hands and adhesion need something to push
+  // on. `reach` is true when an edge within arm's reach is the thing being pushed on.
+  function push(dx, dy, dz, why, reach = false) {
+    if (hero.strict && !reach && hero.contactAge > CONTACT_FRESH) throw new Error(`surface push with nothing to push on: ${why}`);
+    applyDv(body, 'surface', dx, dy, dz);
   }
 
   function moveOnRope(dt) {
     rope.preStep(body, dt);
     move(dt);
     rope.postStep(body, world);
+    // The line's clamp can pull the body into a surface: settle it and keep what it touched.
     world.resolveCapsule(body, tune.radius, HALF_SEG, c);
+    if (c.ground) { touch.ground = true; touch.groundBox = c.groundBox; hero.contactAge = 0; }
+    if (c.wall) { touch.wall = true; touch.nx = c.nx; touch.nz = c.nz; touch.box = c.box; hero.contactAge = 0; }
   }
 
   function airForces(intent, dt, liftScale = 1) {
@@ -134,7 +156,12 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   function shootWeb(intent) {
     const h = wantedHeading(intent);
     const a = findAnchor(world, body, { dirX: h.x, dirZ: h.z, assist: hero.assist, g: g() });
-    if (!a) { hero.webRetry = WEB_RETRY; emit('noAnchor'); return false; }
+    if (!a) {
+      hero.webRetry = WEB_RETRY;
+      // Holding swing with nothing to web retries every 0.12 s; tell the player twice a second.
+      if (hero.time - hero.lastNoAnchor > 0.6) { hero.lastNoAnchor = hero.time; emit('noAnchor'); }
+      return false;
+    }
     hero.pendingWeb = { anchor: a, t: tune.webTravel };
     emit('thwip', { x: a.x, y: a.y, z: a.z });
     return true;
@@ -150,25 +177,24 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   }
 
   function enterWall(n) {
+    const h = Math.hypot(n.nx, n.nz);
+    if (h < 0.5) return false; // not a wall (a ceiling or a floor): stay as we are
     if (rope.active) { rope.release(); emit('release'); }
     hero.pendingWeb = null; hero.zip = null; hero.flick = 0;
     hero.state = 'wall';
-    hero.wall.nx = n.nx; hero.wall.nz = n.nz; hero.wall.box = n.box;
+    hero.wall.nx = n.nx / h; hero.wall.nz = n.nz / h; hero.wall.box = n.box;
     hero.wallLost = 0;
     emit('wallStick');
+    return true;
   }
 
   function tryZip(intent) {
     const cam = { x: intent.camPos.x, y: intent.camPos.y, z: intent.camPos.z, fx: intent.camFwd.x, fy: intent.camFwd.y, fz: intent.camFwd.z };
     const hit = findZipPoint(world, body, cam);
     if (!hit) { emit('noAnchor'); return false; }
-    const top = hit.ny > 0.5;
-    const point = top
-      ? { x: hit.x, y: hit.y + 1.2, z: hit.z }
-      : { x: hit.x + hit.nx * 0.6, y: hit.y, z: hit.z + hit.nz * 0.6 };
-    // Pull toward a point on the surface itself; the rope anchors on the building.
-    rope.attach({ x: hit.x, y: hit.y, z: hit.z }, body);
-    hero.zip = { point, top, nx: hit.nx, nz: hit.nz, box: hit.box };
+    // The winch reels right up to the surface: the zip ends when the hero touches it.
+    rope.attach(hit, body, 0.3);
+    hero.zip = { top: hit.ny > 0.5, box: hit.box };
     hero.zipTime = 0;
     hero.pendingWeb = null;
     hero.state = 'zip';
@@ -182,7 +208,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     const f = intent.camFwd, fl = Math.hypot(f.x, f.z) || 1;
     const cs = Math.cos(25 * Math.PI / 180), sn = Math.sin(25 * Math.PI / 180);
     const s = tune.launchSpeed;
-    applyDv(body, 'surface', (f.x / fl) * cs * s, sn * s - Math.min(0, body.v.y), (f.z / fl) * cs * s);
+    push((f.x / fl) * cs * s, sn * s - Math.min(0, body.v.y), (f.z / fl) * cs * s, 'point launch');
     hero.launchUntil = -1;
     emit('launch');
   }
@@ -201,12 +227,12 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     let dx = tx - v.x, dz = tz - v.z;
     const dl = Math.hypot(dx, dz), lim = accel * dt;
     if (dl > lim) { dx *= lim / dl; dz *= lim / dl; }
-    applyDv(body, 'surface', dx, 0, dz);
+    push(dx, 0, dz, 'run');
 
     if (intent.jumpPressed) {
       if (hero.time <= hero.launchUntil) pointLaunch(intent);
       else {
-        applyDv(body, 'surface', 0, tune.jumpSpeed - Math.max(0, v.y), 0);
+        push(0, tune.jumpSpeed - Math.max(0, v.y), 0, 'jump');
         emit('jump');
       }
       hero.state = 'air';
@@ -302,58 +328,37 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   }
 
   // Zip ------------------------------------------------------------------------------------
+  // The winch reels the hero in until he touches the surface; collision ends the zip.
   function zipStep(intent, dt) {
     hero.zipTime += dt;
     applyGravity(body, g(), dt);
     applyDrag(body, dragK(g(), tune.terminal), dt);
     rope.setReel(tune.zipSpeed, tune.zipTension);
     moveOnRope(dt);
-    const z = hero.zip;
-    const p = body.p;
-    const d = Math.hypot(p.x - z.point.x, p.y - z.point.y, p.z - z.point.z);
-    if (rope.pivots.length > 1 && rope.length <= rope.minLength + 0.6) {
-      // Reeled up to a roof edge the line bends over: climb over it toward the anchor.
-      const a = rope.pivots[0], w = rope.pivot;
+    const p = body.p, v = body.v;
+    const w = rope.pivot;
+    if (rope.pivots.length > 1 && w.roof && Math.hypot(p.x - w.x, p.y - w.y, p.z - w.z) <= REACH) {
+      // Reeled up to the roof edge the line bends over: hands on the edge, climb over toward the
+      // anchor.
+      const a = rope.pivots[0];
       const ix = a.x - w.x, iz = a.z - w.z, il = Math.hypot(ix, iz) || 1;
       rope.release();
-      applyDv(body, 'surface', (ix / il) * 3 - body.v.x, 6.5 - body.v.y, (iz / il) * 3 - body.v.z);
+      push((ix / il) * 3 - v.x, 6.5 - v.y, (iz / il) * 3 - v.z, 'zip vault', true);
       hero.state = 'air'; hero.airTime = 0.2;
       hero.zip = null;
       hero.launchUntil = hero.time + tune.launchWindow + 0.4;
       emit('vault');
       return;
     }
-    if (d < ZIP_ARRIVE || rope.totalLength <= ZIP_ARRIVE) {
-      rope.release();
-      // Grab the perch: hands and feet take the momentum (a push off the surface).
-      applyDv(body, 'surface', -body.v.x, -body.v.y, -body.v.z);
-      if (z.top) {
-        hero.state = 'ground';
-        hero.ungrounded = 0;
-        hero.launchUntil = hero.time + tune.launchWindow;
-        emit('perch');
-      } else {
-        enterWall({ nx: z.nx, nz: z.nz, box: z.box });
-        hero.launchUntil = hero.time + tune.launchWindow;
-      }
-      hero.zip = null;
+    if (touch.ground) {
+      // Perch: hands and feet grab the roof and take the momentum.
+      push(-v.x, 0, -v.z, 'perch');
+      emit('perch');
+      land();
+      hero.launchUntil = hero.time + tune.launchWindow;
       return;
     }
-    if (touch.wall && !z.top) { hero.zip = null; enterWall(touch); return; }
-    if (touch.ground && body.v.y <= 0.5) { hero.zip = null; land(); return; }
-    if (touch.wall && z.top) {
-      // Hit the facade just under the roof edge: climb over it.
-      if (touch.box === z.box && p.y > z.point.y - 3) {
-        rope.release();
-        applyDv(body, 'surface', -body.v.x - touch.nx * 3, 6 - body.v.y, -body.v.z - touch.nz * 3);
-        hero.state = 'air';
-        hero.zip = null;
-        hero.launchUntil = hero.time + tune.launchWindow + 0.3;
-        emit('vault');
-        return;
-      }
-      hero.zip = null; enterWall(touch); return;
-    }
+    if (touch.wall && enterWall(touch)) { hero.launchUntil = hero.time + tune.launchWindow; return; }
     if (hero.zipTime > ZIP_TIMEOUT) { hero.zip = null; releaseRope(); }
   }
 
@@ -369,7 +374,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
         const f = intent.camFwd;
         const side = f.x * -nz + f.z * nx;
         const out = tune.wallJumpOut;
-        applyDv(body, 'surface', nx * out - nz * side * 4, tune.wallJumpUp - Math.min(0, v.y), nz * out + nx * side * 4);
+        push(nx * out - nz * side * 4, tune.wallJumpUp - Math.min(0, v.y), nz * out + nx * side * 4, 'wall jump');
         emit('wallJump');
       }
       hero.state = 'air'; hero.airTime = 0.1;
@@ -399,7 +404,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (Math.abs(dy) > ly) dy = Math.sign(dy) * ly;
     // Adhesion: keep a slight press into the wall so the contact holds.
     const dn = -ADHESION - vn;
-    applyDv(body, 'surface', dhx + dn * nx, dy, dhz + dn * nz);
+    push(dhx + dn * nx, dy, dhz + dn * nz, 'wall');
     move(dt);
     if (touch.wall) {
       hero.wallLost = 0;
@@ -407,9 +412,11 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     } else {
       hero.wallLost += dt;
       if (hero.wallLost > WALL_LOST) {
-        if (v.y > 1) {
-          // Over the top edge: a vault onto the roof.
-          applyDv(body, 'surface', -nx * 4, 5, -nz * 4);
+        const box = hero.wall.box;
+        const p = body.p;
+        if (v.y > 1 && box && p.y + 1.5 >= box.maxY && p.y - 0.9 <= box.maxY + 0.5) {
+          // Ran up past the roof edge with the hands still on it: vault onto the roof.
+          push(-nx * 4, 5, -nz * 4, 'wall vault', true);
           emit('vault');
         }
         hero.state = 'air'; hero.airTime = 0.2;

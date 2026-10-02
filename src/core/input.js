@@ -79,7 +79,9 @@ export function createInput({ target = window, bindings }) {
 
   target.addEventListener('keydown', onKeyDown);
   target.addEventListener('keyup', onKeyUp);
-  target.addEventListener('mousedown', onMouseDown);
+  // Capture phase: input records a click before the canvas's own listener runs, so a click that
+  // only re-grabs the pointer can be swallowed there (bubble order ran it too late).
+  target.addEventListener('mousedown', onMouseDown, true);
   target.addEventListener('mouseup', onMouseUp);
   target.addEventListener('mousemove', onMouseMove);
   target.addEventListener('contextmenu', onContext);
@@ -100,7 +102,7 @@ export function createInput({ target = window, bindings }) {
       stick.lx = dz(pad.axes[2] ?? 0); stick.ly = dz(pad.axes[3] ?? 0);
       if (now.size || stick.mx || stick.my || stick.lx || stick.ly) device = 'pad';
     } else { stick.mx = stick.my = stick.lx = stick.ly = 0; }
-    if (!enabled) now.clear();
+    if (!enabled) { now.clear(); padHeld.clear(); }
     for (const a of now) if (!padHeld.has(a)) padPressed.add(a);
     for (const a of padHeld) if (!now.has(a)) padReleased.add(a);
     padHeld.clear();
@@ -121,7 +123,17 @@ export function createInput({ target = window, bindings }) {
     captureNext(cb) { capture = cb; },
     cancelCapture() { capture = null; },
     get capturing() { return capture !== null; },
-    setEnabled(v) { enabled = v; if (!v) onBlur(); },
+    setEnabled(v) {
+      if (v && !enabled) {
+        // A pad button still held from the menu (A on RESUME) must not count as a fresh press.
+        const pads = navigator.getGamepads?.() ?? [];
+        padActions([...pads].find((p) => p && p.connected) ?? null, now);
+        padHeld.clear();
+        for (const a of now) padHeld.add(a);
+      }
+      enabled = v;
+      if (!v) onBlur();
+    },
     update(dt) {
       pollPad();
       const kx = (anyCode(held, 'right') ? 1 : 0) - (anyCode(held, 'left') ? 1 : 0);
@@ -141,7 +153,7 @@ export function createInput({ target = window, bindings }) {
     dispose() {
       target.removeEventListener('keydown', onKeyDown);
       target.removeEventListener('keyup', onKeyUp);
-      target.removeEventListener('mousedown', onMouseDown);
+      target.removeEventListener('mousedown', onMouseDown, true);
       target.removeEventListener('mouseup', onMouseUp);
       target.removeEventListener('mousemove', onMouseMove);
       target.removeEventListener('contextmenu', onContext);

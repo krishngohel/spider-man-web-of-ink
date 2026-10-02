@@ -10,6 +10,8 @@ const CLIPS = ['Idle_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop', 'Jump_Loop', 'Jump_La
 export const WALL_OFFSET = COM_HEIGHT - 0.4; // lifts the crawl pose off the wall to the capsule's face
 
 const UP = new THREE.Vector3(0, 1, 0);
+const DOWN = new THREE.Vector3(0, -1, 0);
+const fwd2 = new THREE.Vector3();
 const u = new THREE.Vector3(), f = new THREE.Vector3(), r = new THREE.Vector3();
 const m = new THREE.Matrix4(), qTarget = new THREE.Quaternion();
 const target = new THREE.Vector3(), pole = new THREE.Vector3(), tmp = new THREE.Vector3();
@@ -42,9 +44,10 @@ export function createPoser(heroModel) {
     get webHand() { return webHand; },
     handWorld(out) { return (webHand === 'r' ? bones.handR : bones.handL).getWorldPosition(out); },
 
-    update(hero, dt, events) {
+    // at: where to draw the body (the game passes a position interpolated between physics steps).
+    update(hero, dt, events, at = hero.body.p) {
       const b = hero.body;
-      root.position.set(b.p.x, b.p.y, b.p.z);
+      root.position.set(at.x, at.y, at.z);
       vel.set(b.v.x, b.v.y, b.v.z);
       const speed = vel.length();
       const hs = Math.hypot(b.v.x, b.v.z);
@@ -91,7 +94,8 @@ export function createPoser(heroModel) {
           const side = b.v.x * -nz + b.v.z * nx;
           if (Math.abs(b.v.y) < 0.8 && Math.abs(side) > 0.8) f.set(-nz * Math.sign(side), 0, nx * Math.sign(side));
           else f.set(0, b.v.y < -0.8 ? -1 : 1, 0);
-          basis(tmp, f.clone(), qTarget);
+          fwd2.copy(f);
+          basis(tmp, fwd2, qTarget);
           offTarget.set(nx * WALL_OFFSET, 0, nz * WALL_OFFSET);
           const moving = Math.hypot(b.v.x, b.v.y, b.v.z) > 0.6;
           if (b.v.y > 4) play('Sprint_Loop', { timeScale: 1.1 });
@@ -109,7 +113,7 @@ export function createPoser(heroModel) {
           // Falling: upright with a lean into the motion; a dive goes head first.
           if (hero.diving && speed > 8) {
             tmp.set(hero.facing.x, 0, hero.facing.z);
-            basis(vel, tmp.negate().lerp(new THREE.Vector3(0, -1, 0), 0.2), qTarget);
+            basis(vel, tmp.negate().lerp(DOWN, 0.2), qTarget);
           } else {
             u.set(b.v.x * 0.012, 1, b.v.z * 0.012);
             tmp.set(hero.facing.x, 0, hero.facing.z);

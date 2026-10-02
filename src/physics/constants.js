@@ -3,7 +3,8 @@
 
 export const G = { comic: 19.62, real: 9.81 };
 export const STEP = 1 / 240;
-export const MAX_SUBSTEPS = 8;
+// 12 steps cover a 20 fps frame; slower frames slow the game a little instead of spiraling.
+export const MAX_SUBSTEPS = 12;
 
 export const DEFAULTS = {
   // Hero body. Position is the centre of mass, 0.9 m above the feet.

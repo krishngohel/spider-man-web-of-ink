@@ -183,12 +183,67 @@ describe('zip and launch', () => {
   });
 });
 
+describe('zip edge cases', () => {
+  it('a zip to a roof from below its edge climbs over onto the roof', () => {
+    const w = city();
+    const h = createHero(w);
+    h.strict = true;
+    // Low building: x -200..-150, roof at 20. Stand in the street west of it, aim at the roof.
+    h.place(-210, 0.9, 0, 0, 0, 0, 'ground');
+    const i = emptyIntent();
+    i.camPos = { x: -214, y: 6, z: 0 };
+    const tx = -195, ty = 20, tz = 0;
+    const d = Math.hypot(tx - i.camPos.x, ty - i.camPos.y, tz - i.camPos.z);
+    i.camFwd = { x: (tx - i.camPos.x) / d, y: (ty - i.camPos.y) / d, z: 0 };
+    i.zipPressed = true;
+    let onRoof = false;
+    run(h, i, 3, () => { if (h.state === 'ground' && h.body.p.y > 20) onRoof = true; });
+    expect(onRoof).toBe(true);
+  });
+  it('a zip at the underside of an overhang is refused', () => {
+    const w = createWorld();
+    w.addBox({ min: [-10, 20, -10], max: [10, 24, 10] });
+    w.build();
+    const h = createHero(w);
+    h.place(0, 0.9, 0, 0, 0, 0, 'ground');
+    const i = emptyIntent();
+    i.camPos = { x: 0, y: 2, z: 0 }; i.camFwd = { x: 0, y: 1, z: 0 };
+    i.zipPressed = true;
+    run(h, i, 0.5);
+    expect(h.state).toBe('ground');
+    expect(Number.isFinite(h.facing.x) && Math.hypot(h.facing.x, h.facing.z) > 0.5).toBe(true);
+  });
+});
+
+describe('determinism', () => {
+  it('the same inputs give bit-identical state', () => {
+    const go = () => {
+      const w = city();
+      const h = createHero(w);
+      h.place(0, 50, -100, 0, 0, 20);
+      const rng = createRng(3);
+      const i = emptyIntent();
+      for (let n = 0; n < 2400; n++) {
+        if (n % 40 === 0) {
+          const was = i.swing; i.swing = rng.chance(0.7); i.swingPressed = i.swing && !was; i.swingReleased = !i.swing && was;
+          i.jump = rng.chance(0.3); i.jumpPressed = i.jump; i.moveX = rng.range(-1, 1); i.moveZ = rng.range(0, 1);
+        }
+        h.step(i, dt);
+        i.swingPressed = false; i.swingReleased = false; i.jumpPressed = false;
+      }
+      return [h.body.p.x, h.body.p.y, h.body.p.z, h.body.v.x, h.body.v.y, h.body.v.z, h.state];
+    };
+    expect(go()).toEqual(go());
+  });
+});
+
 describe('physics rule', () => {
   it('only the five physical sources ever change velocity, and they add up', () => {
     const w = city();
     const rng = createRng(77);
     for (let trial = 0; trial < 6; trial++) {
       const h = createHero(w);
+      h.strict = true; // a surface push with nothing to push on throws
       h.place(rng.range(-10, 10), rng.range(5, 80), rng.range(0, 300), rng.range(-10, 10), rng.range(-5, 5), rng.range(0, 30));
       const v0 = { ...h.body.v };
       const i = emptyIntent();

@@ -12,6 +12,7 @@ export const FANS = {
   high: { el: [26, 34, 42, 50, 58, 66, 74, 80], az: 11, spread: 75, aim: 0.9 },
 };
 const SHOULDER = 0.6;
+const FAN_RAY = { ground: false };
 const MIN_RISE = 5;
 
 // Where a swing from this anchor would take the hero over the next `T` seconds, with the same
@@ -19,9 +20,9 @@ const MIN_RISE = 5;
 // would first hit something (Infinity if clear), and where it ends up.
 // Scoring weights (tuned with scripts/swing-tune.mjs against the swing-sim battery).
 export const SCORE = {
-  velLean: 0.41, idealBase: 37.7, idealPerSpeed: 0.02, idealMax: 53.8,
-  dist: 1.41, clear: 1.0, vel: 1.04,
-  survive: 2.52, progress: 0, heading: 1.64, keep: 0.13,
+  velLean: 0.46, idealBase: 35.1, idealPerSpeed: 0.2, idealMax: 49.8,
+  dist: 1.6, clear: 0.59, vel: 1.15,
+  survive: 3.49, progress: 0, heading: 2.06, keep: 0,
   predicted: 10, horizon: 1.8,
 };
 const PREDICT_DT = 1 / 45;
@@ -78,7 +79,7 @@ export function findAnchor(world, hero, { dirX = 0, dirZ = 1, assist = 'normal',
       const ca = Math.cos(a), sa = Math.sin(a);
       const hx = px * ca - pz * sa, hz = px * sa + pz * ca;
       const dx = hx * ce, dy = se, dz = hz * ce;
-      const hit = world.raycast(ox, oy, oz, dx, dy, dz, tune.webMax, { ground: false });
+      const hit = world.raycast(ox, oy, oz, dx, dy, dz, tune.webMax, FAN_RAY);
       if (!hit || !hit.box) continue;
       const dist = hit.t;
       if (dist < tune.webMin || hit.y - p.y < MIN_RISE) continue;
@@ -117,13 +118,36 @@ export function findAnchor(world, hero, { dirX = 0, dirZ = 1, assist = 'normal',
   return best;
 }
 
-// Zip target: the first building surface along the camera ray (within zipRange of the hero), or
-// failing that the best anchor within 15 degrees of it.
+// Zip target: the first building surface along the camera ray, within zipRange of the hero. If
+// that misses (or lands on an underside, which you can't perch on yet), the rays of a 15 degree
+// cone around it are tried and the one nearest the centre wins.
+const ZIP_RAY = { ground: false };
+function zipHit(world, hero, cam, fx, fy, fz) {
+  const hit = world.raycast(cam.x, cam.y, cam.z, fx, fy, fz, tune.zipRange + 15, ZIP_RAY);
+  if (!hit || !hit.box || hit.ny < -0.5) return null;
+  const d = Math.hypot(hit.x - hero.p.x, hit.y - hero.p.y, hit.z - hero.p.z);
+  return d <= tune.zipRange && d > 2 ? hit : null;
+}
 export function findZipPoint(world, hero, cam) {
-  const hit = world.raycast(cam.x, cam.y, cam.z, cam.fx, cam.fy, cam.fz, tune.zipRange + 15, { ground: false });
-  if (hit && hit.box) {
-    const d = Math.hypot(hit.x - hero.p.x, hit.y - hero.p.y, hit.z - hero.p.z);
-    if (d <= tune.zipRange && d > 2) return hit;
+  const direct = zipHit(world, hero, cam, cam.fx, cam.fy, cam.fz);
+  if (direct) return direct;
+  // An orthonormal frame around the aim.
+  const f = [cam.fx, cam.fy, cam.fz];
+  const up = Math.abs(f[1]) > 0.95 ? [1, 0, 0] : [0, 1, 0];
+  let rx = up[1] * f[2] - up[2] * f[1], ry = up[2] * f[0] - up[0] * f[2], rz = up[0] * f[1] - up[1] * f[0];
+  const rl = Math.hypot(rx, ry, rz); rx /= rl; ry /= rl; rz /= rl;
+  const ux = f[1] * rz - f[2] * ry, uy = f[2] * rx - f[0] * rz, uz = f[0] * ry - f[1] * rx;
+  for (const deg of [7.5, 15]) {
+    const t = Math.tan(deg * DEG);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      let dx = f[0] + (rx * Math.cos(a) + ux * Math.sin(a)) * t;
+      let dy = f[1] + (ry * Math.cos(a) + uy * Math.sin(a)) * t;
+      let dz = f[2] + (rz * Math.cos(a) + uz * Math.sin(a)) * t;
+      const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
+      const hit = zipHit(world, hero, cam, dx, dy, dz);
+      if (hit) return hit;
+    }
   }
   return null;
 }

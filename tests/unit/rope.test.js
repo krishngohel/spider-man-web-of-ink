@@ -147,6 +147,35 @@ describe('rope wrap', () => {
     expect(rope.length).toBeCloseTo(20, 0);
   });
 
+  it('wraps around a corner of the building it is anchored to', () => {
+    const world = createWorld();
+    world.addBox({ min: [0, 0, 0], max: [20, 60, 20] });
+    world.build();
+    // Anchor high on the west face (normal -x); swing south around the box's south-west corner.
+    const body = createBody({ x: -15, y: 40, z: 10 });
+    const rope = createRope();
+    rope.attach({ x: 0, y: 50, z: 10, nx: -1, ny: 0, nz: 0 }, body);
+    body.v.z = -14; body.v.x = 4;
+    let wrapped = false;
+    for (let i = 0; i < 240 * 3; i++) { step(body, rope, 0, world); if (rope.pivots.length > 1) wrapped = true; }
+    expect(wrapped).toBe(true);
+    expect(world.pointInside(body.p.x, body.p.y, body.p.z, 0.01)).toBe(false);
+  });
+
+  it('wraps over the roof edge of its own building', () => {
+    const world = createWorld();
+    world.addBox({ min: [0, 0, 0], max: [20, 30, 20] });
+    world.build();
+    // Anchor on the roof, hero hanging below the west edge.
+    const body = createBody({ x: -3, y: 22, z: 10 });
+    const rope = createRope();
+    rope.attach({ x: 6, y: 30, z: 10, nx: 0, ny: 1, nz: 0 }, body);
+    step(body, rope, G.comic, world);
+    expect(rope.pivots.length).toBe(2);
+    expect(rope.pivot.roof).toBe(true);
+    expect(rope.pivot.y).toBeCloseTo(30.05, 3);
+  });
+
   it('a straight line clear of buildings never wraps', () => {
     const world = createWorld();
     world.addBox({ min: [40, 0, 40], max: [60, 100, 60] });

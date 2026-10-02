@@ -155,6 +155,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   function enterPlay() {
     mode = 'play';
+    resetIntent();
     menus.hideAll();
     hud.show(true);
     input.setEnabled(true);
@@ -172,6 +173,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   function resume() {
     mode = 'play';
+    resetIntent();
     menus.hideAll();
     input.setEnabled(true);
     canvas.requestPointerLock?.()?.catch?.(() => {});
@@ -188,6 +190,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Intent -----------------------------------------------------------------------------------------
   const intent = emptyIntent();
   let swingLatch = false;
+  // Edges (pressed / released) are judged against what the physics last consumed, and presses are
+  // latched until a step runs: on a fast display many frames run no physics step at all, and a
+  // tap read on one of those frames must still reach the hero (code review: taps were dropped).
+  let consumedSwing = false, consumedJump = false;
   function buildIntent() {
     const sy = Math.sin(rig.yaw), cy = Math.cos(rig.yaw);
     // Camera-relative: forward is where the camera looks (flattened), right is (-cos, sin).
@@ -201,17 +207,21 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (hero.state === 'ground' && !input.down('swing')) swingLatch = false;
       swing = swingLatch || (hero.state === 'ground' && input.down('swing'));
     } else swing = input.down('swing');
-    intent.swingPressed = swing && !intent.swing;
-    intent.swingReleased = !swing && intent.swing;
     intent.swing = swing;
+    intent.swingPressed = swing && !consumedSwing;
+    intent.swingReleased = !swing && consumedSwing;
     const jump = input.down('jump');
-    intent.jumpPressed = input.pressed('jump');
-    intent.jumpReleased = intent.jump && !jump;
     intent.jump = jump;
-    intent.zipPressed = input.pressed('zip');
+    intent.jumpPressed = intent.jumpPressed || input.pressed('jump');
+    intent.jumpReleased = !jump && consumedJump;
+    intent.zipPressed = intent.zipPressed || input.pressed('zip');
     intent.dive = input.down('dive');
   }
-  const clearEdges = () => { intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false; };
+  const clearEdges = () => {
+    intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false;
+    consumedSwing = intent.swing; consumedJump = intent.jump;
+  };
+  const resetIntent = () => { clearEdges(); intent.swing = false; intent.jump = false; consumedSwing = false; consumedJump = false; swingLatch = false; };
 
   // Anchor preview for the HUD, refreshed ten times a second.
   const preview = { visible: false, x: 0, y: 0, zip: false };
@@ -247,11 +257,27 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Loop -------------------------------------------------------------------------------------------
   const fixed = createFixedStep({ step: STEP, maxSteps: MAX_SUBSTEPS });
   const hand = new THREE.Vector3();
+  // Render the hero between the last two physics steps (alpha), so motion is smooth when the
+  // display rate and the 240 Hz physics don't line up (0, 1 or 2 steps per frame at 240 Hz).
+  const prevP = { x: 0, y: 0, z: 0 };
+  const renderP = { x: 0, y: 0, z: 0 };
+  const view = { body: { p: renderP, get v() { return hero.body.v; } }, get state() { return hero.state; } };
+  let alpha = 1;
   const frameTimes = new Float32Array(4000);
   const workTimes = new Float32Array(4000);
   const gpuTimes = new Float32Array(4000);
   let frameIdx = 0, frame = 0, fps = 60, last = performance.now(), time = 0;
   const events = [];
+
+  const NO_LOOK = { dx: 0, dy: 0 };
+  function interpolate() {
+    const p = hero.body.p;
+    // A teleport or respawn jumps: show the new spot, don't sweep to it.
+    if (Math.hypot(p.x - prevP.x, p.y - prevP.y, p.z - prevP.z) > 5) { prevP.x = p.x; prevP.y = p.y; prevP.z = p.z; }
+    renderP.x = prevP.x + (p.x - prevP.x) * alpha;
+    renderP.y = prevP.y + (p.y - prevP.y) * alpha;
+    renderP.z = prevP.z + (p.z - prevP.z) * alpha;
+  }
 
   const state = { ready: false };
   function tick(now) {
@@ -271,16 +297,20 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (input.pressed('pause')) { pauseGame(); }
       if (input.pressed('help')) hud.toggleHelp();
       buildIntent();
-      const { steps } = fixed.advance(dt);
-      for (let i = 0; i < steps; i++) {
+      const adv = fixed.advance(dt);
+      for (let i = 0; i < adv.steps; i++) {
+        const p = hero.body.p;
+        prevP.x = p.x; prevP.y = p.y; prevP.z = p.z;
         hero.step(intent, STEP);
         if (i === 0) clearEdges();
       }
+      alpha = adv.alpha;
       if (hero.state === 'swing' && intent.jump && hero.rope.reelRate > 0 && !hero.rope.stalled && hero.rope.tension > 0) hud.onEvent({ type: 'reel' });
       events.push(...hero.events);
       hero.events.length = 0;
       for (const e of events) { sfx.event(e); hud.onEvent(e); }
-      rig.update(dt, locked() || input.device === 'pad' ? input.look : { dx: 0, dy: 0 }, hero, world, settings);
+      interpolate();
+      rig.update(dt, locked() || input.device === 'pad' ? input.look : NO_LOOK, view, world, settings);
       hud.setLockHint(!locked() && input.device !== 'pad');
     } else {
       fixed.reset();
@@ -288,12 +318,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         // Slow orbit around the spawn roof behind the title card.
         rig.yaw = time * 0.05;
         rig.pitch = 0.22;
-        rig.update(dt, { dx: 0, dy: 0 }, hero, world, settings);
+        interpolate();
+        rig.update(dt, NO_LOOK, view, world, settings);
       }
       if (menus.open) menus.padNav();
     }
 
-    poser.update(hero, dt, events);
+    if (mode !== 'play' && mode !== 'title') interpolate();
+    poser.update(hero, dt, events, renderP);
     poser.handWorld(hand);
     webLine.update(hand, hero.rope, hero.pendingWeb, tune.webTravel);
     sfx.setSpeed(mode === 'play' ? hero.speed : 0, dt);
