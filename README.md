@@ -22,7 +22,7 @@ Click the screen to capture the mouse. A gamepad works too. Every key can be reb
 
 | Action | Keyboard / mouse | Gamepad |
 |---|---|---|
-| Move (steer in the air by leaning) | W A S D | Left stick |
+| Move and steer (swings follow where you point) | W A S D | Left stick |
 | Look | Mouse | Right stick |
 | Swing (hold: webs chain while held), parkour run and wall run | Shift | RT / R2 |
 | Jump. Swinging: swing-jump. In the air: web wings | Space | A / Cross |
