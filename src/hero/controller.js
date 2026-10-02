@@ -171,10 +171,11 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   }
 
   // Fires a web where the crosshair points. Returns false on a miss.
-  function shootWeb(intent, hang = false) {
+  // quiet: a miss says nothing (on the ground the same button is a parkour run).
+  function shootWeb(intent, hang = false, quiet = false) {
     const cam = { x: intent.camPos.x, y: intent.camPos.y, z: intent.camPos.z, fx: intent.camFwd.x, fy: intent.camFwd.y, fz: intent.camFwd.z };
     const hit = findAimPoint(world, body, cam);
-    if (!hit) { emit('miss'); return false; }
+    if (!hit) { if (!quiet) emit('miss'); return false; }
     const t = tune.webTravel + hit.dist / tune.webSpeed;
     hero.pendingWeb = { anchor: hit, t, travel: t, hang };
     emit('thwip', { x: hit.x, y: hit.y, z: hit.z });
@@ -300,7 +301,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       return;
     }
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
-    if ((intent.swingPressed && shootWeb(intent)) || (intent.hangPressed && shootWeb(intent, true))) {
+    if ((intent.swingPressed && shootWeb(intent, false, true)) || (intent.hangPressed && shootWeb(intent, true))) {
       // From the ground: jump and let the web catch.
       push(0, tune.jumpSpeed - Math.max(0, v.y), 0, 'jump');
       hero.state = 'air'; hero.airTime = 0;

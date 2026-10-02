@@ -76,43 +76,43 @@ export const POSES = {
   // Web just fired: right arm straight up toward the anchor (pinned by IK), left arm swept back,
   // legs together and trailing.
   reach: pose({
-    spine: [-0.12, -0.08, 0.1], head: [-0.25, 0],
+    spine: [-0.12, -0.08, 0.1], head: [-0.15, 0.35],
     hl: [0.18, -0.3, -0.32], el: [1, 0, 0], gl: 'open',
     hr: [0, 0.48, 0.05], gr: 'grab',
     fl: [0.05, -0.84, -0.18], kl: [0, 0, 1], fr: [-0.02, -0.82, -0.24], kr: [0, 0, 1], toe: [0.9, 0.9],
   }),
   // Dropping into the arc: legs swing forward a little, knees soften, free arm out for balance.
   drop: pose({
-    spine: [0.05, -0.05, 0.05], head: [-0.1, 0],
+    spine: [0.05, -0.05, 0.05], head: [-0.05, 0.3],
     hl: [0.38, -0.2, 0.1], el: [0.5, 0, -1], gl: 'open',
     hr: [0, 0.48, 0.05], gr: 'grab',
     fl: [0.08, -0.72, 0.18], kl: [0, 0, 1], fr: [-0.06, -0.76, 0.1], kr: [0, 0, 1], toe: [0.7, 0.7],
   }),
   // Bottom of the arc: knees pulled up to the chest, body crunched, free arm in.
   bottom: pose({
-    spine: [0.38, 0, 0], head: [0.1, 0],
+    spine: [0.38, 0, 0], head: [-0.15, 0.2],
     hl: [0.16, -0.18, 0.34], el: [1, -0.3, -0.2], gl: 'fist',
     hr: [0, 0.48, 0.05], gr: 'grab',
     fl: [0.12, -0.32, 0.42], kl: [0.1, 0.2, 1], fr: [-0.1, -0.36, 0.38], kr: [-0.1, 0.2, 1], toe: [0.8, 0.8],
   }),
   // Rising out of the arc: legs kick forward and up, body leans back, free arm swings forward.
   rise: pose({
-    spine: [-0.25, 0.05, -0.1], head: [-0.3, 0],
+    spine: [-0.35, 0.05, -0.1], head: [-0.35, 0.15],
     hl: [0.2, 0.05, 0.4], el: [1, 0, 0], gl: 'open',
     hr: [0, 0.48, 0.05], gr: 'grab',
-    fl: [0.1, -0.55, 0.62], kl: [0, 0.5, 1], fr: [-0.06, -0.66, 0.52], kr: [0, 0.5, 1], toe: [0.9, 0.9],
+    fl: [0.1, -0.42, 0.72], kl: [0, 0.5, 1], fr: [-0.06, -0.52, 0.64], kr: [0, 0.5, 1], toe: [0.9, 0.9],
   }),
   // Swing variants (alternate between swings).
   // B: one knee up, the other leg kicked back (a runner's split through the bottom).
   bottomSplit: pose({
-    spine: [0.3, 0.05, 0.1], head: [0.05, 0],
+    spine: [0.3, 0.05, 0.1], head: [-0.15, 0.2],
     hl: [0.3, -0.12, 0.25], el: [1, -0.4, -0.2], gl: 'open',
     hr: [0, 0.48, 0.05], gr: 'grab',
     fl: [0.12, -0.38, 0.4], kl: [0.1, 0.2, 1], fr: [-0.08, -0.7, -0.38], kr: [0, -0.4, 1], toe: [0.8, 1.0],
   }),
   // B: scissor kick on the rise, legs split front and back, free arm thrown back.
   riseScissor: pose({
-    spine: [-0.2, -0.05, -0.15], head: [-0.35, 0],
+    spine: [-0.3, -0.05, -0.15], head: [-0.35, 0.15],
     hl: [0.3, -0.05, -0.32], el: [1, 0, 0], gl: 'open',
     hr: [0, 0.48, 0.05], gr: 'grab',
     fl: [0.1, -0.5, 0.66], kl: [0, 0.5, 1], fr: [-0.08, -0.72, -0.34], kr: [0, -0.3, 1], toe: [1, 1],

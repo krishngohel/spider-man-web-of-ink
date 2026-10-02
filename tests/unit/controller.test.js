@@ -538,3 +538,18 @@ describe('ledges, corners and launches', () => {
     expect(h.body.p.y).toBeGreaterThan(y1 - 6);
   });
 });
+
+describe('feedback', () => {
+  it('a swing press on the ground with nothing in range is a parkour run, not a MISSED', () => {
+    const w = createWorld();
+    w.addBox({ min: [-500, -1, -500], max: [500, 0, 500], kind: 'ground' });
+    w.build();
+    const h = createHero(w);
+    h.place(0, 0.9, 0, 0, 0, 0, 'ground');
+    const i = emptyIntent(); i.moveZ = 1; i.swing = true; i.swingPressed = true;
+    i.camPos = { x: 0, y: 2, z: -4 }; i.camFwd = { x: 0, y: 0.1, z: 0.995 };
+    run(h, i, 0.5);
+    expect(h.events.some((e) => e.type === 'miss')).toBe(false);
+    expect(h.state).toBe('ground');
+  });
+});

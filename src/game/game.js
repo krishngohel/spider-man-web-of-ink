@@ -286,7 +286,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     wp.set(x, y, z).project(camera);
     return { x: (wp.x * 0.5 + 0.5) * innerWidth, y: (-wp.y * 0.5 + 0.5) * innerHeight, front: wp.z < 1 };
   }
-  let lastThwipWord = -10;
+  let lastThwipWord = -10, lastWhipWord = -10;
   function worldEvent(e) {
     const p = hero.body.p;
     switch (e.type) {
@@ -315,7 +315,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (e.type === 'swingJump') { const s = screenOf(p.x, p.y, p.z); hud.word('WHOOSH!', s.x - 100, s.y + 20, 'small'); }
     if (e.type === 'corner') {
       const s = screenOf(p.x, p.y + 0.5, p.z);
-      if (s.front) hud.word('WHIP!', s.x + 90, s.y - 50, 'small');
+      // The word now and then (corners come thick and fast down an avenue).
+      if (s.front && time - lastWhipWord > 4) { lastWhipWord = time; hud.word('WHIP!', s.x + 90, s.y - 50, 'small'); }
       if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.25);
     }
     if (e.type === 'launch') { const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('HUP!', s.x - 80, s.y - 40, 'small'); }

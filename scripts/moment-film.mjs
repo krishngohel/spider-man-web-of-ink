@@ -1,7 +1,7 @@
 // Films a scripted moment from the side camera as a contact sheet.
 //   node scripts/moment-film.mjs <url> <out.png> <moment> [every ms] [frames]
 // moments: land (a hard drop onto the street), perch (stand on a roof until the idle crouch),
-// launch (zip to a ledge and point-launch)
+// launch (zip to a ledge and point-launch), run (jog, then a parkour sprint)
 import { chromium } from 'playwright-core';
 import sharp from 'sharp';
 import { launchArgs, sleep } from './lib.mjs';
@@ -15,6 +15,11 @@ await p.waitForFunction(() => window.__game?.state?.ready, null, { timeout: 1200
 await p.evaluate(() => window.__game.setCamOverride({ side: 4, up: 0.2, fov: 34 }));
 if (moment === 'land') await p.evaluate(() => window.__game.teleport(0, 26, -330, 0, 0, 3, 'air', 0));
 if (moment === 'perch') await p.evaluate(() => { const s = window.__game.spawn; window.__game.teleport(s.x, s.y, s.z, 0, 0, 0, 'ground', 0); });
+if (moment === 'run') {
+  await p.evaluate(() => { window.__game.teleport(0, 0.9, -360, 0, 0, 0, 'ground', 0); window.__game.setLook(0, 0.1); });
+  await p.keyboard.down('KeyW');
+  setTimeout(() => p.keyboard.down('ShiftLeft'), 900);
+}
 if (moment === 'launch') {
   await p.evaluate(() => { const s = window.__game.spawn; window.__game.teleport(s.x, s.y, s.z, 0, 0, 0, 'ground', 0); window.__game.setCamOverride(null); });
 }

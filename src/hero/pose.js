@@ -37,9 +37,9 @@ const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b
 // Spring stiffness per pose group (1/s): legs lag behind the arms, which gives follow-through.
 const STIFF = new Float32Array(LAYOUT.SIZE);
 STIFF.fill(16);
-for (let i = 0; i < 5; i++) STIFF[i] = 12;           // spine, head
+for (let i = 0; i < 5; i++) STIFF[i] = 15;           // spine, head
 for (let i = 5; i < 17; i++) STIFF[i] = 20;          // arms
-for (let i = 17; i < 29; i++) STIFF[i] = 10;         // legs
+for (let i = 17; i < 29; i++) STIFF[i] = 16;         // legs (a swing phase lasts about 0.3 s)
 for (let i = 29; i < 39; i++) STIFF[i] = 26;         // fingers
 STIFF[43] = 18;                                      // drop
 
@@ -74,7 +74,8 @@ export function createPoser(heroModel) {
   let lastHeading = 0, bank = 0, flutter = 0, perchT = 0, idleT = 0;
   let swings = 0;
   let inverted = false;
-  let mantleT = 0;          // hands-on-the-edge pose while going over a ledge     // hanging upside down: the web runs from the feet
+  let mantleT = 0;
+  let lastAng = null;       // the swing angle last frame (for the pose lead)          // hands-on-the-edge pose while going over a ledge     // hanging upside down: the web runs from the feet
   const webWorld = new THREE.Vector3();
   const webHand = { side: 'r', world: webWorld };
 
@@ -133,6 +134,7 @@ export function createPoser(heroModel) {
         variant = (variant + 1 + (swings++ % 2)) % 3;
       }
       wasRope = swinging || zipping;
+      if (!swinging) lastAng = null;
 
       for (const e of events) {
         if (e.type === 'thwip') { webSide = sideOf(hero, e.x, e.z); shot = { t: 0, x: e.x, y: e.y, z: e.z }; trick = null; }
@@ -219,12 +221,17 @@ export function createPoser(heroModel) {
         if (zipping) target.set(POSES.zip);
         else {
           // Keyed to the swing's phase: reach -> drop -> bottom -> rise.
-          const ang = hero.swing.angle(b.p, b.v);
+          // Keyed a beat ahead of the arc (anticipation): the legs are already coming through
+          // as the body reaches the bottom, not catching up after it.
+          const ang0 = hero.swing.angle(b.p, b.v);
+          const rate = dt > 0 && lastAng !== null ? Math.max(-400, Math.min(400, (ang0 - lastAng) / dt)) : 0;
+          lastAng = ang0;
+          const ang = ang0 + rate * 0.12;
           const bottom = variant === 1 ? 'bottomSplit' : variant === 2 ? 'bottomWide' : 'bottom';
           const rise = variant === 1 ? 'riseScissor' : 'rise';
-          lerpPose(choose('reach'), choose('drop'), smoothstep(-65, -25, ang), blendA);
-          lerpPose(blendA, choose(bottom), smoothstep(-25, 0, ang), blendB);
-          lerpPose(blendB, choose(rise), smoothstep(0, 30, ang), target);
+          lerpPose(choose('reach'), choose('drop'), smoothstep(-75, -40, ang), blendA);
+          lerpPose(blendA, choose(bottom), smoothstep(-40, -10, ang), blendB);
+          lerpPose(blendB, choose(rise), smoothstep(-10, 20, ang), target);
           // Pin the web hand on the strand, arm's length toward where it sticks.
           shoulderOf();
           handTarget.set(grip.x, grip.y, grip.z).sub(shoulder).normalize().multiplyScalar(0.6).add(shoulder);
