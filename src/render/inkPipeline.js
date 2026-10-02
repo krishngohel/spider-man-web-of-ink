@@ -187,6 +187,10 @@ void main() {
   col *= 0.96 + 0.04 * hash(floor(frag / 2.0) + floor(uTime * 6.0));
   vec2 v = vUv - 0.5;
   col *= 1.0 - 0.72 * dot(v, v);
+  // Pixels a material marked with alpha < 0.5 (Spider-Man's lenses) skip the ink: clean colour, only
+  // the paper vignette.
+  vec4 raw = texture2D(tColor, vUv);
+  if (raw.a < 0.5) col = raw.rgb * (1.0 - 0.72 * dot(v, v));
   gl_FragColor = vec4(col, 1.0);
   #include <colorspace_fragment>
 }

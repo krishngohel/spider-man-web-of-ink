@@ -76,6 +76,7 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       toggle(C.invertY[0], 'invertY'),
       slider(C.fov[0], 50, 80, 1, () => getSettings().fov, (v) => update({ fov: v })),
       toggle(C.speedLines[0], 'speedLines'),
+      toggle(C.soundWords[0], 'soundWords', C.soundWords[1]),
       el('h3', {}, C.sections.video),
       choice(C.quality[0], null, ['high', 'medium', 'low'], 'quality', C.qualityValues),
       slider(C.renderScale[0], 0.5, 1, 0.05, () => getSettings().renderScale, (v) => update({ renderScale: v })),

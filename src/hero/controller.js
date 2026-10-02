@@ -275,10 +275,11 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       hero.pendingWeb.t -= dt;
       if (!intent.swing) hero.pendingWeb = null;
       else if (hero.pendingWeb.t <= 0) {
-        swing.attach(hero.pendingWeb.anchor, body);
+        const a = hero.pendingWeb.anchor;
+        swing.attach(a, body);
         hero.pendingWeb = null;
         hero.state = 'swing';
-        emit('attach');
+        emit('attach', { x: a.x, y: a.y, z: a.z, nx: a.nx, ny: a.ny, nz: a.nz });
         const before = hero.speed;
         move(dt);
         swingContacts(before);

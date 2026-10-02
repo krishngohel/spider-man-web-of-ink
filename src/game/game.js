@@ -25,6 +25,7 @@ import { createHud } from '../ui/hud.js';
 import { createMenus } from '../ui/menus.js';
 import { createDevPanel } from '../ui/devPanel.js';
 import { el } from '../ui/dom.js';
+import { createFx } from './fx.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
@@ -67,6 +68,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   scene.add(heroModel.root);
   const poser = createPoser(heroModel);
   const webLine = createWebLine(scene);
+  const fx = createFx(scene);
 
   const hero = createHero(world, { gravity: settings.gravity, assist: settings.swingAssist });
   const spawn = city.spawn;
@@ -265,6 +267,40 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const events = [];
 
   const NO_LOOK = { dx: 0, dy: 0 };
+  // World-side reactions to hero events: web splats, shock rings, camera shake, sound words.
+  const wp = new THREE.Vector3();
+  function screenOf(x, y, z) {
+    wp.set(x, y, z).project(camera);
+    return { x: (wp.x * 0.5 + 0.5) * innerWidth, y: (-wp.y * 0.5 + 0.5) * innerHeight, front: wp.z < 1 };
+  }
+  let lastThwipWord = -10;
+  function worldEvent(e) {
+    const p = hero.body.p;
+    switch (e.type) {
+      case 'attach': fx.splat(e.x, e.y, e.z, e.nx, e.ny, e.nz); break;
+      case 'release': case 'perfect': case 'swingJump': fx.letGo(); break;
+      case 'thwip': {
+        // THWIP! now and then, by the hand (every shot would be noise).
+        if (time - lastThwipWord > 2.5) {
+          lastThwipWord = time;
+          const s = screenOf(p.x, p.y + 0.8, p.z);
+          if (s.front) hud.word('THWIP!', s.x + 70, s.y - 40, 'small');
+        }
+        break;
+      }
+      case 'land':
+        if (e.hard) {
+          fx.ring(p.x, p.y - 0.9, p.z, Math.min(1.6, e.impact / 25));
+          if (settings.cameraShake) rig.shake = Math.min(1, e.impact / 30);
+          const s = screenOf(p.x, p.y, p.z);
+          if (s.front && e.impact > 24) hud.word('WHAM!', s.x - 90, s.y - 30, 'hit');
+        }
+        break;
+      default: break;
+    }
+    if (e.type === 'perfect') { const s = screenOf(p.x, p.y + 1, p.z); hud.word('PERFECT!', s.x, s.y - 90, 'big'); }
+    if (e.type === 'swingJump') { const s = screenOf(p.x, p.y, p.z); hud.word('WHOOSH!', s.x - 100, s.y + 20, 'small'); }
+  }
   let camOverride = null;
   let camHeading = 0, camRoll = 0;
   const sideDir = { x: 1, z: 0 };
@@ -305,7 +341,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       alpha = adv.alpha;
       events.push(...hero.events);
       hero.events.length = 0;
-      for (const e of events) { sfx.event(e); hud.onEvent(e); }
+      for (const e of events) { sfx.event(e); hud.onEvent(e); worldEvent(e); }
       interpolate();
       rig.update(dt, locked() || input.device === 'pad' ? input.look : NO_LOOK, view, world, settings);
       hud.setLockHint(!locked() && input.device !== 'pad');
@@ -331,6 +367,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       // Test hook: a fixed offset from the hero, looking at him (filming poses from the side).
       // side: metres to the hero's left of travel (negative: right); up: metres above; fov.
       const o = camOverride;
+      if (o.at) {
+        // Absolute offset from the hero (close-ups).
+        camera.position.set(renderP.x + o.at[0], renderP.y + o.at[1], renderP.z + o.at[2]);
+        camera.lookAt(renderP.x, renderP.y + (o.lookY ?? 0), renderP.z);
+        if (camera.fov !== o.fov) { camera.fov = o.fov; camera.updateProjectionMatrix(); }
+      } else {
       const v = hero.body.v, sh = Math.hypot(v.x, v.z);
       const hx = sh > 1 ? v.x / sh : hero.facing.x, hz = sh > 1 ? v.z / sh : hero.facing.z;
       sideDir.x += (hz - sideDir.x) * Math.min(1, dt * 4); sideDir.z += (-hx - sideDir.z) * Math.min(1, dt * 4);
@@ -338,6 +380,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       camera.position.set(renderP.x + (sideDir.x / l) * o.side, renderP.y + o.up, renderP.z + (sideDir.z / l) * o.side);
       camera.lookAt(renderP.x, renderP.y, renderP.z);
       if (camera.fov !== o.fov) { camera.fov = o.fov; camera.updateProjectionMatrix(); }
+      }
     } else {
       camera.position.set(rig.pos.x, rig.pos.y, rig.pos.z);
       camera.lookAt(rig.pos.x + rig.fwd.x, rig.pos.y + rig.fwd.y, rig.pos.z + rig.fwd.z);
@@ -351,6 +394,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       const want = flying && Math.hypot(v.x, v.z) > 6 && dt > 0 && settings.cameraShake ? Math.max(-0.12, Math.min(0.12, (turn / dt) * 0.06)) : 0;
       camRoll += (want - camRoll) * Math.min(1, dt * 3);
       camera.rotateZ(camRoll);
+      if (rig.shake > 0.001) {
+        const a = rig.shake * 0.06;
+        camera.rotateX((Math.random() - 0.5) * a); camera.rotateY((Math.random() - 0.5) * a);
+        rig.shake *= Math.exp(-dt * 7);
+      }
     }
     if (!camOverride && Math.abs(camera.fov - rig.fov) > 0.01) { camera.fov = rig.fov; camera.updateProjectionMatrix(); }
     sky.follow(camera);
@@ -361,6 +409,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     sun.target.position.set(Math.round(hp.x / 8) * 8, 0, Math.round(hp.z / 8) * 8);
     sun.position.copy(sun.target.position).addScaledVector(sunDir, 400);
     updatePreview(dt);
+    fx.update(dt);
     ink.render(scene, camera, time);
 
     hud.update(dt, { fps, speed: mode === 'play' ? hero.speed : 0, anchor: mode === 'play' ? preview : null, state: hero.state, dev: dev || devPanel.open, w: innerWidth, h: innerHeight });

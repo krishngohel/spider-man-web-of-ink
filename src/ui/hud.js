@@ -21,7 +21,10 @@ export function createHud(root, getSettings) {
   const toastText = el('span');
   const toast = el('div', { class: 'toast hidden' }, [toastText, el('button', { class: 'chip', onclick: () => toast.classList.add('hidden') }, COPY.ok)]);
   const help = el('div', { class: 'help hidden' });
-  const hud = el('div', { class: 'hud hidden' }, [lines, reticle, dot, noAnchor, speedo, fps, stateLabel, tip, lockHint, help]);
+  const words = el('div', { class: 'words' });
+  const hud = el('div', { class: 'hud hidden' }, [lines, words, reticle, dot, noAnchor, speedo, fps, stateLabel, tip, lockHint, help]);
+  const wordPool = Array.from({ length: 6 }, () => { const w = el('div', { class: 'word' }); words.append(w); return { el: w, t: 0 }; });
+  let wordNext = 0;
   root.append(hud, toast);
   const lctx = lines.getContext('2d');
 
@@ -91,6 +94,25 @@ export function createHud(root, getSettings) {
         tip.classList.add('hidden');
         setTimeout(showTip, 900);
       }
+    },
+    // A comic sound word at screen point (x, y) in CSS pixels. Never over the middle of the screen:
+    // a word that would land there slides out to the side (Gotham lesson: words over the action).
+    word(text, x, y, kind = 'small') {
+      if (!getSettings().soundWords) return;
+      const w = wordPool[wordNext];
+      wordNext = (wordNext + 1) % wordPool.length;
+      const cx = innerWidth / 2, cy = innerHeight / 2;
+      const dx = x - cx, dy = y - cy;
+      const rx = innerWidth * 0.16, ry = innerHeight * 0.16;
+      if (Math.abs(dx) < rx && Math.abs(dy) < ry) x = cx + (dx >= 0 ? 1 : -1) * rx * 1.15;
+      x = Math.max(80, Math.min(innerWidth - 80, x));
+      y = Math.max(60, Math.min(innerHeight - 80, y));
+      w.el.textContent = text;
+      w.el.className = `word ${kind}`;
+      w.el.style.left = `${x}px`; w.el.style.top = `${y}px`;
+      w.el.style.setProperty('--tilt', `${(Math.random() * 16 - 8).toFixed(1)}deg`);
+      void w.el.offsetWidth; // restart the animation
+      w.el.classList.add('show');
     },
     resetTips() { tipIndex = 0; try { localStorage.removeItem(TIPS_KEY); } catch { /* storage blocked */ } showTip(); },
     update(dt, { fps: f, speed, anchor, state, dev, w, h }) {

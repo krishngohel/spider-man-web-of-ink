@@ -43,6 +43,7 @@ export const COPY = {
     invertY: ['Invert vertical look'],
     fov: ['Field of view'],
     speedLines: ['Speed lines'],
+    soundWords: ['Sound words', 'THWIP! and friends, in comic lettering.'],
     cameraShake: ['Camera shake'],
     quality: ['Graphics'],
     qualityValues: { high: 'High', medium: 'Medium', low: 'Low' },

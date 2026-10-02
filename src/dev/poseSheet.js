@@ -29,7 +29,7 @@ const rig = createBodyRig(hero.model);
 window.__pose = {
   names: Object.keys(POSES),
   joints: rig.restJoints,
-  show(name, { mirror = false, yaw = 0, pitch = 0.1, orient = null, dist = 3.6 } = {}) {
+  show(name, { mirror = false, yaw = 0, pitch = 0.1, orient = null, dist = 3.6, ty = 0.95 } = {}) {
     hero.orient.quaternion.identity();
     if (orient) hero.orient.quaternion.setFromEuler(new THREE.Euler(orient[0], orient[1], orient[2]));
     hero.root.updateMatrixWorld(true);
@@ -41,8 +41,8 @@ window.__pose = {
       rig.apply(p);
     }
     const c = new THREE.Vector3(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)).multiplyScalar(dist);
-    camera.position.copy(c).add(new THREE.Vector3(0, 0.95, 0));
-    camera.lookAt(0, 0.95, 0);
+    camera.position.copy(c).add(new THREE.Vector3(0, ty, 0));
+    camera.lookAt(0, ty, 0);
     renderer.render(scene, camera);
     return true;
   },

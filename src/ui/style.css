@@ -89,6 +89,21 @@ button { font: inherit; }
   text-shadow: 3px 3px 0 var(--ink); letter-spacing: 1px; }
 .lockhint.hidden { display: none; }
 .speedlines { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* Sound words: comic lettering with a heavy outline, popped in, held, gone. */
+.words { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+.word { position: absolute; transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)) scale(0); opacity: 0; font-family: var(--head); letter-spacing: 2px;
+  color: #fff; -webkit-text-stroke: 2px var(--ink); paint-order: stroke fill; text-shadow: 4px 4px 0 var(--ink); white-space: nowrap; }
+.word.small { font-size: 34px; color: #fff; }
+.word.big { font-size: 64px; color: var(--yellow); }
+.word.hit { font-size: 52px; color: #ff5a5a; }
+.word.show { animation: wordpop 0.75s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+@keyframes wordpop {
+  0% { transform: translate(-50%, -50%) rotate(var(--tilt)) scale(0.2); opacity: 0; }
+  18% { transform: translate(-50%, -50%) rotate(var(--tilt)) scale(1.15); opacity: 1; }
+  30% { transform: translate(-50%, -50%) rotate(var(--tilt)) scale(1); opacity: 1; }
+  75% { transform: translate(-50%, -58%) rotate(var(--tilt)) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -70%) rotate(var(--tilt)) scale(0.9); opacity: 0; }
+}
 .toast { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); background: var(--yellow); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink);
   padding: 8px 14px; font-size: 18px; max-width: min(560px, calc(100vw - 32px)); pointer-events: auto; }
 .toast.hidden { display: none; }

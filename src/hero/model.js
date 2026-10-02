@@ -90,78 +90,105 @@ function suitMaterial(suit) {
 uniform vec3 uRed, uBlue, uBlack, uLens;
 varying vec3 vBind;
 const float TAU = 6.2831853;
-float lineAA(float f) {
-  float d = min(f, 1.0 - f);
-  float w = fwidth(f) * 1.1 + 0.002;
-  return 1.0 - smoothstep(0.0, w, d);
+float gLens = 0.0;
+// A line at every whole number of f, about px pixels wide, antialiased.
+float lineAA(float f, float px) {
+  float d = abs(f - floor(f + 0.5));
+  float w = fwidth(f);
+  return 1.0 - smoothstep(w * px * 0.5, w * (px * 0.5 + 1.0), d);
 }
 float sdSeg(vec2 p, vec2 a, vec2 b) {
   vec2 pa = p - a, ba = b - a;
   float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
   return length(pa - ba * h);
 }
-float spider(vec2 q) {
-  float d = length((q - vec2(0.0, -0.012)) / vec2(0.016, 0.027)) - 1.0;
-  d = min(d * 0.016, length(q - vec2(0.0, 0.026)) - 0.012);
-  for (int i = 0; i < 4; i++) {
-    float fi = float(i);
-    float y0 = 0.018 - fi * 0.012;
-    vec2 knee = vec2(0.05, 0.035 - fi * 0.028);
-    vec2 foot = vec2(0.075, 0.075 - fi * 0.06);
-    vec2 a = vec2(abs(q.x), q.y);
-    d = min(d, sdSeg(a, vec2(0.0, y0), knee) - 0.0032);
-    d = min(d, sdSeg(a, knee, foot) - 0.0026);
-  }
-  return d;
+// The spider emblem, as a distance (negative inside). s scales it.
+float spider(vec2 q, float s) {
+  q /= s;
+  float d = length((q - vec2(0.0, -0.016)) / vec2(0.017, 0.03)) - 1.0;
+  d = min(d * 0.017, length(q - vec2(0.0, 0.026)) - 0.012);
+  vec2 a = vec2(abs(q.x), q.y);
+  // Four legs a side: the front pair reach up, the back pair down, each bent at a knee.
+  d = min(d, sdSeg(a, vec2(0.006, 0.024), vec2(0.05, 0.062)) - 0.0034);
+  d = min(d, sdSeg(a, vec2(0.05, 0.062), vec2(0.064, 0.112)) - 0.0028);
+  d = min(d, sdSeg(a, vec2(0.008, 0.012), vec2(0.06, 0.03)) - 0.0034);
+  d = min(d, sdSeg(a, vec2(0.06, 0.03), vec2(0.088, 0.058)) - 0.0028);
+  d = min(d, sdSeg(a, vec2(0.008, -0.004), vec2(0.06, -0.022)) - 0.0034);
+  d = min(d, sdSeg(a, vec2(0.06, -0.022), vec2(0.088, -0.062)) - 0.0028);
+  d = min(d, sdSeg(a, vec2(0.006, -0.018), vec2(0.048, -0.06)) - 0.0034);
+  d = min(d, sdSeg(a, vec2(0.048, -0.06), vec2(0.058, -0.11)) - 0.0028);
+  return d * s;
 }
 vec3 paintSuit(vec3 p) {
   float ax = abs(p.x);
   bool red; float lines = 0.0;
-  if (p.y > 1.5) {
+  if (p.y > 1.53) {
+    // Mask: web lines radiate from between the eyes over the whole head, crossed by rings.
     red = true;
-    vec3 dir = normalize(p - vec3(0.0, 1.665, 0.0));
-    float phi = atan(dir.y, dir.x) / TAU + 0.5;
-    float th = acos(clamp(dir.z, -1.0, 1.0));
-    lines = max(lineAA(fract(phi * 16.0)), lineAA(fract(th / 0.3)));
-  } else if (ax < 0.22 && p.y > 0.93) {
-    red = ax < 0.11 + 0.06 * smoothstep(1.22, 1.44, p.y) || p.y > 1.43 || p.y < 0.99;
-    vec2 c = p.xy - vec2(0.0, 1.30);
-    lines = max(lineAA(fract((atan(c.y, c.x) / TAU + 0.5) * 16.0)), lineAA(fract(length(c) / 0.055)));
-  } else if (ax >= 0.22) {
-    red = ax > 0.47 || p.y > 1.455;
-    float phi = atan(p.z + 0.065, p.y - 1.455) / TAU + 0.5;
-    lines = max(lineAA(fract(ax / 0.06)), lineAA(fract(phi * 8.0)));
+    vec3 c = vec3(0.0, 1.69, 0.0);
+    vec3 dir = normalize(p - c);
+    float phi = (atan(dir.y, dir.x) / TAU + 0.5) * 16.0;
+    float th = acos(clamp(dir.z, -1.0, 1.0)) / 0.26;
+    lines = max(lineAA(phi, 1.4), lineAA(th, 1.4));
+  } else if (ax < 0.24 && p.y > 0.93) {
+    // Torso: a red bib from the shoulders, narrowing to the waist; blue sides from the armpits.
+    float bib = mix(0.07, 0.165, smoothstep(1.0, 1.42, p.y));
+    red = ax < bib || p.y > 1.44 || p.y < 0.985;
+    vec2 c = p.xy - vec2(0.0, 1.34);
+    lines = max(lineAA((atan(c.y, c.x) / TAU + 0.5) * 18.0, 1.4), lineAA(length(c) / 0.06, 1.4));
+  } else if (ax >= 0.24) {
+    // Arms: red over the top and outside, blue underneath the upper arm, red forearms and gloves.
+    red = ax > 0.45 || p.y > 1.448;
+    float phi = (atan(p.z + 0.065, p.y - 1.455) / TAU + 0.5) * 8.0;
+    lines = max(lineAA(ax / 0.065, 1.4), lineAA(phi, 1.4));
   } else {
-    red = p.y < 0.36;
-    float phi = atan(p.z + 0.04, p.x - sign(p.x) * 0.114) / TAU + 0.5;
-    lines = max(lineAA(fract(p.y / 0.06)), lineAA(fract(phi * 8.0)));
+    // Legs blue; red boots to mid-calf, the top edge dipping to a point at the front.
+    float a = atan(p.z + 0.04, p.x - sign(p.x) * 0.114);
+    float bootTop = 0.43 - 0.06 * smoothstep(0.6, 1.0, sin(a));
+    red = p.y < bootTop;
+    lines = max(lineAA(p.y / 0.065, 1.4), lineAA((a / TAU + 0.5) * 8.0, 1.4));
   }
   vec3 col = red ? uRed : uBlue;
-  if (red) col = mix(col, uBlack, lines * 0.9);
-  // Chest spider, front only.
-  if (p.z > 0.05 && p.y > 1.2 && p.y < 1.52 && ax < 0.12) {
-    float d = spider(vec2(p.x, p.y - 1.36));
-    col = mix(col, uBlack, 1.0 - smoothstep(0.0, fwidth(d) * 1.2 + 0.0005, d));
+  if (red) col = mix(col, uBlack, lines);
+  // Chest spider (black, front) and back spider (red with a black outline, bigger).
+  if (p.y > 1.12 && p.y < 1.56 && ax < 0.16) {
+    if (p.z > 0.04) {
+      float d = spider(vec2(p.x, p.y - 1.33), 1.25);
+      col = mix(col, uBlack, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
+    } else if (p.z < -0.04) {
+      float d = spider(vec2(p.x, p.y - 1.3), 1.7);
+      float fw = fwidth(d) * 1.5;
+      col = mix(col, uRed, 1.0 - smoothstep(0.0, fw, d));
+      col = mix(col, uBlack, 1.0 - smoothstep(0.0035, 0.0035 + fw, abs(d)));
+    }
   }
-  // Eye lenses: a white teardrop each side, thick black rim.
-  if (p.y > 1.62 && p.z > 0.035) {
+  // Eye lenses: two big separate teardrops, swept up and out, thick black rims. The lens itself
+  // is painted after lighting (gLens) so it stays bright white in shade.
+  if (p.y > 1.63 && p.z > 0.04) {
     for (int s = 0; s < 2; s++) {
       float sx = s == 0 ? -1.0 : 1.0;
-      vec2 q = vec2(p.x - sx * 0.037, p.y - 1.693);
-      float a = sx * 0.5;
+      vec2 q = vec2(p.x - sx * 0.043, p.y - 1.696);
+      float a = sx * 0.42;
       q = mat2(cos(a), -sin(a), sin(a), cos(a)) * q;
-      float e = length(q / vec2(0.031, 0.0185));
-      float aa = fwidth(e) * 1.2;
-      col = mix(col, uBlack, 1.0 - smoothstep(1.32, 1.32 + aa, e));
-      col = mix(col, uLens, 1.0 - smoothstep(1.0, 1.0 + aa, e));
+      // Teardrop: wider at the outer end.
+      q.y *= 1.0 + 0.25 * clamp(q.x * sx * 40.0, -1.0, 1.0);
+      float e = length(q / vec2(0.034, 0.021));
+      float aa = fwidth(e) * 1.5;
+      col = mix(col, uBlack, 1.0 - smoothstep(1.2, 1.2 + aa, e));
+      gLens = max(gLens, 1.0 - smoothstep(1.0, 1.0 + aa, e));
     }
   }
   return col;
 }
 `)
-      .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb = paintSuit(vBind);');
+      .replace('#include <color_fragment>', `#include <color_fragment>
+	diffuseColor.rgb = paintSuit(vBind);`)
+      // The lenses after lighting: bright white with a faint cool shade, never grey.
+      .replace('#include <dithering_fragment>', `#include <dithering_fragment>
+	gl_FragColor.rgb = mix(gl_FragColor.rgb, uLens * (0.92 + 0.08 * clamp(vBind.y * 6.0 - 9.9, 0.0, 1.0)), gLens);
+	if (gLens > 0.5) gl_FragColor.a = 0.0;`);
   };
-  mat.customProgramCacheKey = () => 'suit-v1';
+  mat.customProgramCacheKey = () => 'suit-v2';
   return mat;
 }
 
@@ -171,6 +198,36 @@ export function setSuit(hero, suit) {
 }
 
 export const COM_HEIGHT = 0.9; // the physics body's position is this far above the feet
+
+// The mask: blend the head's face sculpt (nose, brows, lips) onto a smooth ellipsoid, so the head
+// reads as a mask pulled over a skull, not a face. Positions and normals are bind-space, before
+// skinning, so the head still turns and nods with its bones.
+const MASK = { cx: 0, cy: 1.69, cz: 0.0, rx: 0.091, ry: 0.124, rz: 0.104, from: 1.555, to: 1.6 };
+export function smoothHead(geometry) {
+  const g = geometry.clone();
+  const pos = g.attributes.position, nrm = g.attributes.normal;
+  const m = MASK;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+    if (y < m.from || Math.abs(x) > 0.16) continue;
+    const t = Math.min(1, (y - m.from) / (m.to - m.from));
+    const w = t * t * (3 - 2 * t);
+    const ex = (x - m.cx) / m.rx, ey = (y - m.cy) / m.ry, ez = (z - m.cz) / m.rz;
+    const l = Math.hypot(ex, ey, ez) || 1;
+    const px = m.cx + (ex / l) * m.rx, py = m.cy + (ey / l) * m.ry, pz = m.cz + (ez / l) * m.rz;
+    pos.setXYZ(i, x + (px - x) * w, y + (py - y) * w, z + (pz - z) * w);
+    // Ellipsoid normal: gradient of (x/rx)^2 + (y/ry)^2 + (z/rz)^2.
+    let gx = (px - m.cx) / (m.rx * m.rx), gy = (py - m.cy) / (m.ry * m.ry), gz = (pz - m.cz) / (m.rz * m.rz);
+    const gl = Math.hypot(gx, gy, gz) || 1;
+    gx /= gl; gy /= gl; gz /= gl;
+    const nx = nrm.getX(i) + (gx - nrm.getX(i)) * w, ny = nrm.getY(i) + (gy - nrm.getY(i)) * w, nz = nrm.getZ(i) + (gz - nrm.getZ(i)) * w;
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    nrm.setXYZ(i, nx / nl, ny / nl, nz / nl);
+  }
+  pos.needsUpdate = true; nrm.needsUpdate = true;
+  g.computeBoundingSphere();
+  return g;
+}
 
 export function buildHeroModel(assets, suit = SUIT_CLASSIC) {
   const root = new THREE.Group();
@@ -184,8 +241,10 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC) {
   const suitMat = suitMaterial(suit);
   model.traverse((o) => {
     if (!o.isSkinnedMesh) return;
-    if (o.name.startsWith('Face')) { o.visible = false; return; }
+    // The eye and brow meshes stay: smoothed onto the mask and painted by the suit shader, they fill
+    // the body's eye holes as white lens.
     o.material = suitMat;
+    o.geometry = smoothHead(o.geometry);
     o.castShadow = true;
     o.frustumCulled = false;
   });
