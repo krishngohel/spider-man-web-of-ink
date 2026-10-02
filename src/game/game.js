@@ -214,7 +214,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       swing = swingLatch || (hero.state === 'ground' && input.down('swing'));
     } else swing = input.down('swing');
     intent.swing = swing;
-    intent.swingPressed = swing && !consumedSwing;
+    // A press counts when the button went down since the last step, or when a keydown arrived this
+    // frame even though the button was already down for the last step (let go and pressed again
+    // between frames: a fast re-tap).
+    intent.swingPressed = intent.swingPressed || (swing && !consumedSwing) || (swing && !settings.swingToggle && input.pressed('swing'));
     intent.swingReleased = !swing && consumedSwing;
     const jump = input.down('jump');
     intent.jump = jump;

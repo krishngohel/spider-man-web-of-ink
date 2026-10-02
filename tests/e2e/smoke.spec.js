@@ -36,6 +36,28 @@ test('free swing enters play, and an aimed, held swing attaches a web', async ({
   expect(errors).toEqual([]);
 });
 
+test('a release and a fresh press inside one frame still fires the next web', async ({ page }) => {
+  await page.goto('/?at=swing');
+  await page.waitForFunction(ready, null, { timeout: 90000 });
+  await page.evaluate(() => {
+    window.__game.teleport(0, 50, -330, 0, 0, 22, 'air', 0);
+    const t = window.__game.suggest(0, 1);
+    window.__game.aimAt(t.x, t.y, t.z);
+  });
+  await page.keyboard.down('Shift');
+  await page.waitForFunction(() => window.__game.hero().swing.active, null, { timeout: 3000 });
+  // Let go and press again before the next frame runs: a fast re-tap must not be lost.
+  await page.evaluate(() => {
+    window.dispatchEvent(new KeyboardEvent('keyup', { code: 'ShiftLeft', key: 'Shift' }));
+    window.__game.teleport(0, 45, -400, 0, 0, 18, 'air', 0);
+    const t = window.__game.suggest(0, 1);
+    window.__game.aimAt(t.x, t.y, t.z);
+    window.dispatchEvent(new KeyboardEvent('keydown', { code: 'ShiftLeft', key: 'Shift' }));
+  });
+  await page.waitForFunction(() => window.__game.hero().swing.active, null, { timeout: 2000 });
+  await page.keyboard.up('Shift');
+});
+
 test('settings persist across a reload', async ({ page }) => {
   await page.goto('/');
   await page.waitForFunction(ready, null, { timeout: 90000 });

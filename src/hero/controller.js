@@ -269,7 +269,9 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     hero.airTime += dt;
     airForces(intent, dt);
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
-    if ((intent.swingPressed || hero.shootNow) && !hero.pendingWeb) shootWeb(intent);
+    // A fresh press re-aims, even with a web still in flight; a held button never refires.
+    if (intent.swingPressed) { hero.pendingWeb = null; shootWeb(intent); }
+    else if (hero.shootNow && !hero.pendingWeb) shootWeb(intent);
     hero.shootNow = false;
     if (hero.pendingWeb) {
       hero.pendingWeb.t -= dt;
