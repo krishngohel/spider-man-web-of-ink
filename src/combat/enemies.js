@@ -15,7 +15,7 @@ import { shake } from './hitstop.js';
 
 export const ARCHETYPES = {
   brawler: { hp: 55, speed: 4.2, reach: 1.9, windup: 0.5, recover: 0.6, dmg: 8, ranged: false, mass: 80, clip: 'Punch_Cross' },
-  brute: { hp: 120, speed: 3.2, reach: 2.4, windup: 0.85, recover: 1.0, dmg: 18, ranged: false, mass: 160, clip: 'Sword_Heavy_Combo', unblockable: true, heavy: true },
+  brute: { hp: 120, speed: 3.2, reach: 2.4, windup: 0.85, recover: 1.0, dmg: 18, ranged: false, mass: 160, clip: 'Melee_Hook', unblockable: true, heavy: true },
   shield: { hp: 60, speed: 3.6, reach: 2.0, windup: 0.6, recover: 0.7, dmg: 10, ranged: false, mass: 95, clip: 'Shield_Dash', shield: true },
   gunner: { hp: 35, speed: 4.0, reach: 26, windup: 0.9, recover: 1.1, dmg: 6, ranged: true, keep: [9, 17], mass: 75, clip: 'Spell_Simple_Shoot', shot: 'bullet' },
   rocket: { hp: 45, speed: 3.4, reach: 34, windup: 1.3, recover: 2.2, dmg: 12, ranged: true, keep: [14, 24], mass: 85, clip: 'OverhandThrow', shot: 'rocket' },
@@ -122,7 +122,10 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       }
       case 'stagger': a.play(Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head', { once: true, fade: 0.05, timeScale: 1.3 }); break;
       case 'air': a.play('Hit_Knockback', { once: true, fade: 0.05 }); break;
-      case 'down': case 'out': case 'webbed': case 'pinned': a.play('Death01', { once: true, fade: 0.1 }); break;
+      // Knocked down: the fall (until the Mixamo knockdown arrives); out: the same fall, for good.
+      case 'down': case 'out': a.play('Death01', { once: true, fade: 0.1 }); break;
+      // Webbed up or stuck to a wall: upright and struggling against the web, never a death.
+      case 'webbed': case 'pinned': a.play('Idle_No_Loop', { fade: 0.12, timeScale: 1.7 }); break;
       case 'getup': a.play('LayToIdle', { once: true, fade: 0.1, timeScale: 1.6 }); break;
       case 'stunned': a.play('Hit_Head', { once: true, fade: 0.05, timeScale: 0.45 }); break;
       default: break;

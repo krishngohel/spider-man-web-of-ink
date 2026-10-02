@@ -23,6 +23,8 @@ import { buildStreetProps, carBoxes } from '../world/streetProps.js';
 import { buildStreetMeshes } from '../world/streetMesh.js';
 import { createHero, emptyIntent } from '../hero/controller.js';
 import { loadHeroAssets, buildHeroModel, loadCombatClips } from '../hero/model.js';
+import { TUNE } from '../combat/tuning.js';
+import { shake as stopShake } from '../combat/hitstop.js';
 import { createPoser } from '../hero/pose.js';
 import { createWebLine } from '../hero/webLine.js';
 import { createCameraRig } from '../camera/cameraRig.js';
@@ -554,7 +556,19 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     const at = e.at ?? (e.e ? e.e.body.p : null);
     switch (e.type) {
       case 'word': { const s = screenOf(at.x, at.y + 1.1, at.z); if (s.front) hud.word(e.text, s.x + (Math.random() - 0.5) * 80, s.y - 40, e.kind); break; }
-      case 'heroHit': sfx.event({ type: 'punch', heavy: e.heavy }); if (settings.cameraShake) rig.shake = Math.max(rig.shake, e.heavy ? 0.45 : 0.18); break;
+      case 'heroHit': {
+        sfx.event({ type: 'punch', heavy: e.heavy });
+        // Hit feel (spec 1.8): a camera kick, a punch of the field of view, and on the big ones
+        // (enders, launchers, spikes) a one-frame impact panel.
+        if (settings.cameraShake) rig.shake = Math.max(rig.shake, e.heavy ? 0.45 : 0.18);
+        rig.fov += TUNE.fovPunch * (e.heavy ? 1.6 : 1);
+        if (e.heavy && (e.stop ?? 0) >= 0.08 && settings.impactFrames !== 'off') {
+          const s = screenOf(e.e.body.p.x, e.e.body.p.y, e.e.body.p.z);
+          ink.setImpact(1, true, s.x / innerWidth, 1 - s.y / innerHeight);
+          setTimeout(() => ink.setImpact(0), 50);
+        }
+        break;
+      }
       case 'heroHurt': sfx.event({ type: 'hurt' }); combatHud.hurt(); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.5); break;
       case 'finisher': {
         const s = screenOf(at.x, at.y, at.z);
@@ -790,6 +804,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }
 
     if (mode !== 'play' && mode !== 'title') interpolate();
+    // The hero shakes a little while frozen on a blow (drawn only).
+    if (mode === 'play' && combat.heroCombat.c.heroStop > 0) {
+      const s = stopShake(combat.heroCombat.c.heroStop, combat.heroCombat.c.heroStopAll, TUNE.shake * TUNE.shakeHero);
+      renderP.x += s.x; renderP.z += s.z;
+    }
     const Tpose = performance.now();
     poser.update(hero, mode === 'play' ? (combat.heroCombat.c.heroStop > 0 ? 0 : gdt) : dt, events, renderP);
     heroModel.updateGear?.(mode === 'play' ? gdt : dt, hero);
@@ -1064,7 +1083,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     lobby: () => lobby,
     character: () => character.id,
     roster: () => ROSTER.map((c) => c.id),
-    combatState: () => ({ hp: combat.heroCombat.c.hp, focus: combat.heroCombat.c.focus, combo: combat.heroCombat.c.combo, state: combat.heroCombat.c.state, defeated: combat.heroCombat.c.defeated, enemies: combat.enemies.list.map((e) => ({ id: e.id, arch: e.arch, state: e.state, hp: e.hp, x: e.body.p.x, y: e.body.p.y, z: e.body.p.z, vx: e.body.v.x, vy: e.body.v.y, vz: e.body.v.z, t: e.t, at: e.strikeAt, boss: !!e.boss, ranged: !!e.A?.ranged, reach: e.A?.reach ?? 2 })) }),
+    combatState: () => ({ move: combat.heroCombat.c.move?.key ?? null, moveT: combat.heroCombat.c.move?.t ?? 0, heroState: hero.state, heroY: hero.body.p.y, held: combat.heroCombat.c.attackHeldT, hp: combat.heroCombat.c.hp, focus: combat.heroCombat.c.focus, combo: combat.heroCombat.c.combo, state: combat.heroCombat.c.state, defeated: combat.heroCombat.c.defeated, enemies: combat.enemies.list.map((e) => ({ id: e.id, arch: e.arch, state: e.state, hp: e.hp, x: e.body.p.x, y: e.body.p.y, z: e.body.p.z, vx: e.body.v.x, vy: e.body.v.y, vz: e.body.v.z, t: e.t, at: e.strikeAt, boss: !!e.boss, ranged: !!e.A?.ranged, reach: e.A?.reach ?? 2 })) }),
     props: () => director.props.list.filter((q) => q.state === 'rest').map((q) => ({ x: q.p.x, y: q.p.y, z: q.p.z })),
     // Test hook: the nearest point 1.6 m out from a building face (pilots back up to walls).
     wallSpot(x, z, r = 40, off = 1.6) {
