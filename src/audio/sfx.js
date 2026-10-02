@@ -102,6 +102,24 @@ export function createSfx(getVolume) {
         case 'hang': burst({ freq: 300, freq2: 520, q: 3, dur: 0.12, gain: 0.16 }); break;
         case 'wallStick': burst({ freq: 700, freq2: 250, q: 1.5, dur: 0.08, gain: 0.18 }); break;
         case 'perch': tone({ freq: 160, freq2: 70, dur: 0.12, gain: 0.25 }); break;
+        case 'punch':
+          burst({ freq: e.heavy ? 280 : 420, freq2: 120, q: 0.9, dur: e.heavy ? 0.16 : 0.09, gain: e.heavy ? 0.55 : 0.4, type: 'lowpass' });
+          tone({ freq: e.heavy ? 110 : 160, freq2: 60, dur: 0.1, gain: e.heavy ? 0.4 : 0.22 });
+          break;
+        case 'whiff': burst({ freq: 1800, freq2: 700, q: 0.8, dur: 0.12, gain: 0.12 }); break;
+        case 'hurt':
+          tone({ freq: 200, freq2: 80, dur: 0.2, gain: 0.35 });
+          burst({ freq: 600, freq2: 200, q: 0.8, dur: 0.15, gain: 0.3, type: 'lowpass' });
+          break;
+        case 'sense':
+          tone({ freq: 1320, freq2: 1760, dur: 0.12, gain: 0.07, type: 'triangle' });
+          tone({ freq: 1980, freq2: 1500, dur: 0.14, gain: 0.05, type: 'sine' });
+          break;
+        case 'shot': burst({ freq: 2400, freq2: 300, q: 0.7, dur: 0.07, gain: 0.3 }); tone({ freq: 220, freq2: 80, dur: 0.06, gain: 0.18, type: 'square' }); break;
+        case 'dodge': burst({ freq: 800, freq2: 2600, q: 0.8, dur: 0.18, gain: 0.22 }); break;
+        case 'uppercut': burst({ freq: 300, freq2: 1600, q: 0.9, dur: 0.22, gain: 0.35 }); break;
+        case 'gadget': burst({ freq: 3000, freq2: 900, q: 1.4, dur: 0.12, gain: 0.3 }); tone({ freq: 880, freq2: 440, dur: 0.08, gain: 0.08, type: 'triangle' }); break;
+        case 'enemyOut': tone({ freq: 330, freq2: 165, dur: 0.18, gain: 0.08, type: 'triangle' }); break;
         case 'noAnchor': tone({ freq: 240, freq2: 200, dur: 0.06, gain: 0.05, type: 'square' }); break;
         default: break;
       }

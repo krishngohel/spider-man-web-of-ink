@@ -35,6 +35,8 @@ import { newSave, loadSlot, writeSlot, lastSlot } from '../core/save.js';
 import { COPY } from '../ui/copy.js';
 import { el } from '../ui/dom.js';
 import { createFx } from './fx.js';
+import { createCombat } from '../combat/combat.js';
+import { createCombatHud } from '../ui/combatHud.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
@@ -126,6 +128,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const fx = createFx(scene);
 
   const hero = createHero(world, { gravity: settings.gravity, assist: settings.swingAssist });
+  // Combat: enemies, projectiles, gadgets and the hero's fighting state.
+  const combat = createCombat({ scene, world, assets, hero, city, getSettings: () => settings, feedback: {
+    splat: (hit) => fx.splat(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz),
+    boom: (p) => { fx.ring(p.x, p.y, p.z, 1.6); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.6); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('KA-BOOM!', s.x, s.y, 'hit'); sfx.event({ type: 'land', hard: true, impact: 30 }); },
+    sense: (e, unblockable, ranged) => { combatHud.sense(e, unblockable, ranged); sfx.event({ type: 'sense' }); },
+    shot: () => sfx.event({ type: 'shot' }),
+    event: (e) => combatEvent(e),
+  } });
   const spawn = city.spawn;
   hero.place(spawn.x, spawn.y, spawn.z, 0, 0, 0, 'ground');
   const rig = createCameraRig();
@@ -136,6 +146,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const sfx = createSfx(() => settings.volume);
   const uiRoot = el('div', { class: 'ui-layer' });
   document.body.append(uiRoot);
+  const combatHud = createCombatHud(uiRoot, { get combat() { return combat; }, getSettings: () => settings });
   const hud = createHud(uiRoot, () => settings);
   const devPanel = createDevPanel(uiRoot);
   if (dev) devPanel.show();
@@ -320,9 +331,22 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     intent.trickPressed = intent.trickPressed || input.pressed('trick');
     intent.climb = input.move.y;
     intent.dive = input.down('dive');
+    intent.divePressed = intent.divePressed || input.pressed('dive');
+    intent.attack = input.down('attack');
+    intent.attackPressed = intent.attackPressed || input.pressed('attack');
+    intent.webPressed = intent.webPressed || input.pressed('web');
+    intent.finisher = input.down('finisher');
+    intent.yankPressed = intent.yankPressed || input.pressed('hang');
+    // Gadget: a tap uses it; holding the wheel key (or the pad's gadget button) opens the wheel.
+    gadgetHold = input.down('gadgetWheel') || (input.device === 'pad' && input.down('gadget')) ? gadgetHold + 1 : 0;
+    if (input.pressed('gadget') && input.device !== 'pad') intent.gadgetPressed = true;
+    if (input.device === 'pad' && !input.down('gadget') && padGadgetDown && !wheelUsed) intent.gadgetPressed = true;
+    if (input.device === 'pad') { if (!input.down('gadget')) wheelUsed = false; padGadgetDown = input.down('gadget'); }
   }
+  let gadgetHold = 0, padGadgetDown = false, wheelUsed = false;
   const clearEdges = () => {
     intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false; intent.hangPressed = false; intent.trickPressed = false;
+    intent.attackPressed = false; intent.webPressed = false; intent.yankPressed = false; intent.gadgetPressed = false; intent.divePressed = false;
     consumedSwing = intent.swing; consumedJump = intent.jump;
   };
   const resetIntent = () => { clearEdges(); intent.swing = false; intent.jump = false; consumedSwing = false; consumedJump = false; swingLatch = false; };
@@ -380,6 +404,49 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     return { x: (wp.x * 0.5 + 0.5) * innerWidth, y: (-wp.y * 0.5 + 0.5) * innerHeight, front: wp.z < 1 };
   }
   let lastThwipWord = -10, lastWhipWord = -10;
+  let gdt = 0;
+  // Combat feedback: words, sounds, shakes, impact frames, the HUD.
+  function combatEvent(e) {
+    const at = e.at ?? (e.e ? e.e.body.p : null);
+    switch (e.type) {
+      case 'word': { const s = screenOf(at.x, at.y + 1.1, at.z); if (s.front) hud.word(e.text, s.x + (Math.random() - 0.5) * 80, s.y - 40, e.kind); break; }
+      case 'heroHit': sfx.event({ type: 'punch', heavy: e.heavy }); if (settings.cameraShake) rig.shake = Math.max(rig.shake, e.heavy ? 0.45 : 0.18); break;
+      case 'heroHurt': sfx.event({ type: 'hurt' }); combatHud.hurt(); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.5); break;
+      case 'finisher': {
+        const s = screenOf(at.x, at.y, at.z);
+        if (settings.impactFrames !== 'off') ink.setImpact(1, settings.impactFrames === 'soft', s.x / innerWidth, 1 - s.y / innerHeight);
+        setTimeout(() => ink.setImpact(0), 220);
+        break;
+      }
+      case 'slam': fx.ring(e.at.x, e.at.y - 0.9, e.at.z, 2.2); if (settings.cameraShake) rig.shake = 0.8; break;
+      case 'enemyOut': combatHud.ko(e.e); break;
+      case 'enemyPinned': { const p = e.e.body.p; fx.splat(p.x, p.y, p.z, e.e.pin.nx, 0, e.e.pin.nz); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('PINNED!', s.x, s.y - 40); break; }
+      case 'encounterStart': hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; break;
+      case 'encounterDone': hud.caption(COPY.combat.gangBusted); if (waypoint?.auto) waypoint = null; break;
+      case 'thwip': if (e.combat) sfx.event({ type: 'thwip' }); break;
+      default: break;
+    }
+    events.push(e); // the poser and the HUD see combat moves too
+    hud.onEvent(e);
+  }
+  // Defeated: a slow fall, a fade, and back on your feet at the nearest found subway station.
+  let defeatT = 0;
+  function defeatStep(dt) {
+    defeatT += dt;
+    if (defeatT > 1.1 && defeatT - dt <= 1.1) { hud.fade(true); hud.caption(COPY.combat.defeated, 2.5); }
+    if (defeatT > 2.0) {
+      const p = hero.body.p;
+      const found = city.stations.filter((st) => save.world.stations.includes(st.id));
+      const st = (found.length ? found : city.stations).reduce((a, b) => (Math.hypot(a.x - p.x, a.z - p.z) < Math.hypot(b.x - p.x, b.z - p.z) ? a : b));
+      combat.clear();
+      hero.place(st.x, 0.9, st.z, 0, 0, 0, 'ground');
+      prevP.x = renderP.x = st.x; prevP.y = renderP.y = 0.9; prevP.z = renderP.z = st.z;
+      rig.focus.x = st.x; rig.focus.y = 1.45; rig.focus.z = st.z;
+      combat.heroCombat.revive();
+      hud.fade(false);
+      defeatT = 0;
+    }
+  }
   // Entering a district shows its name in a caption box.
   let lastDistrict = null;
   function districtCheck() {
@@ -496,8 +563,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (input.pressed('help')) hud.toggleHelp();
       if (input.pressed('map')) openMap();
       buildIntent();
+      gdt = dt * combat.timeScale(dt);
+      if (gadgetHold > 12) { if (!combatHud.wheelOpen) combatHud.openWheel(); combatHud.steerWheel(input.look, input.move); wheelUsed = true; }
+      else if (combatHud.wheelOpen) { const pick = combatHud.closeWheel(); if (pick) combat.gadgets.select(pick); }
+      combat.preStep(intent, gdt);
       const Tp = performance.now();
-      const adv = fixed.advance(dt);
+      const adv = fixed.advance(gdt);
       for (let i = 0; i < adv.steps; i++) {
         const p = hero.body.p;
         prevP.x = p.x; prevP.y = p.y; prevP.z = p.z;
@@ -508,6 +579,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       prof('physics', Tp);
       events.push(...hero.events);
       hero.events.length = 0;
+      combat.step(gdt);
+      if (combat.heroCombat.c.defeated) defeatStep(dt);
       riverCheck(dt);
       travelStep(dt);
       saveT += dt;
@@ -532,7 +605,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
     if (mode !== 'play' && mode !== 'title') interpolate();
     const Tpose = performance.now();
-    poser.update(hero, dt, events, renderP);
+    poser.update(hero, mode === 'play' ? gdt : dt, events, renderP);
     prof('pose', Tpose);
     poser.lineWorld(hand);
     webLine.update(hand, hero.swing, hero.rope, hero.pendingWeb, tune.webTravel);
@@ -600,7 +673,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     updatePreview(dt);
     prof('aim', Tprev);
     fx.update(dt);
-    life.update(mode === 'play' ? dt : dt * 0.5, renderP, scare);
+    life.update(mode === 'play' ? gdt : dt * 0.5, renderP, scare);
+    combatHud.update(dt, camera);
     scare = null;
     if (trace) {
       // Test hook: what the player sees each frame (smoothness probes).
@@ -678,6 +752,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     stopTrace() { const t = trace; trace = null; return t; },
     setSetting(k, v) { applySettings({ ...settings, [k]: v }); },
     get settings() { return settings; },
+    combat: () => combat,
+    spawnGang: (x, z, opts) => combat.spawnGang(x, z, 'midtown', opts),
+    combatState: () => ({ hp: combat.heroCombat.c.hp, focus: combat.heroCombat.c.focus, combo: combat.heroCombat.c.combo, state: combat.heroCombat.c.state, enemies: combat.enemies.list.map((e) => ({ id: e.id, arch: e.arch, state: e.state, hp: e.hp, x: e.body.p.x, y: e.body.p.y, z: e.body.p.z })) }),
     save: () => save,
     openMap: () => openMap(),
     travel: (id) => { const st = city.stations.find((s) => s.id === id); if (st) travel(st); },

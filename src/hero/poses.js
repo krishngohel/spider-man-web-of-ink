@@ -211,6 +211,20 @@ export const POSES = {
     hr: [-0.14, -0.3, 0.32], er: [-0.6, 0, -1], gr: 'open',
     fl: [0.12, -0.42, 0.38], kl: [0.1, 0.3, 1], fr: [-0.12, -0.5, 0.3], kr: [-0.1, 0.3, 1], toe: [0.5, 0.5],
   }),
+  // Flying kick: the right leg shot out forward, arms back for balance.
+  kick: pose({
+    spine: [-0.25, 0.1, -0.2], head: [-0.2, 0.2],
+    hl: [0.36, -0.1, -0.24], el: [1, -0.4, 0], gl: 'fist',
+    hr: [-0.32, -0.12, -0.2], er: [-1, -0.4, 0], gr: 'fist',
+    fl: [0.08, -0.48, 0.26], kl: [0.1, 0.3, 1], fr: [-0.04, -0.3, 0.84], kr: [0, 1, 0.3], toe: [0.6, 1.0],
+  }),
+  // Slam: dropping fists first, knees tucked.
+  slam: pose({
+    spine: [0.55, 0, 0], head: [-0.6, 0],
+    hl: [0.12, -0.46, 0.16], el: [0.6, 0, -1], gl: 'fist',
+    hr: [-0.12, -0.46, 0.16], er: [-0.6, 0, -1], gr: 'fist',
+    fl: [0.14, -0.36, 0.34], kl: [0.2, 0.3, 1], fr: [-0.14, -0.4, 0.3], kr: [-0.2, 0.3, 1], toe: [0.4, 0.4],
+  }),
   // Superhero landing: crouched low, right knee down, right fist on the ground, left arm out.
   land: pose({
     spine: [0.95, 0, -0.2], head: [-0.85, 0], drop: 0.6,

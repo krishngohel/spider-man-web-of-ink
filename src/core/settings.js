@@ -21,6 +21,8 @@ export const DEFAULT_SETTINGS = {
   dynamicRes: true,
   showFps: true,
   timeOfDay: 'cycle',
+  difficulty: 'amazing',
+  crimes: true,
   weather: 'cycle',
   volume: { master: 0.8, music: 0.6, sfx: 0.9 },
 };
@@ -74,6 +76,8 @@ export function sanitizeSettings(raw = {}) {
     renderScale: num(r.renderScale, 0.5, 1, d.renderScale),
     dynamicRes: bool(r.dynamicRes, d.dynamicRes),
     showFps: bool(r.showFps, d.showFps),
+    difficulty: oneOf(r.difficulty, ['friendly', 'amazing', 'spectacular'], d.difficulty),
+    crimes: bool(r.crimes, d.crimes),
     timeOfDay: oneOf(r.timeOfDay, ['cycle', 'day', 'golden', 'night'], d.timeOfDay),
     weather: oneOf(r.weather, ['cycle', 'clear', 'overcast', 'rain'], d.weather),
     volume: {

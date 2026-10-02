@@ -10,6 +10,11 @@ export const ACTIONS = [
   { id: 'hang', label: 'Hang on the web (climb with forward and back), press again to let go', group: 'Move' },
   { id: 'dive', label: 'Dive (hold in the air)', group: 'Move' },
   { id: 'trick', label: 'Air trick (flips and spins)', group: 'Move' },
+  { id: 'attack', label: 'Attack (hold next to an enemy: launcher). Far away: web strike', group: 'Fight' },
+  { id: 'web', label: 'Web shot (webs enemies up)', group: 'Fight' },
+  { id: 'finisher', label: 'Finisher (tap, one focus bar), heal (hold)', group: 'Fight' },
+  { id: 'gadget', label: 'Use gadget', group: 'Fight' },
+  { id: 'gadgetWheel', label: 'Gadget wheel (hold)', group: 'Fight' },
   { id: 'map', label: 'City map', group: 'Other' },
   { id: 'help', label: 'Controls help', group: 'Other' },
   { id: 'pause', label: 'Pause and settings', group: 'Other' },
@@ -26,6 +31,11 @@ export const DEFAULT_BINDINGS = {
   hang: ['KeyE'],
   dive: ['KeyC'],
   trick: ['KeyR'],
+  attack: ['Mouse0'],
+  web: ['Mouse2'],
+  finisher: ['KeyX'],
+  gadget: ['KeyF'],
+  gadgetWheel: ['Tab'],
   map: ['KeyM'],
   help: ['KeyH'],
   pause: ['Escape', 'KeyP'],
@@ -36,7 +46,10 @@ export const PAD = {
   jump: 0,      // A / Cross
   dive: 1,      // B / Circle
   hang: 3,      // Y / Triangle
-  trick: 2,     // X / Square
+  attack: 2,    // X / Square (in the air with nobody near: a trick)
+  web: 5,       // RB / R1
+  finisher: 11, // R3
+  gadget: 4,    // LB / L1 (tap: use, hold: wheel)
   zipHold: 6,   // LT / L2 (with RT: zip)
   swing: 7,     // RT / R2
   map: 8,       // Back / Share

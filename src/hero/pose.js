@@ -75,7 +75,8 @@ export function createPoser(heroModel) {
   let lastHeading = 0, bank = 0, flutter = 0, perchT = 0, idleT = 0;
   let swings = 0;
   let inverted = false;
-  let mantleT = 0;
+  let mantleT = 0;          // hands-on-the-edge pose while going over a ledge
+  let kickT = 0, slamT = 0; // fighting poses in the air
   let lastAng = null;       // the swing angle last frame (for the pose lead)
   const qSmooth = orient.quaternion.clone();  // the body orientation on its rotation spring
   const angVel = new THREE.Vector3();
@@ -149,6 +150,18 @@ export function createPoser(heroModel) {
         else if (e.type === 'vault') { trick = { def: TRICKS.sideflip, name: 'sideflip', t: 0 }; }
         else if (e.type === 'perch') perchT = 0.9;
         else if (e.type === 'mantle') { mantleT = 0.42; trick = null; }
+        // Fighting moves: clips on the ground, procedural poses in the air.
+        else if (e.type === 'punch') {
+          if (!e.air) { once = null; const clip = ['Punch_Jab', 'Punch_Cross', 'Melee_Hook'][e.n % 3]; once = clip; onceT = 0.32; animator.play(clip, { once: true, fade: 0.05, timeScale: 1.9 }); }
+          else { kickT = 0.28; trick = e.n % 3 === 2 ? { def: TRICKS.spin, name: 'spin', t: 0 } : null; }
+        }
+        else if (e.type === 'uppercut') { once = 'Melee_Hook'; onceT = 0.3; animator.play('Melee_Hook', { once: true, fade: 0.04, timeScale: 2.4 }); trick = { def: TRICKS.backflip, name: 'backflip', t: 0 }; }
+        else if (e.type === 'dodge') { if (hero.state === 'ground') { once = 'Roll'; onceT = 0.32; animator.play('Roll', { once: true, fade: 0.04, timeScale: 2.6 }); } }
+        else if (e.type === 'heroHurt') { if (hero.state === 'ground') { once = 'Hit_Chest'; onceT = 0.3; animator.play('Hit_Chest', { once: true, fade: 0.04, timeScale: 1.5 }); } else trick = { def: TRICKS.backflip, name: 'backflip', t: 0.3 }; }
+        else if (e.type === 'airTrick') startTrick('trick', hero);
+        else if (e.type === 'slamStart') { slamT = 2; trick = null; }
+        else if (e.type === 'webStrike') { kickT = 0.9; trick = null; }
+        else if (e.type === 'strikeEnd') { kickT = 0.25; trick = { def: TRICKS.frontflip, name: 'frontflip', t: 0.35 }; }
         else if (e.type === 'land') {
           trick = null;
           if (e.hard && hs < 10) landT = 0.6;
@@ -163,6 +176,8 @@ export function createPoser(heroModel) {
       if (landT > 0) { landT -= dt; if (st !== 'ground' || hs > 3) landT = 0; }
       if (perchT > 0) { perchT -= dt; if (st !== 'ground' || hs > 2) perchT = 0; }
       if (mantleT > 0) { mantleT -= dt; if (st !== 'air') mantleT = 0; }
+      if (kickT > 0) { kickT -= dt; if (st === 'ground') kickT = 0; }
+      if (slamT > 0) { slamT -= dt; if (st === 'ground') slamT = 0; }
       // Standing still on a rooftop for a while: drop into a perch crouch, Spider-Man style.
       idleT = st === 'ground' && hs < 0.3 && hero.body.p.y > 6 ? idleT + dt : 0;
 
@@ -255,6 +270,14 @@ export function createPoser(heroModel) {
           // Going over a ledge: upright, facing in, hands on the edge.
           basis(UP, tmp, qBase);
           target.set(POSES.mantle);
+        } else if (slamT > 0) {
+          basis(UP, tmp, qBase);
+          target.set(POSES.slam);
+        } else if (kickT > 0) {
+          // A flying kick, leaning into it along the way we are going.
+          u.set(0, 1, 0).lerp(tmp2.copy(vel).normalize(), 0.35).normalize();
+          basis(u, tmp, qBase);
+          target.set(POSES.kick);
         } else if (hero.diving && speed > 8) {
           tmp2.copy(tmp).negate().lerp(DOWN, 0.2);
           basis(vel, tmp2, qBase);

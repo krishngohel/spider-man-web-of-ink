@@ -71,6 +71,8 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       el('h3', {}, C.sections.move),
       choice(C.gravity[0], C.gravity[1], ['comic', 'real'], 'gravity', C.gravityValues),
       choice(C.toggle[0], C.toggle[1], [false, true], 'swingToggle', C.toggleValues),
+      choice(C.difficulty[0], C.difficulty[1], ['friendly', 'amazing', 'spectacular'], 'difficulty', C.difficultyValues),
+      toggle(C.crimes[0], 'crimes', C.crimes[1]),
       el('h3', {}, C.sections.camera),
       slider(C.sensitivity[0], 0.2, 3, 0.05, () => getSettings().sensitivity, (v) => update({ sensitivity: v })),
       toggle(C.invertY[0], 'invertY'),

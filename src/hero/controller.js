@@ -48,6 +48,8 @@ export function emptyIntent() {
     zipPressed: false, dive: false,
     hangPressed: false, climb: 0,
     trickPressed: false,
+    attack: false, attackPressed: false, webPressed: false, yankPressed: false, finisher: false,
+    gadgetPressed: false, divePressed: false,
   };
 }
 
