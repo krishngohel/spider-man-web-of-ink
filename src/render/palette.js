@@ -24,7 +24,7 @@ export const PALETTE = {
   roof: 0x4d5562,
   waterTower: 0x8a5a3a,
   crane: 0xe8b52a,
-  windowDark: 0x24364f,
+  windowDark: 0x35557d,
   windowLit: 0xffd27a,
   asphalt: 0x3b3f49,
   sidewalk: 0xb3ada0,

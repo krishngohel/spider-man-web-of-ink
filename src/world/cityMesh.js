@@ -53,6 +53,9 @@ vec3 facade(vec3 base, float style, float seed) {
   float win = step(m.x, f.x) * step(f.x, 1.0 - m.x) * step(m.y, f.y) * step(f.y, 1.0 - m.y);
   // Ground floor: shopfronts, big dark glass.
   if (v < 4.2) { win = step(0.08, fract(u / 7.0)) * step(fract(u / 7.0), 0.92) * step(0.6, v) * step(v, 3.6); }
+  // Far away the grid is finer than a pixel and shimmers: blend toward its average coverage.
+  vec2 fw = fwidth(g);
+  win = mix(win, (1.0 - 2.0 * m.x) * (1.0 - 2.0 * m.y) * 0.8, smoothstep(0.22, 0.55, max(fw.x, fw.y)));
   float r = h21(id + seed * 13.1 + (xFace ? 7.0 : 0.0));
   vec3 glass = mix(uWinDark, uWinDark * 1.9 + vec3(0.06, 0.1, 0.16), step(0.72, r) * (1.0 - uNight));
   vec3 lit = uWinLit * (0.75 + 0.25 * r);
@@ -141,7 +144,7 @@ export function buildCityMeshes(city, scene, quality) {
     tm.castShadow = quality.shadows;
     group.add(tm);
     const cg = new THREE.IcosahedronGeometry(1, 1);
-    const cm = new THREE.InstancedMesh(cg, new THREE.MeshToonMaterial({ color: PALETTE.leaves, gradientMap: toonGradient(), flatShading: true }), crowns.length);
+    const cm = new THREE.InstancedMesh(cg, new THREE.MeshToonMaterial({ color: PALETTE.leaves, gradientMap: toonGradient() }), crowns.length);
     crowns.forEach((b, i) => {
       p.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2 + 0.6, (b.min[2] + b.max[2]) / 2);
       const r = (b.max[0] - b.min[0]) * 0.62;

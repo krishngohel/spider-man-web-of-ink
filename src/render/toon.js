@@ -7,7 +7,7 @@ let gradient = null;
 // Three hard bands: shadow, mid, lit.
 export function toonGradient() {
   if (gradient) return gradient;
-  const data = new Uint8Array([34, 34, 34, 255, 120, 120, 120, 255, 255, 255, 255, 255]);
+  const data = new Uint8Array([112, 112, 112, 255, 182, 182, 182, 255, 255, 255, 255, 255]);
   gradient = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
   gradient.minFilter = THREE.NearestFilter;
   gradient.magFilter = THREE.NearestFilter;
