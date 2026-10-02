@@ -67,8 +67,12 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       canHit: (e) => isActive(e) || e.state === 'webbed',
       enemy: (e, pr) => {
         if (pr.gadget && gadgets.payload(pr, e)) return;
-        enemies.hit(e, { kind: 'web', dmg: pr.dmg });
-        emit({ type: 'webHit', e });
+        if (pr.kind === 'web') { enemies.hit(e, { kind: 'web', dmg: pr.dmg }); emit({ type: 'webHit', e }); return; }
+        // A character's own shots (darts, stings, spears, bombs).
+        if (pr.aoe > 0) { explode(pr.x, pr.y, pr.z, pr); return; }
+        const d = Math.hypot(pr.vx, pr.vz) || 1;
+        enemies.hit(e, { dmg: pr.dmg, dir: { x: pr.vx / d, z: pr.vz / d }, push: 4, from: { x: pr.x, y: pr.y, z: pr.z } });
+        emit({ type: 'heroHit', e, heavy: false, kind: 'shot' });
       },
       explode,
       webWall: (hit, pr) => { if (pr.gadget) gadgets.payload(pr, null); feedback.splat(hit); },
@@ -81,7 +85,16 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   }
 
   function explode(x, y, z, pr) {
-    if (pr.owner === 'hero') { gadgets.payload({ ...pr, x, y, z }, null); return; }
+    if (pr.owner === 'hero') {
+      if (pr.gadget) { gadgets.payload({ ...pr, x, y, z }, null); return; }
+      // A hero's bomb: everyone in the blast.
+      feedback.boom({ x, y, z });
+      for (const e of enemies.active) {
+        const dx = e.body.p.x - x, dz = e.body.p.z - z, d = Math.hypot(dx, dz);
+        if (d < pr.aoe) enemies.hit(e, { dmg: pr.dmg * (1 - d / (pr.aoe * 1.5)), dir: { x: dx / (d || 1), z: dz / (d || 1) }, push: 9, lift: 3, kind: 'slam', from: { x, y, z } });
+      }
+      return;
+    }
     const h = hero.body.p;
     const d = Math.hypot(h.x - x, h.y - y, h.z - z);
     feedback.boom({ x, y, z });

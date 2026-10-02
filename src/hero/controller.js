@@ -107,6 +107,9 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       this.time += dt;
       if (intent.jumpPressed) this.lastJumpPress = this.time;
       this.diving = false;
+      // A character's mover (src/movers) can take a step over entirely (a flyer in the air, a
+      // heavy's charge) or leave it to the swinger's states below.
+      if (this.mover && this.mover.step(this, intent, dt, api)) { capSpeed(); updateFacing(intent); return; }
       switch (this.state) {
         case 'ground': groundStep(intent, dt); break;
         case 'air': airStep(intent, dt); break;
@@ -116,6 +119,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
         case 'glide': glideStep(intent, dt); break;
         case 'hang': hangStep(intent, dt); break;
       }
+      if (this.mover?.after) this.mover.after(this, intent, dt, api);
       capSpeed();
       updateFacing(intent);
     },
@@ -687,5 +691,12 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (m > 0.2) { hero.facing.x = intent.moveX / m; hero.facing.z = intent.moveZ / m; }
   }
 
+  // What a mover may use: the same moves, pushes and contacts as the swinger's own states.
+  const api = {
+    move, push, land, enterWall, toAir, tryZip, shootWeb, airForces, tryMantle, wallWithMomentum,
+    groundStep, airStep, wallStep, glideStep, zipStep,
+    g, touch, world, rope, swing, emit,
+  };
+  hero.api = api;
   return hero;
 }

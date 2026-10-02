@@ -226,3 +226,6 @@ button { font: inherit; }
 .pm-list .pm-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 2px dashed rgba(0, 0, 0, 0.2); }
 .pm-row b { font-family: var(--head); font-weight: 400; font-size: 18px; display: block; }
 .pm-row span { font-size: 13px; }
+.rs-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.rs-card span { display: block; font-size: 12px; margin: 3px 0; }
+.pm-suit.off { opacity: 0.5; cursor: default; }

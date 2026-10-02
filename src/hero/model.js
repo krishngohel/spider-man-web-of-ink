@@ -12,12 +12,12 @@ import { COMIC_SHADE, SHADOW_ALPHA, addShadeUniforms } from '../render/comicShad
 
 export async function loadHeroAssets(base = './assets/', onProgress = () => {}) {
   const loader = new GLTFLoader();
-  const names = ['hero_m.glb', 'anims1.glb', 'anims2.glb'];
+  const names = ['hero_m.glb', 'anims1.glb', 'anims2.glb', 'hero_f.glb', 'hair_long.glb'];
   let done = 0;
-  const [hero, a1, a2] = await Promise.all(names.map((n) => loader.loadAsync(base + n).then((g) => { onProgress(++done / names.length); return g; })));
+  const [hero, a1, a2, heroF, hair] = await Promise.all(names.map((n) => loader.loadAsync(base + n).then((g) => { onProgress(++done / names.length); return g; })));
   const clips = new Map();
   for (const clip of [...a1.animations, ...a2.animations]) clips.set(clip.name, sanitizeClip(clip));
-  return { body: hero.scene, clips };
+  return { body: hero.scene, bodyF: heroF.scene, hair: hair.scene, clips };
 }
 
 // The shared skeleton has matching bone lengths, but only rotations and the pelvis translation are
@@ -80,6 +80,7 @@ function suitMaterial(suit) {
     uBlack: { value: new THREE.Color(suit.black) },
     uLens: { value: new THREE.Color(suit.lens) },
     uStyle: { value: suit.style ?? 0 },
+    uBodyScale: { value: new THREE.Vector3(1, 1, 1) },
   };
   mat.userData.suit = uniforms;
   mat.onBeforeCompile = (shader) => {
@@ -87,7 +88,8 @@ function suitMaterial(suit) {
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vBind;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position;');
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position * uBodyScale;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uBodyScale;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform vec3 uRed, uBlue, uBlack, uLens;
@@ -168,23 +170,33 @@ vec3 paintSuit(vec3 p) {
     if (ax < 0.24 && p.y > 0.93 && ax > 0.15) col = uRed;
   }
   else if (uStyle < 5.5) { col = uRed; gGlow = lines; }                                 // stealth: glowing lines
-  else { col = mix(col, uBlue, lines * (red ? 1.0 : 0.0)); }                             // negative
+  else if (uStyle < 6.5) { col = mix(col, uBlue, lines * (red ? 1.0 : 0.0)); }           // negative
+  else {
+    // Venom: black, a white spider, and a grin full of teeth under the eyes.
+    col = uRed;
+    if (p.y > 1.585 && p.y < 1.66 && p.z > 0.06 && ax < 0.075) {
+      float mouth = 1.0 - smoothstep(0.0, 0.004, abs(p.y - 1.62 - 0.25 * ax * ax / 0.075) - 0.028);
+      float teeth = step(0.5, fract(p.x * 70.0)) * step(abs(p.y - 1.62 - 0.25 * ax * ax / 0.075), 0.024);
+      col = mix(col, vec3(0.55, 0.06, 0.1), mouth);
+      col = mix(col, vec3(0.96), teeth * mouth);
+    }
+  }
   // Chest spider (black, front) and back spider (red with a black outline, bigger).
   if (p.y > 1.12 && p.y < 1.56 && ax < 0.16) {
     if (p.z > 0.04) {
-      float big = uStyle > 0.5 && uStyle < 1.5 ? 1.9 : uStyle > 3.5 && uStyle < 4.5 ? 1.6 : 1.25;
+      float big = (uStyle > 0.5 && uStyle < 1.5) || uStyle > 6.5 ? 1.9 : uStyle > 3.5 && uStyle < 4.5 ? 1.6 : 1.25;
       float d = spider(vec2(p.x, p.y - 1.33), big);
-      vec3 ec = uStyle > 3.5 && uStyle < 4.5 ? uRed : uStyle > 5.5 ? uBlue : uBlack;
+      vec3 ec = uStyle > 3.5 && uStyle < 4.5 ? uRed : uStyle > 5.5 && uStyle < 6.5 ? uBlue : uBlack;
       col = mix(col, ec, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
       if (uStyle > 4.5 && uStyle < 5.5) gGlow = max(gGlow, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
     } else if (p.z < -0.04) {
-      float big = uStyle > 0.5 && uStyle < 1.5 ? 2.2 : 1.7;
+      float big = (uStyle > 0.5 && uStyle < 1.5) || uStyle > 6.5 ? 2.2 : 1.7;
       float d = spider(vec2(p.x, p.y - 1.3), big);
       float fw = fwidth(d) * 1.5;
-      if (uStyle > 0.5 && uStyle < 1.5) col = mix(col, uBlack, 1.0 - smoothstep(0.0, fw, d));
+      if ((uStyle > 0.5 && uStyle < 1.5) || uStyle > 6.5) col = mix(col, uBlack, 1.0 - smoothstep(0.0, fw, d));
       else {
         col = mix(col, uRed, 1.0 - smoothstep(0.0, fw, d));
-        col = mix(col, uStyle > 5.5 ? uBlue : uBlack, 1.0 - smoothstep(0.0035, 0.0035 + fw, abs(d)));
+        col = mix(col, uStyle > 5.5 && uStyle < 6.5 ? uBlue : uBlack, 1.0 - smoothstep(0.0035, 0.0035 + fw, abs(d)));
       }
     }
   }
@@ -230,7 +242,7 @@ ${SHADOW_ALPHA}
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, uLens * (0.92 + 0.08 * clamp(vBind.y * 6.0 - 9.9, 0.0, 1.0)), gLens);
 	if (gLens > 0.5) gl_FragColor.a = 0.0;`);
   };
-  mat.customProgramCacheKey = () => 'suit-v6';
+  mat.customProgramCacheKey = () => 'suit-v7';
   return mat;
 }
 
@@ -245,11 +257,13 @@ export const COM_HEIGHT = 0.9; // the physics body's position is this far above 
 // The mask: blend the head's face sculpt (nose, brows, lips) onto a smooth ellipsoid, so the head
 // reads as a mask pulled over a skull, not a face. Positions and normals are bind-space, before
 // skinning, so the head still turns and nods with its bones.
-const MASK = { cx: 0, cy: 1.69, cz: 0.0, rx: 0.091, ry: 0.124, rz: 0.104, from: 1.555, to: 1.6 };
-export function smoothHead(geometry) {
+export const MASK = { cx: 0, cy: 1.69, cz: 0.0, rx: 0.091, ry: 0.124, rz: 0.104, from: 1.555, to: 1.6 };
+export const MASK_F = { cx: 0, cy: 1.645, cz: 0.0, rx: 0.085, ry: 0.118, rz: 0.098, from: 1.515, to: 1.56 };
+// The female body's bind positions mapped onto the male body the paint was drawn on.
+export const BODY_SCALE_F = [1 / 0.94, 1.69 / 1.645, 1];
+export function smoothHead(geometry, m = MASK) {
   const g = geometry.clone();
   const pos = g.attributes.position, nrm = g.attributes.normal;
-  const m = MASK;
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
     if (y < m.from || Math.abs(x) > 0.16) continue;
@@ -272,22 +286,24 @@ export function smoothHead(geometry) {
   return g;
 }
 
-export function buildHeroModel(assets, suit = SUIT_CLASSIC) {
+export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, scale = null } = {}) {
   const root = new THREE.Group();
   root.name = 'hero';
   // root (at the centre of mass) -> orient (whole-body rotation about the centre of mass) -> model
   const orient = new THREE.Group();
   root.add(orient);
-  const model = SkeletonUtils.clone(assets.body);
+  const model = SkeletonUtils.clone(female ? assets.bodyF : assets.body);
   model.position.y = -COM_HEIGHT;
+  if (scale) model.scale.set(scale[0], scale[1], scale[2]);
   orient.add(model);
   const suitMat = suitMaterial(suit);
+  if (female) suitMat.userData.suit.uBodyScale.value.set(...BODY_SCALE_F);
   model.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     // The eye and brow meshes stay: smoothed onto the mask and painted by the suit shader, they fill
     // the body's eye holes as white lens.
     o.material = suitMat;
-    o.geometry = smoothHead(o.geometry);
+    o.geometry = smoothHead(o.geometry, female ? MASK_F : MASK);
     o.castShadow = true;
     o.frustumCulled = false;
   });

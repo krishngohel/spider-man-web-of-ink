@@ -39,6 +39,11 @@ import { createCombat } from '../combat/combat.js';
 import { createCombatHud } from '../ui/combatHud.js';
 import { createProgressRuntime } from '../progress/runtime.js';
 import { createProgressMenu } from '../ui/progressMenu.js';
+import { ROSTER, characterById } from '../roster/characters.js';
+import { buildCharacter } from '../roster/build.js';
+import { makeSpecial } from '../roster/specials.js';
+import { MOVERS } from '../movers/movers.js';
+import { createRosterMenu } from '../ui/rosterMenu.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
@@ -123,9 +128,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   onProgress(0.15);
 
   const assets = await loadHeroAssets('./assets/', (f) => onProgress(0.15 + f * 0.7));
-  const heroModel = buildHeroModel(assets);
+  let heroModel = buildHeroModel(assets);
   scene.add(heroModel.root);
-  const poser = createPoser(heroModel);
+  let poser = createPoser(heroModel);
+  let character = characterById('peter');
   const webLine = createWebLine(scene);
   const fx = createFx(scene);
 
@@ -205,7 +211,34 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onRestart: () => { hero.place(spawn.x, spawn.y, spawn.z, 0, 0, 0, 'ground'); resume(); },
     onQuit: () => toTitle(),
     onProgress: () => progressMenu.show(),
+    onRoster: () => rosterMenu.show(),
   });
+  // Characters (spec 13): the roster unlocks in solo free roam after the story; ?roster opens it.
+  const rosterOpen = () => params.has('roster') || save.story.done.includes('act4.epilogue');
+  const rosterMenu = createRosterMenu(uiRoot, { isOpen: rosterOpen, current: () => character.id, onPick: (id) => { switchCharacter(id); rosterMenu.hide(); resume(); }, onBack: () => menus.showPause() });
+  // Metal for Electro: lamp posts, traffic lights, antennas, cranes and the bridge cables.
+  const metal = [
+    ...street.lamps.map((l) => ({ x: l.x, y: 6.1, z: l.z })),
+    ...street.lights.map((l) => ({ x: l.x, y: 5, z: l.z })),
+    ...city.boxes.filter((b) => b.style === 16 || b.style === 10 || b.style === 25).map((b) => ({ x: (b.min[0] + b.max[0]) / 2, y: b.max[1], z: (b.min[2] + b.max[2]) / 2 })),
+  ];
+  function switchCharacter(id) {
+    const def = characterById(id);
+    scene.remove(heroModel.root);
+    heroModel = buildCharacter(assets, def);
+    scene.add(heroModel.root);
+    poser = createPoser(heroModel);
+    character = def;
+    hero.mover = def.mover ? MOVERS[def.mover]({ ...(def.moverOpts ?? {}), metal }) : null;
+    hero.body.mass = def.mass ?? 75;
+    combat.heroCombat.c.special = makeSpecial(def.special, { hero, enemies: combat.enemies, projectiles: combat.projectiles, emit: (e) => combatEvent(e) });
+    // Skills first, then the character's own differences on top.
+    progress.setCharacter(heroModel, def.id, () => {
+      for (const [k, v] of Object.entries(def.tune ?? {})) tune[k] += v;
+      for (const [k, v] of Object.entries(hero.mover?.tune ?? {})) tune[k] = v;
+    });
+    hud.caption(def.name.toUpperCase(), 2);
+  }
   const progressMenu = createProgressMenu(uiRoot, { save, onChange: () => { progress.apply(); persist(); }, onBack: () => menus.showPause() });
   const progress = createProgressRuntime({ save, heroModel, combat, hero, hud, sfx, ink });
   progress.apply();
@@ -326,7 +359,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     // A press counts when the button went down since the last step, or when a keydown arrived this
     // frame even though the button was already down for the last step (let go and pressed again
     // between frames: a fast re-tap).
-    intent.swingPressed = intent.swingPressed || (swing && !consumedSwing) || (swing && !settings.swingToggle && input.pressed('swing'));
+    // A tap that went down and up within one frame still counts (Shocker's blasts, Electro's pulls).
+    intent.swingPressed = intent.swingPressed || (swing && !consumedSwing) || (!settings.swingToggle && input.pressed('swing'));
     intent.swingReleased = !swing && consumedSwing;
     const jump = input.down('jump');
     intent.jump = jump;
@@ -616,6 +650,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (mode !== 'play' && mode !== 'title') interpolate();
     const Tpose = performance.now();
     poser.update(hero, mode === 'play' ? gdt : dt, events, renderP);
+    heroModel.updateGear?.(mode === 'play' ? gdt : dt, hero);
     prof('pose', Tpose);
     poser.lineWorld(hand);
     webLine.update(hand, hero.swing, hero.rope, hero.pendingWeb, tune.webTravel);
@@ -765,6 +800,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     combat: () => combat,
     spawnGang: (x, z, opts) => combat.spawnGang(x, z, 'midtown', opts),
     progress: () => progress,
+    switchCharacter: (id) => switchCharacter(id),
+    character: () => character.id,
+    roster: () => ROSTER.map((c) => c.id),
     combatState: () => ({ hp: combat.heroCombat.c.hp, focus: combat.heroCombat.c.focus, combo: combat.heroCombat.c.combo, state: combat.heroCombat.c.state, enemies: combat.enemies.list.map((e) => ({ id: e.id, arch: e.arch, state: e.state, hp: e.hp, x: e.body.p.x, y: e.body.p.y, z: e.body.p.z })) }),
     save: () => save,
     openMap: () => openMap(),

@@ -9,7 +9,7 @@ import { applyDv } from '../physics/ledger.js';
 // parameters, pays out XP and tokens for deeds, and runs the suit powers.
 
 export function createProgressRuntime({ save, heroModel, combat, hero, hud, sfx, ink, onLevelUp = () => {} }) {
-  const R = { powerT: 0, powerCd: 0, battleFocusT: 0, electricT: 0, rocketN: 0 };
+  const R = { powerT: 0, powerCd: 0, battleFocusT: 0, electricT: 0, rocketN: 0, model: heroModel, charId: 'peter', afterApply: null };
 
   function apply() {
     const p = save.progress;
@@ -41,10 +41,11 @@ export function createProgressRuntime({ save, heroModel, combat, hero, hud, sfx,
     combat.gadgets.setLevels(Object.fromEntries(GADGETS.map((g) => [g.id, p.gadgets[g.id] ?? (g.id === 'webBomb' ? 1 : 0)])));
     R.flags = fx.flags;
     R.mods = mods;
-    // The suit (and the Noir suit's black-and-white world).
+    // The suit (and the Noir suit's black-and-white world): Peter's suits only.
     const suit = suitById(p.suit);
-    setSuit(heroModel, suit);
-    ink.setFilter(suit.id === 'noir' ? 'noir' : 'none');
+    if (R.charId === 'peter' && R.model.suitMat) { setSuit(R.model, suit); ink.setFilter(suit.id === 'noir' ? 'noir' : 'none'); }
+    else ink.setFilter(R.charId === 'noir' ? 'noir' : 'none');
+    R.afterApply?.();
   }
 
   // XP (and tokens) for a deed.
@@ -113,5 +114,10 @@ export function createProgressRuntime({ save, heroModel, combat, hero, hud, sfx,
     if (e.type === 'perfect') reward('perfectRelease');
   }
 
-  return { apply, reward, usePower, step, onCombatEvent, onHeroEvent, get powerCooldown() { return R.powerCd; } };
+  return {
+    apply, reward, usePower, step, onCombatEvent, onHeroEvent,
+    get powerCooldown() { return R.powerCd; },
+    // A different character: its model, and what to layer on top of the skills after each apply.
+    setCharacter(model, id, afterApply) { R.model = model; R.charId = id; R.afterApply = afterApply; apply(); },
+  };
 }

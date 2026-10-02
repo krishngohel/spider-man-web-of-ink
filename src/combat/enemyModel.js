@@ -46,13 +46,15 @@ export const FACTIONS = {
 
 const OUTFIT_FRAG = /* glsl */ `
 uniform vec3 uJacket, uPants, uShoes, uHat, uAccent;
-uniform float uSkin, uHead, uShades, uSpots;
+uniform float uSkin, uHead, uShades, uSpots, uPattern;
 varying vec3 vBind;
-vec3 skinCol() { return mix(vec3(0.95, 0.76, 0.6), vec3(0.36, 0.22, 0.14), clamp(uSkin, 0.0, 1.0)); }
+// Skin: a tone from 0 (pale) to 1 (dark); below -1.5 the character is covered (gloves and a mask
+// in the hat colour, or a lizard's hide).
+vec3 skinCol() { return uSkin < -1.5 ? uHat : mix(vec3(0.95, 0.76, 0.6), vec3(0.36, 0.22, 0.14), clamp(uSkin, 0.0, 1.0)); }
 vec3 paintOutfit(vec3 p) {
   float ax = abs(p.x);
   vec3 col;
-  if (uSkin < 0.0) {
+  if (uSkin < -0.5 && uSkin > -1.5) {
     // Symbiote spawn: black, with white veins and big white eyes.
     col = uJacket;
     float v = abs(sin(p.y * 22.0 + sin(p.x * 30.0) * 2.0 + sin(p.z * 24.0)));
@@ -81,6 +83,14 @@ vec3 paintOutfit(vec3 p) {
   } else {
     col = p.y < 0.1 ? uShoes : uPants;
   }
+  // Villain patterns: 1 quilted diamonds, 2 lightning, 3 scales, 4 armour plates, 5 stripes.
+  if (uPattern > 0.5 && p.y < 1.53) {
+    if (uPattern < 1.5) { vec2 q = vec2(p.x * 9.0 + p.y * 9.0, p.y * 9.0 - p.x * 9.0); vec2 f = abs(fract(q) - 0.5); col = mix(col, col * 0.62, step(0.43, max(f.x, f.y))); }
+    else if (uPattern < 2.5) { float z = abs(fract(p.y * 3.0 + abs(p.x) * 2.0) - 0.5) - abs(fract(p.x * 4.0) - 0.5) * 0.4; col = mix(col, uAccent, step(abs(z), 0.06)); }
+    else if (uPattern < 3.5) { vec2 q = vec2(p.x * 22.0 + floor(p.y * 22.0) * 0.5, p.y * 22.0); vec2 f = fract(q) - 0.5; col = mix(col, col * 0.7, step(0.36, length(f))); }
+    else if (uPattern < 4.5) { col = mix(col, col * 0.7, step(0.92, fract(p.y * 4.0)) + step(0.94, fract(abs(p.x) * 6.0))); }
+    else { if (ax < 0.24 && p.y > 0.93) col = mix(col, uAccent, step(0.5, fract(p.y * 8.0))); }
+  }
   if (uSpots > 0.5 && p.y > 0.93 && p.y < 1.53) {
     vec2 sp = vec2(p.x * 26.0 + p.z * 13.0, p.y * 26.0);
     vec2 f = fract(sp) - 0.5;
@@ -90,13 +100,14 @@ vec3 paintOutfit(vec3 p) {
 }
 `;
 
-function outfitMaterial(look) {
+export function outfitMaterial(look) {
   const mat = new THREE.MeshToonMaterial({ color: 0xffffff, gradientMap: toonGradient() });
   const U = {
     uJacket: { value: new THREE.Color(look.jacket) }, uPants: { value: new THREE.Color(look.pants) },
     uShoes: { value: new THREE.Color(look.shoes) }, uHat: { value: new THREE.Color(look.hat) },
     uAccent: { value: new THREE.Color(look.accent) }, uSkin: { value: look.skin }, uHead: { value: look.head ?? 0 },
     uShades: { value: look.shades ?? 0 }, uSpots: { value: look.spots ?? 0 },
+    uPattern: { value: look.pattern ?? 0 }, uBodyScale: { value: new THREE.Vector3(1, 1, 1) },
   };
   mat.userData.outfit = U;
   mat.onBeforeCompile = (shader) => {
@@ -104,7 +115,8 @@ function outfitMaterial(look) {
     Object.assign(shader.uniforms, U);
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vBind;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position;');
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position * uBodyScale;')
+      .replace('#include <common>', '#include <common>\nuniform vec3 uBodyScale;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>\n${OUTFIT_FRAG}\n${COMIC_SHADE}`)
       .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb = paintOutfit(vBind);')
@@ -119,7 +131,7 @@ function outfitMaterial(look) {
     shader.uniforms.uHurt = mat.userData.hurt;
   };
   mat.userData.hurt = { value: 0 };
-  mat.customProgramCacheKey = () => 'outfit-v1';
+  mat.customProgramCacheKey = () => 'outfit-v2';
   return mat;
 }
 

@@ -4,7 +4,8 @@ export const COPY = {
   title: { a: 'SPIDER-MAN', b: 'WEB OF INK' },
   subtitle: 'Swing test build. Aim the crosshair at a building, hold swing, let go and aim the next one. Miss and you fall.',
   disclaimer: 'Unofficial fan game. Not affiliated with or endorsed by Marvel or Sony. Spider-Man and related characters are trademarks of Marvel. Made for fun, never sold.',
-  buttons: { progress: 'SKILLS AND SUITS', play: 'FREE SWING', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
+  roster: { title: 'CHARACTERS', heroes: 'HEROES', villains: 'VILLAINS', playing: 'Playing', play: 'Play', locked: 'Finish the story to play everyone in free roam (everyone is open in multiplayer).' },
+  buttons: { roster: 'CHARACTERS', progress: 'SKILLS AND SUITS', play: 'FREE SWING', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
   pause: 'PAUSED',
   clickToPlay: 'CLICK THE GAME TO USE THE MOUSE. ESC GIVES IT BACK.',
   map: {

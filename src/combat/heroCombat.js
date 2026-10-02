@@ -26,7 +26,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     iframes: 0, outOfCombat: 9, attackHeldT: 0, buffered: false, punchN: 0,
     timeScale: 1, slowT: 0, stopT: 0, finisherHoldT: 0, defeated: false, lastWord: 0,
     dmgMul: 1, // skills raise this (Plan 4)
-    strikeMul: 1, comboKeep: 2.2, armor: 0, resilient: false, resilientUsed: false, focusMul: 1, brutalMul: 1,
+    special: null, strikeMul: 1, comboKeep: 2.2, armor: 0, resilient: false, resilientUsed: false, focusMul: 1, brutalMul: 1,
   };
   const P = () => hero.body.p, V = () => hero.body.v;
   const toward = (e) => { const p = P(), q = e.body.p; const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz) || 1; return { x: dx / d, z: dz / d, d, dy: q.y - p.y }; };
@@ -161,6 +161,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
     // Dodge: dive on the ground while enemies are about.
     if (intent.divePressed && grounded() && engaged.length) { startDodge(intent, engaged); return; }
+    // A character's own special replaces the web shot (Shocker's blast, Goblin's bombs...).
+    if (intent.webPressed && c.special) { c.special(camFwd); onEvent({ type: 'special' }); return; }
     // Web shot.
     if (intent.webPressed) {
       const t2 = pickTarget(P(), camFwd, enemies.list, COMBAT.webRange);
