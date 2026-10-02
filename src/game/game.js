@@ -44,6 +44,13 @@ import { buildCharacter } from '../roster/build.js';
 import { makeSpecial } from '../roster/specials.js';
 import { MOVERS } from '../movers/movers.js';
 import { createRosterMenu } from '../ui/rosterMenu.js';
+import { createSession } from '../net/session.js';
+import { createModes } from '../net/modes.js';
+import { createSocial } from '../net/social.js';
+import { createLobby } from '../ui/lobby.js';
+import { unlockedSave } from '../progress/unlocked.js';
+import { ARCHETYPES } from '../combat/enemies.js';
+import { DEFAULTS } from '../physics/constants.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
@@ -212,6 +219,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onQuit: () => toTitle(),
     onProgress: () => progressMenu.show(),
     onRoster: () => rosterMenu.show(),
+    onMultiplayer: () => lobby.show(),
   });
   // Characters (spec 13): the roster unlocks in solo free roam after the story; ?roster opens it.
   const rosterOpen = () => params.has('roster') || save.story.done.includes('act4.epilogue');
@@ -238,6 +246,53 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       for (const [k, v] of Object.entries(hero.mover?.tune ?? {})) tune[k] = v;
     });
     hud.caption(def.name.toUpperCase(), 2);
+    if (session?.active) session.setChar(def.id);
+  }
+
+  // Multiplayer (spec 14) -------------------------------------------------------------------------
+  const mpSave = unlockedSave();
+  let mpRule = {}, pvpOn = false;
+  const session = createSession({
+    scene, assets, hero, combat, hud, uiRoot, buildCharacter, createPoser, createWebLine, camera,
+    characterId: () => character.id,
+    makeSnapshot: () => ({
+      mode: modes.state,
+      encounter: combat.encounter ? { x: combat.encounter.x, z: combat.encounter.z, district: combat.encounter.district, faction: combat.encounter.faction,
+        list: combat.enemies.list.filter((e) => e.alive && !e.puppet && !e.isPlayer && e.state !== 'out').map((e) => ({ arch: e.arch, faction: e.faction, look: e.look, x: e.body.p.x, z: e.body.p.z, hp: e.hp })) } : null,
+    }),
+    onSnapshot: (snap) => modes.adopt(snap?.mode),
+    onBecomeHost: (snap) => { modes.adopt(snap?.mode); combat.restoreEncounter(snap?.encounter); },
+  });
+  combat.setTargets(() => session.targets());
+  combat.setAuthority(() => !session.active || session.isHost);
+  const modes = createModes({ session, scene, hud, uiRoot, city, getHero: () => hero, getCamera: () => camera, applyRule: (r) => { mpRule = r; } });
+  const social = createSocial({ session, scene, uiRoot, getCamera: () => camera, getAim: () => findAimPoint(world, hero.body, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z }) ?? world.raycast(rig.pos.x, rig.pos.y, rig.pos.z, rig.fwd.x, rig.fwd.y, rig.fwd.z, 300) });
+  const lobby = createLobby(uiRoot, { session, onEnter: () => enterMp(), onBack: () => (session.active ? resume() : menus.showTitle()), startMode: (k, o) => modes.start(k, o) });
+  session.on('message', (id, data) => { modes.message(id, data); social.message(id, data); });
+  session.on('status', (kind) => { if (kind === 'closed') { progress.useSave(save); if (mode !== 'title') hud.caption('LEFT THE WORLD', 2); } });
+  let mpEntered = false;
+  function enterMp() {
+    if (!mpEntered) {
+      mpEntered = true;
+      progress.useSave(mpSave);
+      switchCharacter(lobby.profile.char);
+      // A joiner starts next to whoever got there first.
+      if (!session.isHost) setTimeout(() => { const first = [...session.players.values()][0]; const s = first?.buf.items[first.buf.items.length - 1]?.s; if (s) hero.place(s.p.x + 2, s.p.y + 0.5, s.p.z, 0, 0, 0, 'air'); }, 900);
+    }
+    menus.hideAll();
+    if (mode !== 'play') enterPlay();
+  }
+  // Other players as targets while friendly fire is on (Brawl): hits on them go to their machine.
+  function syncPvp(on) {
+    if (on === pvpOn && !on) return;
+    pvpOn = on;
+    const have = new Map(combat.enemies.list.filter((e) => e.isPlayer).map((e) => [e.netPlayer, e]));
+    for (const p of session.players.values()) {
+      if (on && !p.away && !have.has(p.id)) {
+        combat.enemies.list.push({ id: 900000 + p.id, isPlayer: true, netPlayer: p.id, arch: 'brawler', A: ARCHETYPES.brawler, faction: 'street', state: 'engage', alive: true, alerted: true, hp: 100, maxHp: 100, web: 0, facing: 0, body: p.puppet.body, model: { root: new THREE.Object3D(), hurt: { value: 0 }, animator: { play() {}, update() {} }, mat: { dispose() {} } } });
+      }
+    }
+    for (const [id, e] of have) if (!on || !session.players.has(id)) combat.enemies.remove(e);
   }
   const progressMenu = createProgressMenu(uiRoot, { save, onChange: () => { progress.apply(); persist(); }, onBack: () => menus.showPause() });
   const progress = createProgressRuntime({ save, heroModel, combat, hero, hud, sfx, ink });
@@ -318,7 +373,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     input.setEnabled(false);
     // A locked pointer sends every click to the canvas: release it so the menu can be clicked.
     if (locked()) document.exitPointerLock();
-    menus.showPause();
+    if (session.active) lobby.showWorld(); else menus.showPause();
   }
   function resume() {
     mode = 'play';
@@ -371,6 +426,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     intent.trickPressed = intent.trickPressed || input.pressed('trick');
     intent.climb = input.move.y;
     intent.dive = input.down('dive');
+    if (mpRule.frozen) { intent.moveX = 0; intent.moveZ = 0; intent.swing = false; intent.jump = false; }
     intent.divePressed = intent.divePressed || input.pressed('dive');
     intent.attack = input.down('attack');
     intent.attackPressed = intent.attackPressed || input.pressed('attack');
@@ -473,6 +529,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Defeated: a slow fall, a fade, and back on your feet at the nearest found subway station.
   let defeatT = 0;
   function defeatStep(dt) {
+    if (session.active && mpRule.friendlyFire) {
+      if (defeatT === 0) session.all({ k: 'ko', by: session.lastHurtBy });
+      defeatT += dt;
+      if (defeatT > 1.6) { combat.heroCombat.revive(); defeatT = 0; hud.caption('BACK IN!', 1); }
+      return;
+    }
     defeatT += dt;
     if (defeatT > 1.1 && defeatT - dt <= 1.1) { hud.fade(true); hud.caption(COPY.combat.defeated, 2.5); }
     if (defeatT > 2.0) {
@@ -622,6 +684,17 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       hero.events.length = 0;
       combat.step(gdt);
       progress.step(gdt);
+      if (session.active) {
+        session.update(dt);
+        modes.update(dt);
+        social.update(dt);
+        syncPvp(!!mpRule.friendlyFire);
+        tune.maxSpeed = mpRule.fairCap ? 30 : DEFAULTS.maxSpeed;
+        if (input.pressed('ping')) social.ping();
+        if (input.pressed('chat')) social.openChat();
+        social.toggleQuick(input.down('quickChat'));
+        if (input.pressed('scan') && modes.ping()) hud.caption('SPIDER-SENSE!', 1);
+      }
       if (input.pressed('suitPower')) progress.usePower();
       for (const e of events) progress.onHeroEvent(e);
       if (combat.heroCombat.c.defeated) defeatStep(dt);
@@ -801,6 +874,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     spawnGang: (x, z, opts) => combat.spawnGang(x, z, 'midtown', opts),
     progress: () => progress,
     switchCharacter: (id) => switchCharacter(id),
+    mp: () => session,
+    modes: () => modes,
+    lobby: () => lobby,
     character: () => character.id,
     roster: () => ROSTER.map((c) => c.id),
     combatState: () => ({ hp: combat.heroCombat.c.hp, focus: combat.heroCombat.c.focus, combo: combat.heroCombat.c.combo, state: combat.heroCombat.c.state, enemies: combat.enemies.list.map((e) => ({ id: e.id, arch: e.arch, state: e.state, hp: e.hp, x: e.body.p.x, y: e.body.p.y, z: e.body.p.z })) }),

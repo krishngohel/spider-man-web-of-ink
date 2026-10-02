@@ -1,0 +1,8 @@
+{
+  // Web of Ink multiplayer relay: one Worker, one Durable Object (World).
+  "name": "web-of-ink-relay",
+  "main": "src/index.js",
+  "compatibility_date": "2026-08-15",
+  "durable_objects": { "bindings": [{ "name": "WORLD", "class_name": "World" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["World"] }]
+}

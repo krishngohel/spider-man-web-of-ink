@@ -17,6 +17,10 @@ export const ACTIONS = [
   { id: 'gadgetWheel', label: 'Gadget wheel (hold)', group: 'Fight' },
   { id: 'suitPower', label: 'Suit power', group: 'Fight' },
   { id: 'map', label: 'City map', group: 'Other' },
+  { id: 'scan', label: 'Spider-sense scan (Hide and Seek: ping)', group: 'Other' },
+  { id: 'ping', label: 'Multiplayer: ping where you look', group: 'Other' },
+  { id: 'chat', label: 'Multiplayer: chat', group: 'Other' },
+  { id: 'quickChat', label: 'Multiplayer: quick chat (hold, then 1 to 8)', group: 'Other' },
   { id: 'help', label: 'Controls help', group: 'Other' },
   { id: 'pause', label: 'Pause and settings', group: 'Other' },
 ];
@@ -39,6 +43,10 @@ export const DEFAULT_BINDINGS = {
   gadgetWheel: ['Tab'],
   suitPower: ['KeyZ'],
   map: ['KeyM'],
+  scan: ['KeyV'],
+  ping: ['KeyG'],
+  chat: ['Enter'],
+  quickChat: ['KeyT'],
   help: ['KeyH'],
   pause: ['Escape', 'KeyP'],
 };

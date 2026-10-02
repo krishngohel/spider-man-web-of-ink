@@ -75,7 +75,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       state: alert ? 'engage' : 'idle', t: 0, alive: true, alerted: alert,
       cooldown: 0.4 + Math.random() * 1.0, web: 0, facing: Math.random() * Math.PI * 2,
       onGround: true, model: m, strikeAt: 0, hitThisAttack: false, lastHitT: -10, shieldBroken: false,
-      strafe: Math.random() < 0.5 ? 1 : -1, disarmed: false, outT: 0, pin: null, home: { x, z },
+      strafe: Math.random() < 0.5 ? 1 : -1, disarmed: false, outT: 0, pin: null, home: { x, z }, look,
     };
     m.root.position.set(x, y, z);
     m.animator.play('Idle_Loop');
@@ -106,7 +106,14 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
   }
 
   // A hit on an enemy. dir: unit push direction (x, z); lift: up speed; kind: 'melee', 'web', ...
-  function hit(e, { dmg = 10, dir = { x: 0, z: 1 }, push = 3, lift = 0, kind = 'melee', from = null } = {}) {
+  function hit(e, args = {}) {
+    if (e.puppet || e.isPlayer) {
+      // Someone else's: the host (or the other player) applies it. Show the hit here at once.
+      e.model.hurt.value = 1;
+      api.onPuppetHit?.(e, { dmg: 10, dir: { x: 0, z: 1 }, push: 3, lift: 0, kind: 'melee', ...args });
+      return { dealt: args.dmg ?? 10, blocked: false };
+    }
+    const { dmg = 10, dir = { x: 0, z: 1 }, push = 3, lift = 0, kind = 'melee', from = null } = args;
     if (!e.alive || e.state === 'out' || e.state === 'pinned') return { dealt: 0, blocked: false };
     const front = from ? ((from.x - e.body.p.x) * Math.sin(e.facing) + (from.z - e.body.p.z) * Math.cos(e.facing)) > 0 : true;
     if (kind === 'web') {
@@ -135,12 +142,17 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
 
   function step(dt, ctx) {
     const { hero, heroInvuln, difficulty = 'amazing', gravity = 'comic', heroHit } = ctx;
+    // Everyone they can go for (in multiplayer, every player; alone, the hero).
+    const targets = ctx.targets ?? [{ body: hero.body, invuln: heroInvuln, hit: heroHit }];
+    const nearest = (p) => { let best = targets[0], bd = Infinity; for (const t of targets) { const d = Math.hypot(t.body.p.x - p.x, t.body.p.z - p.z); if (d < bd) { bd = d; best = t; } } return best; };
     const g = G[gravity] ?? G.comic;
-    const hp = hero.body.p;
     const maxA = MAX_ATTACKERS[difficulty] ?? 2;
+    // Puppets (enemies the host runs, other players) only follow what they are told.
+    for (const e of list) if (e.puppet) puppetStep(e, dt);
     // Alerts spread: anyone near an alerted ally joins in.
     for (const e of list) {
-      if (!e.alive) continue;
+      if (!e.alive || e.puppet || e.isPlayer) continue;
+      const hp = nearest(e.body.p).body.p;
       const dHero = Math.hypot(e.body.p.x - hp.x, e.body.p.z - hp.z);
       if (!e.alerted && (dHero < 20 || list.some((o) => o.alerted && o !== e && Math.hypot(o.body.p.x - e.body.p.x, o.body.p.z - e.body.p.z) < 25))) {
         e.alerted = true;
@@ -148,7 +160,9 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       }
     }
     for (const e of list) {
-      if (!e.alive) continue;
+      if (!e.alive || e.puppet || e.isPlayer) continue;
+      const T = nearest(e.body.p);
+      const hp = T.body.p, hero = T, heroInvuln = T.invuln, heroHit = T.hit;
       const A = e.A, b = e.body, p = b.p, v = b.v;
       e.t += dt;
       e.cooldown -= dt;
@@ -291,15 +305,49 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     return !hit;
   }
 
+  // Host snapshots drive puppets: spawn the ones we have not seen, steer the rest to where the
+  // host says they are, drop the ones that left.
+  function puppetSync(snap) {
+    const seen = new Set();
+    for (const s of snap) {
+      seen.add(s.id);
+      let e = list.find((q) => q.puppet && q.netId === s.id);
+      if (!e) { e = spawn({ x: s.p.x, y: s.p.y, z: s.p.z, faction: s.faction, arch: s.arch, look: s.look, alert: true }); e.puppet = true; e.netId = s.id; }
+      e.target = s.p; e.targetFacing = s.facing;
+      e.hp = s.hp * e.maxHp; e.web = s.web;
+      if (s.state !== e.state) setState(e, s.state);
+      e.seenT = 0;
+    }
+    for (const e of [...list]) if (e.puppet && !seen.has(e.netId)) { e.seenT = (e.seenT ?? 0) + 1; if (e.seenT > 5) { e.alive = false; remove(e); } }
+  }
+  function puppetStep(e, dt) {
+    if (!e.target) return;
+    const k = Math.min(1, dt * 12), p = e.body.p;
+    p.x += (e.target.x - p.x) * k; p.y += (e.target.y - p.y) * k; p.z += (e.target.z - p.z) * k;
+    let df = e.targetFacing - e.facing;
+    while (df > Math.PI) df -= Math.PI * 2;
+    while (df < -Math.PI) df += Math.PI * 2;
+    e.facing += df * k;
+    e.model.hurt.value = Math.max(0, e.model.hurt.value - dt * 6);
+    if (e.state === 'engage') e.model.animator.play('Jog_Fwd_Loop');
+    e.model.root.position.set(p.x, p.y, p.z);
+    e.model.root.rotation.set(0, e.facing, 0);
+    e.model.animator.update(dt);
+  }
+
   void tmp;
-  return {
+  const api = {
     list,
     spawn,
     hit,
     step,
     remove,
+    puppetSync,
+    onPuppetHit: null,
+    clearPuppets() { for (const e of [...list]) if (e.puppet) { e.alive = false; remove(e); } },
     clear() { while (list.length) remove(list[0]); },
-    get engaged() { return list.filter((e) => isActive(e) && e.alerted); },
+    get engaged() { return list.filter((e) => isActive(e) && e.alerted && !e.isPlayer); },
     get active() { return list.filter(isActive); },
   };
+  return api;
 }

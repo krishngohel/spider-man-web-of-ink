@@ -30,6 +30,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   strikeLine.visible = false;
   scene.add(strikeLine);
   let encounter = null, encounterCooldown = 25;
+  let authority = null; // multiplayer: only the host runs the world
 
   function heroHit(h) { return heroCombat.takeHit(h); }
   const heroInvuln = () => heroCombat.c.iframes > 0;
@@ -40,9 +41,11 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     if (intent.gadgetPressed) gadgets.use(intent.camFwd);
   }
 
+  let targetsFn = null;
   function step(dt) {
     const s = getSettings();
-    enemies.step(dt, { hero, heroInvuln, difficulty: s.difficulty ?? 'amazing', gravity: s.gravity, heroHit });
+    const targets = targetsFn ? targetsFn() : null;
+    enemies.step(dt, { hero, heroInvuln, difficulty: s.difficulty ?? 'amazing', gravity: s.gravity, heroHit, targets });
     gadgets.step(dt);
     // Gunners aim with a laser while they wind up.
     for (const e of enemies.list) {
@@ -54,14 +57,17 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     }
     projectiles.step(dt, {
       hero: (pr, nx, ny, nz) => {
-        const h = hero.body.p;
-        const seg = Math.hypot(nx - pr.x, ny - pr.y, nz - pr.z) || 1;
-        const t = Math.max(0, Math.min(1, ((h.x - pr.x) * (nx - pr.x) + (h.y - pr.y) * (ny - pr.y) + (h.z - pr.z) * (nz - pr.z)) / (seg * seg)));
-        const d = Math.hypot(pr.x + (nx - pr.x) * t - h.x, pr.y + (ny - pr.y) * t - h.y, pr.z + (nz - pr.z) * t - h.z);
-        if (d > 0.7 || heroInvuln()) return false;
-        if (pr.kind === 'rocket') { explode(pr.x, pr.y, pr.z, pr); return true; }
-        heroHit({ dmg: pr.dmg, dir: { x: pr.vx / 70, z: pr.vz / 70 }, from: null });
-        return true;
+        for (const T of targets ?? [{ body: hero.body, invuln: heroInvuln, hit: heroHit }]) {
+          const h = T.body.p;
+          const seg = Math.hypot(nx - pr.x, ny - pr.y, nz - pr.z) || 1;
+          const t = Math.max(0, Math.min(1, ((h.x - pr.x) * (nx - pr.x) + (h.y - pr.y) * (ny - pr.y) + (h.z - pr.z) * (nz - pr.z)) / (seg * seg)));
+          const d = Math.hypot(pr.x + (nx - pr.x) * t - h.x, pr.y + (ny - pr.y) * t - h.y, pr.z + (nz - pr.z) * t - h.z);
+          if (d > 0.7 || T.invuln()) continue;
+          if (pr.kind === 'rocket') { explode(pr.x, pr.y, pr.z, pr); return true; }
+          T.hit({ dmg: pr.dmg, dir: { x: pr.vx / 70, z: pr.vz / 70 }, from: null });
+          return true;
+        }
+        return false;
       },
       enemies: enemies.list,
       canHit: (e) => isActive(e) || e.state === 'webbed',
@@ -130,7 +136,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       else if (Math.hypot(encounter.x - hero.body.p.x, encounter.z - hero.body.p.z) > 420) { for (const e of encounter.list) enemies.remove(e); encounter = null; encounterCooldown = 20; }
       return;
     }
-    if (!getSettings().crimes) return;
+    if (!getSettings().crimes || (authority && !authority())) return;
     encounterCooldown -= dt;
     if (encounterCooldown > 0) return;
     encounterCooldown = 15;
@@ -172,6 +178,14 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     preStep, step,
     timeScale: (realDt) => heroCombat.timeScale(realDt),
     spawnGang,
+    setTargets(fn) { targetsFn = fn; },
+    setAuthority(fn) { authority = fn; },
+    // A new host picks up the gang the old one was running.
+    restoreEncounter(enc) {
+      if (!enc) return;
+      const list = enc.list.map((q, i) => { const e = enemies.spawn({ x: q.x, z: q.z, faction: q.faction, arch: q.arch, look: q.look ?? i, alert: true }); e.hp = q.hp; return e; });
+      encounter = { x: enc.x, z: enc.z, list, district: enc.district, faction: enc.faction, kind: enc.kind ?? 'gang' };
+    },
     get encounter() { return encounter; },
     clear() { enemies.clear(); projectiles.clear(); gadgets.clear(); encounter = null; },
   };

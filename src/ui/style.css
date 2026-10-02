@@ -229,3 +229,24 @@ button { font: inherit; }
 .rs-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
 .rs-card span { display: block; font-size: 12px; margin: 3px 0; }
 .pm-suit.off { opacity: 0.5; cursor: default; }
+
+/* Multiplayer. */
+.nametags, .pings { position: absolute; inset: 0; pointer-events: none; }
+.nametag, .pingtag { position: absolute; transform: translate(-50%, -100%); font-family: var(--head); font-size: 17px; -webkit-text-stroke: 1px var(--ink); text-shadow: 2px 2px 0 var(--ink); white-space: nowrap; }
+.chatlog { position: absolute; left: 22px; bottom: 150px; width: 380px; font-size: 15px; color: #fff; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink); pointer-events: none; }
+.chatline b { font-family: var(--head); font-weight: 400; }
+.chatinput { position: absolute; left: 22px; bottom: 120px; width: 380px; padding: 6px 8px; font: inherit; border: 3px solid var(--ink); pointer-events: auto; }
+.chatinput.hidden, .quickchat.hidden { display: none; }
+.quickchat { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 12px; background: var(--paper); border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); pointer-events: auto; }
+.mode-panel { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); padding: 6px 14px; text-align: center; background: var(--paper); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
+.mode-panel.hidden { display: none; }
+.mode-panel b { display: block; font-family: var(--head); font-weight: 400; font-size: 20px; }
+.mode-panel span { display: block; font-size: 15px; }
+.mode-panel em { font-family: var(--head); font-style: normal; font-size: 22px; }
+.scoreboard .row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 2px dashed rgba(0, 0, 0, 0.2); }
+.lobby input[type=text], .worldmenu input[type=text] { font: inherit; padding: 6px 8px; border: 3px solid var(--ink); }
+.lobby .code { width: 120px; text-transform: uppercase; letter-spacing: 3px; font-family: var(--head); font-size: 20px; }
+.mp-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+.mp-msg { min-height: 1.4em; font-weight: 700; }
+.mp-code { display: flex; gap: 14px; align-items: baseline; }
+.mp-code b { font-family: var(--head); font-size: 44px; letter-spacing: 6px; font-weight: 400; }

@@ -5,7 +5,17 @@ export const COPY = {
   subtitle: 'Swing test build. Aim the crosshair at a building, hold swing, let go and aim the next one. Miss and you fall.',
   disclaimer: 'Unofficial fan game. Not affiliated with or endorsed by Marvel or Sony. Spider-Man and related characters are trademarks of Marvel. Made for fun, never sold.',
   roster: { title: 'CHARACTERS', heroes: 'HEROES', villains: 'VILLAINS', playing: 'Playing', play: 'Play', locked: 'Finish the story to play everyone in free roam (everyone is open in multiplayer).' },
-  buttons: { roster: 'CHARACTERS', progress: 'SKILLS AND SUITS', play: 'FREE SWING', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
+  mp: {
+    title: 'MULTIPLAYER', blurb: 'One shared city for up to five friends. Everyone can play anyone, with everything unlocked. Your story save is never touched.',
+    name: 'Your name', namePh: 'Name', codePh: 'CODE', pick: 'PLAY AS', create: 'CREATE WORLD', join: 'JOIN', or: 'or join with a code:',
+    connecting: 'Connecting...', advanced: 'Relay server', relay: 'Relay address', ended: 'The host ended the world.',
+    worldTitle: 'YOUR WORLD', code: 'JOIN CODE', share: 'Send this code to your friends. They pick MULTIPLAYER, type it in and press JOIN.',
+    players: 'PLAYERS', you: 'you', away: 'reconnecting', hostTag: 'HOST', modes: 'START A ROUND', hostRuns: 'The host starts rounds.',
+    start: 'Start', fairRace: 'RACE WITH A FAIR SPEED CAP', end: 'END WORLD', leave: 'LEAVE',
+    chatPh: 'Say something (Enter to send)',
+    quick: ['On my way!', 'Over here!', 'Need a hand!', 'Nice one!', 'Race you there!', 'Watch out!', 'Wait for me!', 'Thwip!'],
+  },
+  buttons: { multiplayer: 'MULTIPLAYER', roster: 'CHARACTERS', progress: 'SKILLS AND SUITS', play: 'FREE SWING', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
   pause: 'PAUSED',
   clickToPlay: 'CLICK THE GAME TO USE THE MOUSE. ESC GIVES IT BACK.',
   map: {
