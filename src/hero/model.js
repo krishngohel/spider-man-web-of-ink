@@ -73,6 +73,8 @@ export function createAnimator(root, clips) {
       return next;
     },
     prime(names) { for (const n of names) action(n); },
+    has(name) { return clips.has(name); },
+    duration(name) { return clips.get(name)?.duration ?? 1; },
     get currentName() { return current?.getClip().name ?? null; },
     update(dt) { mixer.update(dt); },
   };

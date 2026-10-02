@@ -6,6 +6,7 @@ import { buildEnemyModel } from './enemyModel.js';
 import { perceive, patrolWant, takedownKind } from './stealth.js';
 import { TUNE } from './tuning.js';
 import { createTokens, airSafe } from './tokens.js';
+import { shake } from './hitstop.js';
 
 // Enemies (spec 8.1): a body each on the same collision world as the hero, a state machine per
 // archetype, and a director (tokens.js) that lets one fist and a few guns go at a time. Attacks
@@ -29,16 +30,18 @@ export const DIFFICULTY_DMG = { friendly: 0.55, amazing: 1, spectacular: 1.35, u
 
 // Pure helpers (unit tested) ----------------------------------------------------------------------
 
-// The enemy the player means: near the line of sight from the camera, close, and not already out.
-export function pickTarget(heroP, camFwd, enemies, maxDist = 14) {
+// The enemy the player means: the one the stick points at when it is pushed (spec C3, as in
+// Gotham), else near the camera's line of sight; close, and not already out.
+export function pickTarget(heroP, camFwd, enemies, maxDist = 14, stick = null) {
   let best = null, bestScore = Infinity;
+  const dir = stick && Math.hypot(stick.x, stick.z) > 0.3 ? stick : camFwd;
   for (const e of enemies) {
     if (!isActive(e)) continue;
     const dx = e.body.p.x - heroP.x, dy = e.body.p.y - heroP.y, dz = e.body.p.z - heroP.z;
     const d = Math.hypot(dx, dy, dz);
     if (d > maxDist) continue;
-    const fl = Math.hypot(camFwd.x, camFwd.z) || 1;
-    const along = (dx * camFwd.x + dz * camFwd.z) / fl / Math.max(0.1, Math.hypot(dx, dz));
+    const fl = Math.hypot(dir.x, dir.z) || 1;
+    const along = (dx * dir.x + dz * dir.z) / fl / Math.max(0.1, Math.hypot(dx, dz));
     const score = d * (1.6 - along);
     if (score < bestScore) { bestScore = score; best = e; }
   }
@@ -121,6 +124,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       case 'air': a.play('Hit_Knockback', { once: true, fade: 0.05 }); break;
       case 'down': case 'out': case 'webbed': case 'pinned': a.play('Death01', { once: true, fade: 0.1 }); break;
       case 'getup': a.play('LayToIdle', { once: true, fade: 0.1, timeScale: 1.6 }); break;
+      case 'stunned': a.play('Hit_Head', { once: true, fade: 0.05, timeScale: 0.45 }); break;
       default: break;
     }
   }
@@ -196,6 +200,13 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       const T = nearest(e.body.p);
       const hp = T.body.p, hero = T, heroInvuln = T.invuln, heroHit = T.hit;
       const A = e.A, b = e.body, p = b.p, v = b.v;
+      // Hitstop: frozen mid-blow for a few frames, shaking (drawn only; the body stays put).
+      if (e.stopT > 0) {
+        e.stopT -= dt;
+        const s = shake(e.stopT, e.stopAll ?? 0.1);
+        e.model.root.position.set(p.x + s.x, p.y, p.z + s.z);
+        continue;
+      }
       e.t += dt;
       e.cooldown -= dt;
       e.lastHitT += dt;
@@ -276,6 +287,10 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
         case 'stagger':
           if (e.t > 0.45) setState(e, e.hp <= 0 ? 'out' : 'engage');
           break;
+        case 'stunned':
+          // Webbed in the face by a perfect dodge: open for a beat.
+          if (e.t > (e.stunT ?? 1.5)) setState(e, 'engage');
+          break;
         case 'air':
           if (e.onGround && e.t > 0.25) {
             if (e.hp <= 0) { setState(e, 'out'); onEvent({ type: 'enemyOut', e }); } else setState(e, 'down');
@@ -317,6 +332,10 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           // Jetpack thrust: hold about 5 m over the ground under the hero's height.
           const want = Math.max(4, Math.min(hp.y + 2, world.groundHeight(p.x, p.y, p.z) + 6));
           applyDv(b, 'assist', 0, ((want - p.y) * 3 - v.y) * Math.min(1, dt * 4), 0);
+        } else if (e.hangT > 0) {
+          // Juggled: the hero's hits keep him up (spec 1.5); he drifts, barely sinking.
+          e.hangT -= dt;
+          applyDv(b, 'assist', -v.x * Math.min(1, dt * 5), -v.y * Math.min(1, dt * 10) - g * dt * 0.15, -v.z * Math.min(1, dt * 5));
         } else applyGravity(b, g, dt);
         p.x += v.x * dt; p.y += v.y * dt; p.z += v.z * dt;
         world.resolveCapsule(b, 0.35, 0.5, C);
@@ -407,6 +426,14 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
   const api = {
     tokens,
     takedown,
+    // Hitstop on this body (seconds).
+    freeze(e, s) { if (e.boss || e.puppet || e.isPlayer) return; e.stopT = Math.max(e.stopT ?? 0, s); e.stopAll = e.stopT; },
+    // Kept in the air by an air string.
+    hang(e, s) { if (e.boss || e.puppet || e.isPlayer) return; e.hangT = s; if (e.state !== 'air' && isActive(e)) { setState(e, 'air'); } e.onGround = false; },
+    // Open for a beat (a perfect dodge's web to the face).
+    stun(e, s) { if (e.boss || e.puppet || e.isPlayer || !isActive(e)) return; e.stunT = s; setState(e, 'stunned'); onEvent({ type: 'enemyStunned', e }); },
+    // Beaten to the punch: the swing never comes.
+    interrupt(e) { if (e.boss || e.state !== 'windup') return; setState(e, 'stagger'); onEvent({ type: 'enemyMiss', e }); },
     // The guard nearest the hero open to a takedown, and which kind.
     takedownTarget(heroCtl) {
       let best = null, bd = Infinity;

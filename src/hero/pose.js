@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { COM_HEIGHT } from './model.js';
 import { createBodyRig } from './bodyRig.js';
 import { POSES, MIRRORED, LAYOUT, lerpPose } from './poses.js';
+import { createCombatAnim } from './combatAnim.js';
 
 // Drives the hero model from the physics state. Two layers:
 //  - On the ground and on walls, Quaternius clips (idle, jog, sprint, crawl) play on the mixer.
@@ -50,6 +51,10 @@ const TRICKS = {
   sideflip: { axis: [0, 0, 1], turns: 1, dur: 0.7, tuck: 0.6 },
   spin: { axis: [0, 1, 0], turns: 1, dur: 0.65, tuck: 0.3 },
   doubleflip: { axis: [1, 0, 0], turns: 2, dur: 1.0, tuck: 1 },
+  // Combat dodges (spec 1.3): a side flip away in 0.45 s, a corkscrew for a perfect one.
+  dodgeL: { axis: [0, 0, 1], turns: -1, dur: 0.45, tuck: 0.8 },
+  dodgeR: { axis: [0, 0, 1], turns: 1, dur: 0.45, tuck: 0.8 },
+  corkscrew: { axis: [0, 1, 0], turns: 1, dur: 0.5, tuck: 0.9 },
 };
 
 export function createPoser(heroModel) {
@@ -57,6 +62,7 @@ export function createPoser(heroModel) {
   animator.prime(CLIPS);
   animator.play('Idle_Loop', { fade: 0 });
   const rig = createBodyRig(model);
+  const combatAnim = createCombatAnim(animator);
   const target = new Float32Array(LAYOUT.SIZE);
   const cur = new Float32Array(LAYOUT.SIZE);
   const curV = new Float32Array(LAYOUT.SIZE);
@@ -150,18 +156,15 @@ export function createPoser(heroModel) {
         else if (e.type === 'vault') { trick = { def: TRICKS.sideflip, name: 'sideflip', t: 0 }; }
         else if (e.type === 'perch') perchT = 0.9;
         else if (e.type === 'mantle') { mantleT = 0.42; trick = null; }
-        // Fighting moves: clips on the ground, procedural poses in the air.
-        else if (e.type === 'punch') {
-          if (!e.air) { once = null; const clip = ['Punch_Jab', 'Punch_Cross', 'Melee_Hook'][e.n % 3]; once = clip; onceT = 0.32; animator.play(clip, { once: true, fade: 0.05, timeScale: 1.9 }); }
-          else { kickT = 0.28; trick = e.n % 3 === 2 ? { def: TRICKS.spin, name: 'spin', t: 0 } : null; }
-        }
-        else if (e.type === 'uppercut') { once = 'Melee_Hook'; onceT = 0.3; animator.play('Melee_Hook', { once: true, fade: 0.04, timeScale: 2.4 }); trick = { def: TRICKS.backflip, name: 'backflip', t: 0 }; }
-        else if (e.type === 'dodge') { if (hero.state === 'ground') { once = 'Roll'; onceT = 0.32; animator.play('Roll', { once: true, fade: 0.04, timeScale: 2.6 }); } }
-        else if (e.type === 'heroHurt') { if (hero.state === 'ground') { once = 'Hit_Chest'; onceT = 0.3; animator.play('Hit_Chest', { once: true, fade: 0.04, timeScale: 1.5 }); } else trick = { def: TRICKS.backflip, name: 'backflip', t: 0.3 }; }
+        // Fighting moves: their clips, driven to land on the contact frame (combatAnim.js).
+        else if (e.type === 'moveStart') { once = null; trick = null; kickT = 0; slamT = 0; combatAnim.start(e); }
+        else if (e.type === 'strikeArrive') combatAnim.arrive();
+        // The dodge is a flip or a vault (a corkscrew when it is perfect), over the shoulder away.
+        else if (e.type === 'dodge') { combatAnim.stop(); once = null; trick = e.perfect ? { def: TRICKS.corkscrew, name: 'corkscrew', t: 0 } : { def: e.side === 'l' ? TRICKS.dodgeL : TRICKS.dodgeR, name: 'dodge', t: 0 }; }
+        else if (e.type === 'heroHurt') { combatAnim.stop(); if (hero.state === 'ground') { once = 'Hit_Chest'; onceT = 0.3; animator.play('Hit_Chest', { once: true, fade: 0.04, timeScale: 1.5 }); } else trick = { def: TRICKS.backflip, name: 'backflip', t: 0.3 }; }
         else if (e.type === 'airTrick') startTrick('trick', hero);
         else if (e.type === 'slamStart') { slamT = 2; trick = null; }
-        else if (e.type === 'webStrike') { kickT = 0.9; trick = null; }
-        else if (e.type === 'strikeEnd') { kickT = 0.25; trick = { def: TRICKS.frontflip, name: 'frontflip', t: 0.35 }; }
+
         else if (e.type === 'land') {
           trick = null;
           if (e.hard && hs < 10) landT = 0.6;
@@ -172,7 +175,7 @@ export function createPoser(heroModel) {
       if (once) { onceT -= dt; if (onceT <= 0 || st !== 'ground') once = null; }
       const play = (name, opts) => { if (!once) animator.play(name, opts); };
       if (shot) { shot.t += dt; if (shot.t > 0.22 || swinging) shot = null; }
-      if (trick) { trick.t += dt; if (trick.t >= trick.def.dur || st !== 'air') trick = null; }
+      if (trick) { trick.t += dt; if (trick.t >= trick.def.dur || (st !== 'air' && trick.name !== 'dodge' && trick.name !== 'corkscrew') || (st === 'ground' && trick.t > 0.3)) trick = null; }
       if (landT > 0) { landT -= dt; if (st !== 'ground' || hs > 3) landT = 0; }
       if (perchT > 0) { perchT -= dt; if (st !== 'ground' || hs > 2) perchT = 0; }
       if (mantleT > 0) { mantleT -= dt; if (st !== 'air') mantleT = 0; }
@@ -186,7 +189,12 @@ export function createPoser(heroModel) {
       let pin = null;
       offTarget.set(0, 0, 0);
       tmp.set(hero.facing.x, 0, hero.facing.z);
-      if (st === 'ground') {
+      const fighting = combatAnim.active;
+      if (fighting) {
+        // A fighting clip plays the whole body, upright, facing the way the move faces.
+        wantProc = 0;
+        basis(UP, tmp, qBase);
+      } else if (st === 'ground') {
         basis(UP, tmp, qBase);
         if (landT > 0) {
           target.set(POSES.land);
@@ -374,7 +382,8 @@ export function createPoser(heroModel) {
       offTarget.y -= cur[LAYOUT.drop];
       orient.position.lerp(offTarget, 1 - Math.exp(-dt * 14));
 
-      procW += ((wantProc ? 1 : 0) - procW) * Math.min(1, dt * 10);
+      procW += ((wantProc ? 1 : 0) - procW) * Math.min(1, dt * (fighting ? 30 : 10));
+      combatAnim.update(dt);
       animator.update(dt);
       if (procW > 0.01) {
         root.updateMatrixWorld(true);

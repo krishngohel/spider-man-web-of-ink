@@ -1,4 +1,5 @@
 import { TUNE } from './tuning.js';
+import { CLIP_DATA } from './clipData.js';
 
 // The hero's moves (spec 1.4 to 1.6): what each one is, which clip plays it, and which one an
 // attack press means right now. clips lists the preferred clips in order (Mixamo, then Gotham's
@@ -39,6 +40,32 @@ export function chooseMove({ d, dy = 0, step = 0, airStep = 0, grounded = true, 
 export function clipFor(move, have) {
   for (const c of move.clips) if (have.has(c)) return c;
   return move.alt;
+}
+
+// Where each mocap clip's useful part starts (clip seconds): the long studio wind-ups are skipped
+// so the contact frame comes quickly (from Gotham's freeflow tuning).
+export const CLIP_START = { Kick_Front: 0.25, Kick_Round: 0.5, Kick_Spin: 0.1, Kick_Flying: 0.05, Knee_Strike: 0.25 };
+
+// A clip's start, contact and end in clip seconds. Clips without mocap data (the Quaternius
+// punches) land a little before their middle.
+export function clipTiming(clip, duration) {
+  const d = CLIP_DATA[clip];
+  if (d) return { start: CLIP_START[clip] ?? 0, contact: d.contact, end: d.duration };
+  return { start: 0, contact: duration * 0.42, end: duration };
+}
+
+// The clip time to show t seconds into a move (spec 2.4, speed curves): the wind-up accelerates
+// into the contact frame exactly at the move's impact, the recovery eases out over the rest.
+// A travelling move (web strike) holds its reach until it arrives (arrivedAt), then recovers.
+export function clipTimeAt(tm, M, t, arrivedAt = null) {
+  if (M.travel) {
+    if (arrivedAt === null) return tm.start + (tm.contact - tm.start) * 0.85 * Math.min(1, t / 0.25);
+    const u = Math.min(1, (t - arrivedAt) / 0.3);
+    return tm.contact + (tm.end - tm.contact) * (1 - (1 - u) * (1 - u));
+  }
+  if (t <= M.impact) return tm.start + (tm.contact - tm.start) * Math.pow(Math.max(0, t) / M.impact, 1.5);
+  const u = Math.min(1, (t - M.impact) / Math.max(1e-3, M.time - M.impact));
+  return tm.contact + (tm.end - tm.contact) * (1 - (1 - u) * (1 - u));
 }
 
 // A move can be followed from 55% of the way through (spec 1.4).

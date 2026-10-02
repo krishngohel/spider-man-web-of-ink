@@ -4,7 +4,7 @@ import { TUNE } from './tuning.js';
 // every difficulty, the turn handed on (job stealing) every 0.25 s, ranged slots by difficulty, a
 // short hold after the player dodges so he gets a few free hits, and the air is safe from fists.
 
-const able = (e) => e.alive && !['out', 'webbed', 'pinned', 'away', 'down', 'getup', 'air', 'stagger'].includes(e.state);
+const able = (e) => e.alive && !['out', 'webbed', 'pinned', 'away', 'down', 'getup', 'air', 'stagger', 'stunned'].includes(e.state);
 
 // Keep the attacker unless he is past 6 m or someone is 2 m closer; with none, the nearest.
 export function pickMeleeHolder(cands, heroP, current, dist) {

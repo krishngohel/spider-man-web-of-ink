@@ -476,6 +476,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (mpRule.frozen) { intent.moveX = 0; intent.moveZ = 0; intent.swing = false; intent.jump = false; }
     intent.divePressed = intent.divePressed || input.pressed('dive');
     intent.attack = input.down('attack');
+    intent.web = input.down('web');
     intent.attackPressed = intent.attackPressed || input.pressed('attack');
     intent.webPressed = intent.webPressed || input.pressed('web');
     intent.finisher = input.down('finisher');
@@ -723,7 +724,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (storyOn) director.preStep(intent, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
       combat.preStep(intent, gdt);
       const Tp = performance.now();
-      const adv = fixed.advance(gdt);
+      // The hero's hitstop: frozen for a few frames on a blow while the world goes on.
+      const heroFrozen = combat.heroCombat.c.heroStop > 0;
+      const adv = fixed.advance(heroFrozen ? 0 : gdt);
       for (let i = 0; i < adv.steps; i++) {
         const p = hero.body.p;
         prevP.x = p.x; prevP.y = p.y; prevP.z = p.z;
@@ -788,7 +791,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
     if (mode !== 'play' && mode !== 'title') interpolate();
     const Tpose = performance.now();
-    poser.update(hero, mode === 'play' ? gdt : dt, events, renderP);
+    poser.update(hero, mode === 'play' ? (combat.heroCombat.c.heroStop > 0 ? 0 : gdt) : dt, events, renderP);
     heroModel.updateGear?.(mode === 'play' ? gdt : dt, hero);
     prof('pose', Tpose);
     poser.lineWorld(hand);

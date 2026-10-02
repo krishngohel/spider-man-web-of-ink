@@ -6,6 +6,7 @@ import { createGadgets } from './gadgets.js';
 import { createRng } from '../core/rng.js';
 import { LAND } from '../world/city.js';
 import { TUNE } from './tuning.js';
+import { G } from '../physics/constants.js';
 
 // The combat director: owns the enemies, projectiles, gadgets and the hero's combat state, turns
 // their events into feedback (spider-sense, words, sounds, shakes, impact frames), and runs the
@@ -25,7 +26,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   const emit = (e) => events.push(e);
   const enemies = createEnemies({ scene, world, assets, onEvent: emit });
   const projectiles = createProjectiles(scene, world);
-  const heroCombat = createHeroCombat({ hero, enemies, projectiles, onEvent: emit });
+  const heroCombat = createHeroCombat({ hero, enemies, projectiles, onEvent: emit, clips: assets.clips });
   const gadgets = createGadgets({ scene, enemies, projectiles, hero, world, onEvent: emit });
   const strikeLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xf2f2f4 }));
   strikeLine.visible = false;
@@ -42,7 +43,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
 
   function preStep(intent, dt) {
     const p = hero.body.p;
-    heroCombat.preStep(intent, dt, { groundBelow: world.groundHeight(p.x, p.y, p.z) });
+    heroCombat.preStep(intent, dt, { groundBelow: world.groundHeight(p.x, p.y, p.z), g: G[getSettings().gravity] ?? G.comic });
     if (intent.gadgetPressed) gadgets.use(intent.camFwd);
   }
 
