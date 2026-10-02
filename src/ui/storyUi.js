@@ -80,15 +80,16 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
   const bossFill = el('div', { class: 'bfill' });
   const bossBar = el('div', { class: 'bossbar hidden' }, [bossName, el('div', { class: 'btrack' }, bossFill)]);
   const card = el('div', { class: 'actcard hidden' });
+  const timerEl = el('div', { class: 'stimer hidden' });
   const stamp = el('div', { class: 'stamp hidden' });
   const tips = el('div', { class: 'storytips' });
-  root.append(comic, radio, objective, bossBar, card, stamp, tips);
+  root.append(comic, radio, objective, bossBar, card, stamp, tips, timerEl);
   let cardT = 0, stampT = 0, cardDone = null;
 
   const keys = () => {
     const b = getSettings().bindings;
     const out = {};
-    for (const a of ['swing', 'jump', 'zip', 'dive', 'attack', 'web', 'hang', 'finisher', 'map', 'gadget']) out[a] = bindingLabel(b, a);
+    for (const a of ['swing', 'jump', 'zip', 'dive', 'attack', 'web', 'hang', 'finisher', 'map', 'gadget', 'scan']) out[a] = bindingLabel(b, a);
     return out;
   };
   const fill = (s) => { const k = keys(); return esc(s).replace(/\{(\w+)\}/g, (_, n) => `<kbd>${esc(k[n] ?? n)}</kbd>`); };
@@ -133,6 +134,14 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
       cardT = kind === 'free' ? 3.6 : 3.2;
       return new Promise((r) => { cardDone = r; });
     },
+    // A countdown under the boss bar (the poison); null hides it.
+    timer(label, s) {
+      timerEl.classList.toggle('hidden', !label);
+      if (!label) return;
+      const t = Math.max(0, s);
+      timerEl.textContent = `${label} ${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
+      timerEl.classList.toggle('low', t < 20);
+    },
     stamp(text) { stamp.textContent = text; stamp.classList.remove('hidden'); void stamp.offsetWidth; stamp.classList.add('show'); stampT = 2.2; },
     tips(ids) {
       tips.replaceChildren(...ids.filter((id) => COPY.story.tips[id]).map((id) => el('div', { class: 'stip', html: fill(COPY.story.tips[id]) })));
@@ -152,7 +161,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
     },
     clear() {
       queue = []; line = null; radio.classList.remove('show'); radioDone = null;
-      objective.classList.add('hidden'); bossBar.classList.add('hidden'); tips.replaceChildren();
+      objective.classList.add('hidden'); bossBar.classList.add('hidden'); tips.replaceChildren(); timerEl.classList.add('hidden');
       // Dropped, not resolved: whatever waited on them belongs to a story that has stopped.
       if (resolver) { comic.classList.add('hidden'); resolver = null; }
       if (cardDone) { card.classList.remove('show'); card.classList.add('hidden'); cardDone = null; cardT = 0; }

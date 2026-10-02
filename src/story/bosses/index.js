@@ -2,6 +2,10 @@ import { createKingpin } from './kingpin.js';
 import { createShocker } from './shocker.js';
 import { createVulture } from './vulture.js';
 import { createRhino } from './rhino.js';
+import { createElectro } from './electro.js';
+import { createScorpion } from './scorpion.js';
+import { createMysterio } from './mysterio.js';
+import { createLizard } from './lizard.js';
 
 // Every boss module, by the id story steps use. A module: create(ctx) -> { actor, done, failed?,
 // phase, state, update(dt), setPhase(n), dispose(), objective?, waypoint? }.
@@ -10,4 +14,8 @@ export const BOSSES = {
   shocker: createShocker,
   vulture: createVulture,
   rhino: createRhino,
+  electro: createElectro,
+  scorpion: createScorpion,
+  mysterio: createMysterio,
+  lizard: createLizard,
 };

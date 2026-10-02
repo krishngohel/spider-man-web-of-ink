@@ -8,6 +8,7 @@ import { createStoryFx, buildMarker } from './storyFx.js';
 import { createActors } from './actors.js';
 import { LAYER_FX } from '../render/layers.js';
 import { COPY } from '../ui/copy.js';
+import { comicToon } from '../render/comicShade.js';
 
 // Runs the story (spec 10): the current step from the save, one handler per step type, the
 // objective card and waypoint, mission time and weather, retries on defeat (the step starts over;
@@ -31,6 +32,7 @@ export function createDirector(g) {
   // Bumped whenever the story is stopped or jumped: a pending card, comic or radio from before
   // must not complete the step that runs now.
   let epoch = 0;
+  const genMat = { body: comicToon({ color: 0x5a6a4a }), band: comicToon({ color: 0xf2c230 }) };
   let env = null;
   let started = false;
 
@@ -41,7 +43,12 @@ export function createDirector(g) {
   const bossCtx = () => ({
     scene, world, assets: g.assets, combat, hero, city, buildCharacter: g.buildCharacter, createPoser: g.createPoser, getSettings: g.getSettings,
     props, fx, say, word, shake, heroInvuln, sfx: (e) => g.sfx.event(e),
+    timer: (label, s) => ui.timer(label, s),
+    illusion: (k) => g.illusion?.(k),
+    // The poison wins, a fall into the river in a fight: down at once, whatever the iframes.
+    knockOut: () => { const c = combat.heroCombat.c; c.hp = 0; c.defeated = true; },
   });
+  let bctx = null; // the context the running boss module was given (it may hang hooks on it)
 
   function heroD(site) {
     const p = hero.body.p;
@@ -55,12 +62,15 @@ export function createDirector(g) {
     if (!step) { ui.objective(null); marker.show(null); g.setWaypoint(null); setEnv(null); return; }
     const site = step.site ? resolveSite(city, step.site) : null;
     cur = { step, site, t: 0, phase: 'run', wave: 0, waveT: 0 };
+    // Whose story this is: Miles in his missions, Peter everywhere else.
+    const who = step.char ?? 'peter';
+    if (g.character && g.character() !== who) g.setCharacter(who);
     if (step.env) setEnv(step.env);
     else if (step.type === 'start') setEnv(null);
     ui.objective(step.text ?? null);
     if (step.tutorial) ui.tips(step.tutorial);
     marker.show(step.type === 'start' ? site : null);
-    g.setWaypoint(site && ['start', 'reach', 'fight', 'boss', 'chase'].includes(step.type) ? { x: site.x, z: site.z, story: true } : null);
+    g.setWaypoint(site && ['start', 'reach', 'fight', 'defend', 'boss', 'chase'].includes(step.type) ? { x: site.x, z: site.z, story: true } : null);
     const ep = epoch;
     const done = () => { if (ep === epoch) complete(step.id); };
     switch (step.type) {
@@ -68,7 +78,7 @@ export function createDirector(g) {
       case 'broadcast': say(step.lines, { bugle: true }).then(done); break;
       case 'title': ui.card(step.card, actById(step.act)).then(done); break;
       case 'panels': cur.phase = 'draw'; cur.drawIn = 2; setBlock(true); break;
-      case 'fight': case 'boss': case 'chase': cur.phase = 'arrive'; break;
+      case 'fight': case 'defend': case 'boss': case 'chase': cur.phase = 'arrive'; break;
       default: break;
     }
     g.persist();
@@ -77,7 +87,8 @@ export function createDirector(g) {
   function complete(id) {
     const step = runner.step;
     if (!step || step.id !== id) return;
-    if (step.type === 'fight') g.reward('storyStep');
+    if (step.type === 'fight' || step.type === 'defend') g.reward('storyStep');
+    dropGenerator();
     if (step.type === 'boss') g.reward('bossDefeated');
     if (step.type === 'start') combat.clear(); // the mission begins: free-roam gangs clear off
     runner.complete(id);
@@ -127,7 +138,8 @@ export function createDirector(g) {
 
   function startBoss() {
     const step = cur.step;
-    boss = BOSSES[step.boss]({ ...bossCtx(), site: cur.site, step });
+    bctx = { ...bossCtx(), site: cur.site, step };
+    boss = BOSSES[step.boss](bctx);
     cur.phase = 'fight';
     g.setWaypoint(null);
     ui.objective(step.text);
@@ -135,6 +147,8 @@ export function createDirector(g) {
   function endBoss() {
     boss?.dispose();
     boss = null;
+    bctx = null;
+    ui.timer(null);
     ui.boss(null);
     fx.clear();
   }
@@ -193,10 +207,15 @@ export function createDirector(g) {
           ui.comic(pages).then(() => { if (ep !== epoch) return; setBlock(false); complete(step.id); });
         }
         break;
-      case 'fight': {
+      case 'fight': case 'defend': {
         if (cur.phase === 'arrive') {
-          if (heroD(site).d < 70) { cur.phase = 'fight'; cur.wave = 0; spawnWave(); }
+          if (heroD(site).d < 70) { cur.phase = 'fight'; cur.wave = 0; if (step.type === 'defend') placeGenerator(site); spawnWave(); }
           break;
+        }
+        // Defend: the generator is a target too; if it goes, the step starts over.
+        if (cur.gen) {
+          ui.boss({ name: COPY.story.generator, hp: cur.gen.hp / cur.gen.max });
+          if (cur.gen.hp <= 0) { fx.shock(cur.gen.p, 6); word('KA-BLAM!', cur.gen.p, 'big'); dropGenerator(); retry(); break; }
         }
         // Walked away from the fight: the crew packs up and waits for you to come back.
         if (heroD(site).d > 260) { for (const e of cur.waveList ?? []) combat.enemies.remove(e); combat.clearEncounter(); cur.phase = 'arrive'; break; }
@@ -237,6 +256,28 @@ export function createDirector(g) {
     }
   }
 
+  // The thing to protect in a defend step: a generator the enemies go for if it is nearer.
+  function placeGenerator(site) {
+    dropGenerator();
+    const p = { x: site.x - 4, y: 0.9, z: site.z - 2 };
+    const mesh = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(1.8, 1.3, 1.1), genMat.body);
+    body.position.y = 0.65;
+    const band = new THREE.Mesh(new THREE.BoxGeometry(1.82, 0.22, 1.12), genMat.band);
+    band.position.y = 0.95;
+    mesh.add(body, band);
+    mesh.position.set(p.x, 0, p.z);
+    mesh.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    scene.add(mesh);
+    cur.gen = { p, hp: 100, max: 100, mesh };
+  }
+  function dropGenerator() {
+    if (!cur?.gen) return;
+    scene.remove(cur.gen.mesh);
+    cur.gen = null;
+    ui.boss(null);
+  }
+
   function spawnWave() {
     const w = cur.step.waves[cur.wave];
     const d = city.districts.find((q) => cur.site.x >= q.minX && cur.site.x < q.maxX && cur.site.z >= q.minZ && cur.site.z < q.maxZ);
@@ -247,7 +288,7 @@ export function createDirector(g) {
     get blocking() { return blocking; },
     // Free-roam gangs stay away while a mission runs.
     get quiet() { return !!cur && cur.step.type !== 'start'; },
-    get inFight() { return !!cur && ['fight', 'boss', 'chase'].includes(cur.step.type) && cur.phase !== 'arrive'; },
+    get inFight() { return !!cur && ['fight', 'defend', 'boss', 'chase'].includes(cur.step.type) && cur.phase !== 'arrive'; },
     get env() { return env; },
     get step() { return runner.step; },
     get finished() { return runner.finished; },
@@ -259,6 +300,9 @@ export function createDirector(g) {
     // Before combat reads the intent: a yank aimed at a loose crate throws it at the boss.
     preStep(intent, cam) {
       if (!intent.yankPressed || !boss) return;
+      // A boss's own yank targets first (Electro's relays), then loose crates.
+      const own = boss.yankAt?.(cam, hero.body.p);
+      if (own) { intent.yankPressed = false; intent.hangPressed = false; g.sfx.event({ type: 'thwip' }); return; }
       const thrown = props.tryYank(cam, hero.body.p, boss.actor.e);
       if (thrown) { intent.yankPressed = false; intent.hangPressed = false; word('YANK!', thrown.p, 'small'); g.sfx.event({ type: 'thwip' }); }
     },
@@ -269,9 +313,19 @@ export function createDirector(g) {
       if (this.inFight && retryT < 0) { retry(); return true; }
       return retryT >= 0;
     },
+    // Spider-sense scan (V): the running boss may use it (the real Mysterio).
+    scan() { bctx?.onScan?.(); },
+    // Combat events a boss cares about (perfect dodges against the poison).
+    onCombatEvent(e) { boss?.onEvent?.(e); },
+    // Extra targets the enemies may go for (the generator in a defend step).
+    targets() {
+      const gen = cur?.gen;
+      if (!gen || gen.hp <= 0) return null;
+      return [{ body: { p: gen.p, v: { x: 0, y: 0, z: 0 } }, invuln: () => false, hit: (h) => { gen.hp = Math.max(0, gen.hp - h.dmg * 0.8); word('CLANG!', gen.p, 'small'); return true; } }];
+    },
     // Test hooks.
     state() {
-      return { step: runner.step?.id ?? null, type: runner.step?.type ?? null, phase: cur?.phase ?? null, wave: cur?.wave ?? 0, finished: runner.finished, boss: boss ? { ...boss.state } : null, site: cur?.site ? { x: cur.site.x, y: cur.site.y, z: cur.site.z } : null, blocking, talking: ui.talking, retries, done: [...save.story.done] };
+      return { step: runner.step?.id ?? null, type: runner.step?.type ?? null, phase: cur?.phase ?? null, wave: cur?.wave ?? 0, finished: runner.finished, boss: boss ? { ...boss.state } : null, site: cur?.site ? { x: cur.site.x, y: cur.site.y, z: cur.site.z } : null, blocking, talking: ui.talking, retries, gen: cur?.gen ? cur.gen.hp : null, done: [...save.story.done] };
     },
     skip() {
       const s = runner.step;

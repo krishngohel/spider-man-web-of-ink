@@ -7,5 +7,6 @@ export const CAST = {
   may: { id: 'may', name: 'Aunt May', body: 'f', outfit: { jacket: 0x8a5a8a, pants: 0x5a4a5a, shoes: 0x3a3030, skin: 0.14, head: 0, hat: 0xe6e6ea, accent: 0xf4f0e6, pattern: 0 } },
   yuri: { id: 'yuri', name: 'Captain Watanabe', body: 'f', outfit: { jacket: 0x1f2c4a, pants: 0x1f2c4a, shoes: 0x111111, skin: 0.2, head: 0, hat: 0x141418, accent: 0xd8c040, pattern: 0 }, gear: ['hairLong'], hairColor: 0x141418 },
   jameson: { id: 'jameson', name: 'J. Jonah Jameson', body: 'm', outfit: { jacket: 0x4a4a52, pants: 0x3a3a40, shoes: 0x1a1a1a, skin: 0.25, head: 0, hat: 0x2a2a2e, accent: 0xf4f4f4, pattern: 0 }, gear: ['moustache'], hairColor: 0x2a2a2e },
+  connors: { id: 'connors', name: 'Dr. Connors', body: 'm', outfit: { jacket: 0xf2f2ee, pants: 0x4a4a52, shoes: 0x2a2a2a, skin: 0.2, head: 0, hat: 0x5a3a20, accent: 0x6a8aa8, pattern: 0 } },
   cop: { id: 'cop', name: 'Officer', body: 'm', outfit: { jacket: 0x1f2c4a, pants: 0x1f2c4a, shoes: 0x111111, skin: 0.55, head: 1, hat: 0x1f2c4a, accent: 0xd8c040, pattern: 0 } },
 };

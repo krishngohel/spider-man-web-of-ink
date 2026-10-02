@@ -40,6 +40,24 @@ const FACES = {
   rhino: () => collar('#7a7f86') + head({ skin: '#8a8f96', w: 33, h: 37 })
     + `<path d="M50 30 Q46 12 58 4 Q56 18 60 30 Z" fill="#c8ccd2" stroke="${INK}" stroke-width="3"/><path d="M28 30 Q22 22 24 14 Q32 20 34 28 Z M72 30 Q78 22 76 14 Q68 20 66 28 Z" fill="#7a7f86" stroke="${INK}" stroke-width="2.4"/>`
     + `<ellipse cx="50" cy="66" rx="16" ry="11" fill="#e8b48a" stroke="${INK}" stroke-width="2.6"/>` + eyes(48, 12, 2.6) + brows(41, 12, 5) + mouth(68, 6, -2),
+  miles: () => collar('#16161c') + head({ skin: '#16161c' })
+    + `<g stroke="#d02030" stroke-width="1.4" fill="none" opacity="0.9"><path d="M50 16 L50 88"/><path d="M20 52 L80 52"/><path d="M28 26 L72 78"/><path d="M72 26 L28 78"/><ellipse cx="50" cy="52" rx="12" ry="14"/><ellipse cx="50" cy="52" rx="22" ry="25"/></g>`
+    + `<path d="M28 40 Q36 34 46 44 Q40 56 30 52 Z" fill="#f4f6fb" stroke="${INK}" stroke-width="3.4"/><path d="M72 40 Q64 34 54 44 Q60 56 70 52 Z" fill="#f4f6fb" stroke="${INK}" stroke-width="3.4"/>`,
+  electro: () => collar('#2a8a4a', '#f2d030') + head({ skin: '#2a8a4a' })
+    + `<path d="M50 6 L58 30 L82 22 L64 40 L86 52 L60 50 L50 30 L40 50 L14 52 L36 40 L18 22 L42 30 Z" fill="#f2d030" stroke="${INK}" stroke-width="3"/>`
+    + `<ellipse cx="40" cy="54" rx="6" ry="4" fill="#f4f6fb" stroke="${INK}" stroke-width="2"/><ellipse cx="60" cy="54" rx="6" ry="4" fill="#f4f6fb" stroke="${INK}" stroke-width="2"/>` + mouth(72, 8, -3),
+  scorpion: () => collar('#3a7a3a', '#9ab040') + head({ skin: '#3a7a3a', w: 31 })
+    + `<path d="M22 44 Q50 30 78 44 L76 58 Q50 50 24 58 Z" fill="#9ab040" stroke="${INK}" stroke-width="3"/><path d="M50 18 L50 34" stroke="${INK}" stroke-width="3"/>`
+    + `<path d="M30 46 L46 50 M70 46 L54 50" stroke="#e04a2a" stroke-width="4" stroke-linecap="round"/>` + mouth(72, 8, -2),
+  mysterio: () => collar('#3a8a4a', '#6a3a8a') + `<path d="M20 74 Q50 86 80 74" fill="#3a8a4a" stroke="${INK}" stroke-width="3"/>`
+    + `<circle cx="50" cy="46" r="32" fill="#d8e8f0" fill-opacity="0.55" stroke="${INK}" stroke-width="3"/><path d="M28 30 Q34 22 44 22" stroke="#fff" stroke-width="4" fill="none" stroke-linecap="round"/>`
+    + `<g fill="#7ad06a" opacity="0.6"><circle cx="42" cy="54" r="8"/><circle cx="58" cy="48" r="9"/><circle cx="50" cy="38" r="7"/></g>`,
+  lizard: () => collar('#f0f0ea') + head({ skin: '#4a8a3a', w: 30, h: 33, y: 50 })
+    + `<path d="M50 52 Q86 54 92 66 Q70 76 48 70 Z" fill="#4a8a3a" stroke="${INK}" stroke-width="3"/><path d="M60 68 L64 72 L68 68 L72 72 L76 68" stroke="#fff" stroke-width="2" fill="none"/>`
+    + `<ellipse cx="44" cy="42" rx="6" ry="5" fill="#f2d030" stroke="${INK}" stroke-width="2"/><path d="M44 38 L44 46" stroke="${INK}" stroke-width="2.4"/>` + brows(36, 6, 5),
+  connors: () => collar('#f2f2ee', '#6a8aa8') + head({ skin: '#ecc7a0', w: 27 })
+    + `<path d="M24 40 Q26 20 50 20 Q74 20 76 40 Q64 28 50 28 Q36 28 24 40 Z" fill="#5a3a20" stroke="${INK}" stroke-width="3"/>`
+    + `<g fill="none" stroke="${INK}" stroke-width="2.4"><rect x="31" y="44" width="15" height="10" rx="3"/><rect x="54" y="44" width="15" height="10" rx="3"/><path d="M46 49 L54 49"/></g>` + eyes(49, 11, 1.8) + mouth(70, 7, -1),
   cop: () => collar('#1f2c4a', '#d8d8de') + head({ skin: '#c99a76', w: 28 })
     + `<path d="M18 34 Q50 4 82 34 L82 40 L18 40 Z" fill="#1f2c4a" stroke="${INK}" stroke-width="3"/><rect x="44" y="24" width="12" height="9" fill="#d8c040" stroke="${INK}" stroke-width="2"/>` + eyes(52, 11, 2.4) + mouth(72, 8, 1),
   robbie: () => collar('#5a5a6a', '#f4f4f4') + head({ skin: '#7a5236', w: 28 }) + `<path d="M24 38 Q26 20 50 20 Q74 20 76 38 Q64 28 50 28 Q36 28 24 38 Z" fill="#d8d8dc" stroke="${INK}" stroke-width="3"/>` + eyes(50, 11, 2.4) + mouth(70, 8, 3),

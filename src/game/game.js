@@ -61,7 +61,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
   let settings = loadSettings(window.localStorage);
   // The story (Plan 7): on in a story slot, off in free swing and multiplayer.
-  let storyOn = false, director = null, storyEnv = null;
+  let storyOn = false, director = null, storyEnv = null, illusionK = 0;
   let quality = getQuality(settings.quality);
   const dev = params.has('dev');
 
@@ -275,7 +275,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onSnapshot: (snap) => modes.adopt(snap?.mode),
     onBecomeHost: (snap) => { modes.adopt(snap?.mode); combat.restoreEncounter(snap?.encounter); },
   });
-  combat.setTargets(() => session.targets());
+  combat.setTargets(() => { const t = session.targets(); const extra = storyOn ? director?.targets() : null; return extra ? t.concat(extra) : t; });
   combat.setAuthority(() => !session.active || session.isHost);
   const modes = createModes({ session, scene, hud, uiRoot, city, getHero: () => hero, getCamera: () => camera, applyRule: (r) => { mpRule = r; } });
   const social = createSocial({ session, scene, uiRoot, getCamera: () => camera, getAim: () => findAimPoint(world, hero.body, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z }) ?? world.raycast(rig.pos.x, rig.pos.y, rig.pos.z, rig.fwd.x, rig.fwd.y, rig.fwd.z, 300) });
@@ -545,6 +545,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       default: break;
     }
     progress.onCombatEvent(e);
+    if (storyOn) director.onCombatEvent(e);
     events.push(e); // the poser and the HUD see combat moves too
     hud.onEvent(e);
   }
@@ -721,6 +722,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         if (input.pressed('scan') && modes.ping()) hud.caption('SPIDER-SENSE!', 1);
       }
       if (input.pressed('suitPower')) progress.usePower();
+      if (storyOn && !session.active && input.pressed('scan')) director.scan();
       for (const e of events) progress.onHeroEvent(e);
       if (combat.heroCombat.c.defeated) defeatStep(dt);
       riverCheck(dt);
@@ -814,6 +816,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     } else hud.waypoint(false);
     sky.follow(camera, time);
     applyEnv(mode === 'play' ? dt : 0);
+    // Mysterio's smoke: a green cast over the ink and a slow tilt of the camera (visual only).
+    if (illusionK > 0 && !shadeFreeze) SHADE_UNIFORMS.uTint.value.lerp(C4.setRGB(0.62, 1.05, 0.7), 0.4 * illusionK);
+    if (illusionK > 0 && !camOverride) camera.rotateZ(Math.sin(time * 0.6) * 0.07 * illusionK);
     rain.update(camera, time);
     // The camera crammed right up against the hero (a tight corner): hide him rather than fill the
     // screen with his back.
@@ -880,6 +885,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     focusSun: (x, z) => { sun.target.position.set(x, 0, z); sun.position.copy(sun.target.position).addScaledVector(sunDir, 400); sun.target.updateMatrixWorld(); },
     aspect: () => innerWidth / innerHeight,
     snapshot: (cam) => { ink.render(scene, cam, time); return renderer.domElement.toDataURL('image/jpeg', 0.86); },
+    character: () => character.id,
+    setCharacter: (id) => switchCharacter(id),
+    illusion: (k) => { illusionK = k; },
     onBlock: (on) => {
       if (on && mode === 'play') { mode = 'comic'; input.setEnabled(false); if (locked()) document.exitPointerLock(); }
       else if (!on && mode === 'comic') { mode = 'play'; resetIntent(); input.setEnabled(true); }

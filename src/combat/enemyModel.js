@@ -25,6 +25,10 @@ export const FACTIONS = {
     { jacket: 0x5a4636, pants: 0x3a2e26, shoes: 0x1a1210, skin: 0.25, head: 4, hat: 0x2a2018, accent: 0xc8a050 },
     { jacket: 0x4a4a52, pants: 0x2e2e34, shoes: 0x1a1210, skin: 0.4, head: 4, hat: 0x1a1a1e, accent: 0xb03030 },
   ] },
+  lizard: { name: 'Lizard-men', looks: [
+    { jacket: 0x4a8a3a, pants: 0x3a6a2a, shoes: 0x3a6a2a, skin: -3, head: 6, hat: 0x4a8a3a, accent: 0x9ab040, pattern: 3 },
+    { jacket: 0x5a9a4a, pants: 0x3a6a2a, shoes: 0x2a4a1a, skin: -3, head: 6, hat: 0x5a9a4a, accent: 0xb0c050, pattern: 3 },
+  ] },
   sable: { name: 'Silver Sable private army', looks: [
     { jacket: 0x9aa0a6, pants: 0x4a5058, shoes: 0x22252a, skin: 0.3, head: 3, hat: 0x6a7078, accent: 0xdfe6ee },
     { jacket: 0x6d7a5a, pants: 0x4a5040, shoes: 0x22252a, skin: 0.5, head: 3, hat: 0x5a6448, accent: 0xdfe6ee },

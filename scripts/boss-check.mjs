@@ -96,7 +96,7 @@ async function run(stepId, label, pilot, limit = 150000) {
     minHp = Math.min(minHp, c.hp);
     const h = await H();
     const bossE = c.enemies.find((e) => e.boss);
-    if (process.env.DEBUG && Date.now() - (run.lastLog ?? 0) > Number(process.env.DEBUG)) { run.lastLog = Date.now(); console.log(JSON.stringify({ t: ((Date.now() - t0) / 1000).toFixed(1), hp: Math.round(c.hp), hero: [h.p.x.toFixed(1), h.p.y.toFixed(1), h.p.z.toFixed(1), h.state], boss: bossE && [bossE.x.toFixed(1), bossE.y.toFixed(1), bossE.z.toFixed(1), bossE.state, Math.round(bossE.hp)], st: st.boss, cs: c.state })); }
+    if (process.env.DEBUG && Date.now() - (run.lastLog ?? 0) > Number(process.env.DEBUG)) { run.lastLog = Date.now(); console.log(JSON.stringify({ t: ((Date.now() - t0) / 1000).toFixed(1), hp: Math.round(c.hp), hero: [h.p.x.toFixed(1), h.p.y.toFixed(1), h.p.z.toFixed(1), h.state], boss: bossE && [bossE.x.toFixed(1), bossE.y.toFixed(1), bossE.z.toFixed(1), bossE.state, Math.round(bossE.hp)], st: st.boss, cs: c.state, phase: st.phase, wave: st.wave, foes: c.enemies.filter((e) => !['out', 'webbed', 'pinned'].includes(e.state)).length, all: c.enemies.length })); }
     await pilot({ st, c, h, bossE });
     await sleep(25);
   }

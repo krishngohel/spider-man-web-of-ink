@@ -159,8 +159,10 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       const ground = ctx.groundBelow;
       if (below && P().y - ground > 2.5) { c.state = 'slam'; c.t = 0; onEvent({ type: 'slamStart' }); return; }
     }
-    // Dodge: dive on the ground while enemies are about.
+    // Dodge: dive on the ground while enemies are about. In the air (mid combo) it is a web pull to
+    // the side and down: a short rope impulse, not a jump off nothing.
     if (intent.divePressed && grounded() && engaged.length) { startDodge(intent, engaged); return; }
+    if (intent.divePressed && !grounded() && !hero.swing.active && hero.state === 'air' && engaged.length && P().y - ctx.groundBelow < 6) { startDodge(intent, engaged, true); return; }
     // A character's own special replaces the web shot (Shocker's blast, Goblin's bombs...).
     if (intent.webPressed && c.special) { c.special(camFwd); onEvent({ type: 'special' }); return; }
     // Web shot.
@@ -220,7 +222,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     onEvent({ type: 'punch', air: !grounded(), n: c.punchN });
   }
 
-  function startDodge(intent, engaged) {
+  function startDodge(intent, engaged, air = false) {
     // Away from the nearest attacker, sideways if the stick says so.
     let threat = null, soon = Infinity;
     for (const e of engaged) {
@@ -236,11 +238,12 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     let dx = -u.z, dz = u.x;
     if (m > 0.2) { dx = intent.moveX / m; dz = intent.moveZ / m; } else if (Math.random() < 0.5) { dx = -dx; dz = -dz; }
     const v = V();
-    applyDv(hero.body, 'surface', dx * COMBAT.dodgeSpeed - v.x, Math.max(0, 2.5 - v.y), dz * COMBAT.dodgeSpeed - v.z);
+    if (air) applyDv(hero.body, 'rope', dx * COMBAT.dodgeSpeed - v.x, Math.min(0, -4 - v.y), dz * COMBAT.dodgeSpeed - v.z);
+    else applyDv(hero.body, 'surface', dx * COMBAT.dodgeSpeed - v.x, Math.max(0, 2.5 - v.y), dz * COMBAT.dodgeSpeed - v.z);
     c.state = 'dodge'; c.t = 0; c.iframes = COMBAT.iframes;
     const perfect = threat && soon < COMBAT.perfectWindow;
     if (perfect) { slowmo(COMBAT.slowmo); c.focus = Math.min(3, c.focus + COMBAT.focusPerfect); word('PERFECT DODGE!', null, 'big'); }
-    onEvent({ type: 'dodge', perfect: !!perfect, dir: { x: dx, z: dz } });
+    onEvent({ type: 'dodge', perfect: !!perfect, dir: { x: dx, z: dz }, air });
   }
 
   // An enemy's hit lands on the hero (called by the enemies).

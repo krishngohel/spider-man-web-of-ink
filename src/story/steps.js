@@ -13,6 +13,8 @@
 //   chase     a chase module (the boss module's chase phase)
 // Sites are named spots resolved against the city at run time (src/story/sites.js).
 
+import { ACT2 } from './acts/act2.js';
+
 const L = (who, text) => ({ who, text });
 
 export const ACTS = [
@@ -27,6 +29,7 @@ export const ACTS = [
 export const SPEAKERS = {
   peter: 'Spider-Man', parker: 'Peter', yuri: 'Captain Watanabe', mj: 'MJ', may: 'Aunt May', jameson: 'J. Jonah Jameson',
   kingpin: 'Kingpin', shocker: 'Shocker', vulture: 'Vulture', rhino: 'Rhino', cop: 'Officer', robbie: 'Robbie Robertson',
+  miles: 'Miles', electro: 'Electro', scorpion: 'Scorpion', mysterio: 'Mysterio', lizard: 'Lizard', connors: 'Dr. Connors',
 };
 
 // Comic panel shots: a camera and a cast, relative to a site. cam / look / p are [x, y, z] offsets
@@ -181,6 +184,7 @@ export const STEPS = [
     ],
   },
   { id: 'act1.done', act: 'act1', type: 'title', card: 'actEnd' },
+  ...ACT2,
 ];
 
 export const stepById = (id) => STEPS.find((s) => s.id === id) ?? null;
