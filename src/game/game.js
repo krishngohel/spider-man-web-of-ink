@@ -22,7 +22,7 @@ import { SHADE_UNIFORMS } from '../render/comicShade.js';
 import { buildStreetProps, carBoxes } from '../world/streetProps.js';
 import { buildStreetMeshes } from '../world/streetMesh.js';
 import { createHero, emptyIntent } from '../hero/controller.js';
-import { loadHeroAssets, buildHeroModel } from '../hero/model.js';
+import { loadHeroAssets, buildHeroModel, loadCombatClips } from '../hero/model.js';
 import { createPoser } from '../hero/pose.js';
 import { createWebLine } from '../hero/webLine.js';
 import { createCameraRig } from '../camera/cameraRig.js';
@@ -890,7 +890,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     workTimes[frameIdx % workTimes.length] = scriptMs - renderMs;
     gpuTimes[frameIdx % gpuTimes.length] = ink.gpuMs ?? -1;
     frameTimes[frameIdx++ % frameTimes.length] = dtMs;
-    if (frame === 3) { performance.mark('boot:firstFrame'); state.ready = true; }
+    if (frame === 3) {
+      performance.mark('boot:firstFrame'); state.ready = true;
+      loadCombatClips(assets).catch((err) => console.warn('combat clips', err));
+    }
   }
 
   function placeHeroAt(x, y, z, vx = 0, vy = 0, vz = 0, st = 'air', yaw = null) {

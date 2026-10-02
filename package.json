@@ -14,6 +14,8 @@
     "three": "0.186.1"
   },
   "devDependencies": {
+    "@gltf-transform/core": "4.5",
+    "@gltf-transform/extensions": "4.5",
     "@playwright/test": "1.63",
     "playwright-core": "1.63",
     "sharp": "^0.35.4",

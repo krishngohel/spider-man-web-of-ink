@@ -20,6 +20,17 @@ export async function loadHeroAssets(base = './assets/', onProgress = () => {}) 
   return { body: hero.scene, bodyF: heroF.scene, hair: hair.scene, clips };
 }
 
+// The combat clips (kicks, flips, evades, reactions; scripts/retarget-mocap.mjs) load after the
+// game is up, so the first load stays fast; until then moves fall back to the Quaternius clips.
+export async function loadCombatClips(assets, base = './assets/') {
+  const g = await new GLTFLoader().loadAsync(base + 'anims_combat.glb');
+  for (const clip of g.animations) assets.clips.set(clip.name, sanitizeClip(clip));
+  assets.combatReady = true;
+  return true;
+}
+
+export const hasClip = (assets, name) => assets.clips.has(name);
+
 // The shared skeleton has matching bone lengths, but only rotations and the pelvis translation are
 // safe to apply across bodies. Scale tracks are identity noise.
 export function sanitizeClip(clip) {
