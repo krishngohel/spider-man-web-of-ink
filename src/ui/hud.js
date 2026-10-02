@@ -25,12 +25,14 @@ export function createHud(root, getSettings) {
   const fader = el('div', { class: 'fader' });
   const caption = el('div', { class: 'caption hidden' });
   const wpMark = el('div', { class: 'waypoint hidden' }, [el('i'), el('span')]);
+  const xpBox = el('div', { class: 'xpbox hidden' }, [el('b'), el('span', { class: 'xpbar' }, [el('i')])]);
+  let xpT = 0;
   let captionT = 0;
   const hud = el('div', { class: 'hud hidden' }, [lines, words, reticle, dot, noAnchor, speedo, fps, stateLabel, tip, lockHint, help]);
   const wordPool = Array.from({ length: 6 }, () => { const w = el('div', { class: 'word' }); words.append(w); return { el: w, t: 0 }; });
   let wordNext = 0;
   root.append(hud, toast, fader);
-  hud.append(caption, wpMark);
+  hud.append(caption, wpMark, xpBox);
   const lctx = lines.getContext('2d');
 
   let tipIndex = 0;
@@ -44,7 +46,7 @@ export function createHud(root, getSettings) {
       swing: bindingLabel(b, 'swing'), jump: bindingLabel(b, 'jump'), zip: bindingLabel(b, 'zip'),
       dive: bindingLabel(b, 'dive'), help: bindingLabel(b, 'help'), pause: bindingLabel(b, 'pause'),
       hang: bindingLabel(b, 'hang'), trick: bindingLabel(b, 'trick'), map: bindingLabel(b, 'map'),
-      attack: bindingLabel(b, 'attack'), web: bindingLabel(b, 'web'), finisher: bindingLabel(b, 'finisher'),
+      suitPower: bindingLabel(b, 'suitPower'), attack: bindingLabel(b, 'attack'), web: bindingLabel(b, 'web'), finisher: bindingLabel(b, 'finisher'),
       gadget: bindingLabel(b, 'gadget'), gadgetWheel: bindingLabel(b, 'gadgetWheel'), forward: bindingLabel(b, 'forward'), back: bindingLabel(b, 'back'),
       move: ['forward', 'left', 'back', 'right'].map((a) => bindingLabel(b, a)).join(' '),
     };
@@ -137,6 +139,12 @@ export function createHud(root, getSettings) {
       wpMark.style.left = `${sx}px`; wpMark.style.top = `${sy}px`;
       wpMark.lastChild.textContent = `${Math.round(metres)} M`;
     },
+    // XP gained: a small "+150 XP" with the level bar, for a few seconds.
+    xp(amount, lv) {
+      xpBox.firstChild.textContent = `+${amount} XP`;
+      xpBox.lastChild.firstChild.style.width = `${lv.need ? (lv.into / lv.need) * 100 : 100}%`;
+      xpBox.classList.remove('hidden'); xpT = 2.4;
+    },
     resetTips() { tipIndex = 0; try { localStorage.removeItem(TIPS_KEY); } catch { /* storage blocked */ } showTip(); },
     update(dt, { fps: f, speed, anchor, state, dev, w, h }) {
       const s = getSettings();
@@ -146,6 +154,7 @@ export function createHud(root, getSettings) {
       stateLabel.textContent = dev ? state : '';
       noAnchorT -= dt;
       if (captionT > 0) { captionT -= dt; if (captionT <= 0) caption.classList.remove('show'); }
+      if (xpT > 0) { xpT -= dt; if (xpT <= 0) xpBox.classList.add('hidden'); }
       noAnchor.classList.toggle('show', noAnchorT > 0);
       reticle.classList.toggle('valid', !!(anchor && anchor.valid));
       reticle.classList.toggle('invalid', !!anchor && !anchor.valid);

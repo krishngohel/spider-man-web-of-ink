@@ -15,6 +15,7 @@ export const ACTIONS = [
   { id: 'finisher', label: 'Finisher (tap, one focus bar), heal (hold)', group: 'Fight' },
   { id: 'gadget', label: 'Use gadget', group: 'Fight' },
   { id: 'gadgetWheel', label: 'Gadget wheel (hold)', group: 'Fight' },
+  { id: 'suitPower', label: 'Suit power', group: 'Fight' },
   { id: 'map', label: 'City map', group: 'Other' },
   { id: 'help', label: 'Controls help', group: 'Other' },
   { id: 'pause', label: 'Pause and settings', group: 'Other' },
@@ -36,6 +37,7 @@ export const DEFAULT_BINDINGS = {
   finisher: ['KeyX'],
   gadget: ['KeyF'],
   gadgetWheel: ['Tab'],
+  suitPower: ['KeyZ'],
   map: ['KeyM'],
   help: ['KeyH'],
   pause: ['Escape', 'KeyP'],
@@ -50,6 +52,7 @@ export const PAD = {
   web: 5,       // RB / R1
   finisher: 11, // R3
   gadget: 4,    // LB / L1 (tap: use, hold: wheel)
+  suitPower: 10, // L3
   zipHold: 6,   // LT / L2 (with RT: zip)
   swing: 7,     // RT / R2
   map: 8,       // Back / Share

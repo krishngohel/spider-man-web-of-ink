@@ -37,6 +37,8 @@ import { el } from '../ui/dom.js';
 import { createFx } from './fx.js';
 import { createCombat } from '../combat/combat.js';
 import { createCombatHud } from '../ui/combatHud.js';
+import { createProgressRuntime } from '../progress/runtime.js';
+import { createProgressMenu } from '../ui/progressMenu.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
@@ -202,7 +204,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onResume: () => resume(),
     onRestart: () => { hero.place(spawn.x, spawn.y, spawn.z, 0, 0, 0, 'ground'); resume(); },
     onQuit: () => toTitle(),
+    onProgress: () => progressMenu.show(),
   });
+  const progressMenu = createProgressMenu(uiRoot, { save, onChange: () => { progress.apply(); persist(); }, onBack: () => menus.showPause() });
+  const progress = createProgressRuntime({ save, heroModel, combat, hero, hud, sfx, ink });
+  progress.apply();
 
   function applySettings(next) {
     const prevQuality = settings.quality;
@@ -426,6 +432,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       case 'thwip': if (e.combat) sfx.event({ type: 'thwip' }); break;
       default: break;
     }
+    progress.onCombatEvent(e);
     events.push(e); // the poser and the HUD see combat moves too
     hud.onEvent(e);
   }
@@ -580,6 +587,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       events.push(...hero.events);
       hero.events.length = 0;
       combat.step(gdt);
+      progress.step(gdt);
+      if (input.pressed('suitPower')) progress.usePower();
+      for (const e of events) progress.onHeroEvent(e);
       if (combat.heroCombat.c.defeated) defeatStep(dt);
       riverCheck(dt);
       travelStep(dt);
@@ -754,6 +764,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     get settings() { return settings; },
     combat: () => combat,
     spawnGang: (x, z, opts) => combat.spawnGang(x, z, 'midtown', opts),
+    progress: () => progress,
     combatState: () => ({ hp: combat.heroCombat.c.hp, focus: combat.heroCombat.c.focus, combo: combat.heroCombat.c.combo, state: combat.heroCombat.c.state, enemies: combat.enemies.list.map((e) => ({ id: e.id, arch: e.arch, state: e.state, hp: e.hp, x: e.body.p.x, y: e.body.p.y, z: e.body.p.z })) }),
     save: () => save,
     openMap: () => openMap(),

@@ -21,6 +21,8 @@ export function createGadgets({ scene, enemies, projectiles, hero, world, onEven
   const state = {};
   for (const g of GADGETS) state[g.id] = { level: 1, charges: g.charges[0], t: 0 };
   let selected = 'webBomb';
+  // Skill and mod modifiers (progression sets these).
+  const mods = { refillMul: 1, extraCharge: 0, mineRadius: 0, chainExtra: 0, droneTime: 0, blastRange: 0 };
   const mines = [], drones = [];
   const mineMat = comicToon({ color: 0x2a2c30 }), droneMat = comicToon({ color: 0xd3232e });
 
@@ -31,7 +33,7 @@ export function createGadgets({ scene, enemies, projectiles, hero, world, onEven
       state[g.id].charges = Math.min(state[g.id].charges, lv ? g.charges[lv - 1] : 0);
     }
   }
-  const maxCharges = (g) => (state[g.id].level ? g.charges[state[g.id].level - 1] : 0);
+  const maxCharges = (g) => (state[g.id].level ? g.charges[state[g.id].level - 1] + mods.extraCharge : 0);
 
   function use(camFwd) {
     const g = GADGETS.find((x) => x.id === selected);
@@ -54,7 +56,7 @@ export function createGadgets({ scene, enemies, projectiles, hero, world, onEven
         mesh.lookAt(mesh.position.x + hit.nx, mesh.position.y + hit.ny, mesh.position.z + hit.nz);
         mesh.rotateX(Math.PI / 2);
         scene.add(mesh);
-        mines.push({ x: hit.x, y: hit.y, z: hit.z, mesh, r: 2.6 + lv * 0.5, life: 60 });
+        mines.push({ x: hit.x, y: hit.y, z: hit.z, mesh, r: 2.6 + lv * 0.5 + mods.mineRadius, life: 60 });
         break;
       }
       case 'suspension':
@@ -64,20 +66,12 @@ export function createGadgets({ scene, enemies, projectiles, hero, world, onEven
         }
         onEvent({ type: 'suspension', at: { ...p } });
         break;
-      case 'drone': {
-        const mesh = new THREE.Group();
-        const body = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), droneMat);
-        mesh.add(body);
-        for (let i = 0; i < 4; i++) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.04), mineMat); leg.rotation.y = (i * Math.PI) / 4; mesh.add(leg); }
-        scene.add(mesh);
-        drones.push({ mesh, life: 8 + lv * 2, fireT: 0.4, a: Math.random() * 6 });
-        break;
-      }
+      case 'drone': makeDrone(8 + lv * 2 + mods.droneTime); break;
       case 'concussive':
         for (const e of enemies.active) {
           const dx = e.body.p.x - p.x, dz = e.body.p.z - p.z, d = Math.hypot(dx, dz) || 1;
           const along = (dx * camFwd.x + dz * camFwd.z) / d;
-          if (d < 9 + lv * 1.5 && along > 0.45) enemies.hit(e, { dmg: 8, dir: { x: dx / d, z: dz / d }, push: 12, lift: 3, from: p });
+          if (d < 9 + lv * 1.5 + mods.blastRange && along > 0.45) enemies.hit(e, { dmg: 8, dir: { x: dx / d, z: dz / d }, push: 12, lift: 3, from: p });
         }
         onEvent({ type: 'concussive', at: { ...p }, dir: camFwd });
         break;
@@ -85,6 +79,15 @@ export function createGadgets({ scene, enemies, projectiles, hero, world, onEven
     }
     onEvent({ type: 'gadget', id: g.id });
     return true;
+  }
+
+  // A spider-drone that circles the hero and shoots stun webs at the nearest enemy.
+  function makeDrone(life, phase = Math.random() * 6) {
+    const mesh = new THREE.Group();
+    mesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8), droneMat));
+    for (let i = 0; i < 4; i++) { const leg = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.04, 0.04), mineMat); leg.rotation.y = (i * Math.PI) / 4; mesh.add(leg); }
+    scene.add(mesh);
+    drones.push({ mesh, life, fireT: 0.4, a: phase });
   }
 
   // A hero web projectile with a gadget payload hit something.
@@ -104,7 +107,7 @@ export function createGadgets({ scene, enemies, projectiles, hero, world, onEven
       return true;
     }
     if (p.gadget === 'electricWeb' && e) {
-      const chain = [e, ...enemies.active.filter((o) => o !== e && Math.hypot(o.body.p.x - e.body.p.x, o.body.p.z - e.body.p.z) < 6).slice(0, 3)];
+      const chain = [e, ...enemies.active.filter((o) => o !== e && Math.hypot(o.body.p.x - e.body.p.x, o.body.p.z - e.body.p.z) < 6).slice(0, 3 + mods.chainExtra)];
       for (const o of chain) enemies.hit(o, { dmg: 9, push: 1, from: hero.body.p });
       onEvent({ type: 'electric', chain: chain.map((o) => ({ ...o.body.p })) });
       return true;
@@ -115,7 +118,7 @@ export function createGadgets({ scene, enemies, projectiles, hero, world, onEven
   function step(dt) {
     for (const g of GADGETS) {
       const s = state[g.id];
-      if (s.charges < maxCharges(g)) { s.t += dt; if (s.t >= g.refill) { s.t = 0; s.charges++; } }
+      if (s.charges < maxCharges(g)) { s.t += dt; if (s.t >= g.refill * mods.refillMul) { s.t = 0; s.charges++; } }
     }
     for (let i = mines.length - 1; i >= 0; i--) {
       const m = mines[i];
@@ -149,7 +152,8 @@ export function createGadgets({ scene, enemies, projectiles, hero, world, onEven
   }
 
   return {
-    state, use, payload, step, setLevels,
+    state, use, payload, step, setLevels, mods,
+    makeDrone,
     get selected() { return selected; },
     select(id) { if (state[id]) selected = id; },
     maxCharges,

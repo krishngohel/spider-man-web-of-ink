@@ -4,7 +4,7 @@ export const COPY = {
   title: { a: 'SPIDER-MAN', b: 'WEB OF INK' },
   subtitle: 'Swing test build. Aim the crosshair at a building, hold swing, let go and aim the next one. Miss and you fall.',
   disclaimer: 'Unofficial fan game. Not affiliated with or endorsed by Marvel or Sony. Spider-Man and related characters are trademarks of Marvel. Made for fun, never sold.',
-  buttons: { play: 'FREE SWING', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
+  buttons: { progress: 'SKILLS AND SUITS', play: 'FREE SWING', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
   pause: 'PAUSED',
   clickToPlay: 'CLICK THE GAME TO USE THE MOUSE. ESC GIVES IT BACK.',
   map: {
@@ -14,6 +14,13 @@ export const COPY = {
     notFound: 'find this station in the city first',
   },
   stationFound: 'SUBWAY STATION FOUND',
+  progress: {
+    title: 'SKILLS AND SUITS', level: 'LEVEL', points: 'skill points', learned: 'Learned', free: 'Free', locked: 'Not built',
+    build: 'Build', upgrade: 'Upgrade', max: 'Top level', wear: 'Wear', wearing: 'Wearing', remove: 'Remove', equip: 'Equip', equipped: 'Equipped',
+    powerLocked: 'Unlock a suit with this power', story: 'Unlocked by the story', modsNote: 'Up to three mods at a time. Removing one keeps it bought only while it is on, so choose well.',
+    tabs: { skills: 'SKILLS', suits: 'SUITS', gadgets: 'GADGETS', mods: 'MODS', powers: 'POWERS' },
+    trees: { webslinger: 'WEBSLINGER', defender: 'DEFENDER', innovator: 'INNOVATOR' },
+  },
   combat: { gangSpotted: 'STREET GANG SPOTTED', gangBusted: 'GANG BUSTED!', defeated: 'DOWN, BUT NOT OUT', combo: 'COMBO', focus: 'FOCUS' },
   subwayTo: 'SUBWAY TO',
   noAnchor: 'MISSED',

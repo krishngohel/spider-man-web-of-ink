@@ -79,6 +79,7 @@ function suitMaterial(suit) {
     uBlue: { value: new THREE.Color(suit.blue) },
     uBlack: { value: new THREE.Color(suit.black) },
     uLens: { value: new THREE.Color(suit.lens) },
+    uStyle: { value: suit.style ?? 0 },
   };
   mat.userData.suit = uniforms;
   mat.onBeforeCompile = (shader) => {
@@ -90,6 +91,8 @@ function suitMaterial(suit) {
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
 uniform vec3 uRed, uBlue, uBlack, uLens;
+uniform float uStyle;   // 0 classic, 1 symbiote, 2 iron, 3 noir, 4 2099, 5 stealth glow, 6 negative
+float gGlow = 0.0;      // glowing lines (stealth suits), painted after lighting
 ${COMIC_SHADE}
 varying vec3 vBind;
 const float TAU = 6.2831853;
@@ -155,17 +158,34 @@ vec3 paintSuit(vec3 p) {
     lines = max(lineAA(p.y / 0.065, 1.4), lineAA((a / TAU + 0.5) * 8.0, 1.4));
   }
   vec3 col = red ? uRed : uBlue;
-  if (red) col = mix(col, uBlack, lines);
+  if (uStyle < 0.5) { if (red) col = mix(col, uBlack, lines); }
+  else if (uStyle < 1.5) col = uRed;                                                    // symbiote: one colour
+  else if (uStyle < 2.5) { col = mix(col, col * 0.55, lines * 0.7); }                    // iron: panel seams
+  else if (uStyle < 3.5) { col = mix(col, uBlack, lines * 0.55); }                       // noir: soft lines
+  else if (uStyle < 4.5) {                                                                // 2099: blue, red bands
+    col = uBlue;
+    if (red && (ax > 0.45 || p.y < 0.45)) col = uRed;
+    if (ax < 0.24 && p.y > 0.93 && ax > 0.15) col = uRed;
+  }
+  else if (uStyle < 5.5) { col = uRed; gGlow = lines; }                                 // stealth: glowing lines
+  else { col = mix(col, uBlue, lines * (red ? 1.0 : 0.0)); }                             // negative
   // Chest spider (black, front) and back spider (red with a black outline, bigger).
   if (p.y > 1.12 && p.y < 1.56 && ax < 0.16) {
     if (p.z > 0.04) {
-      float d = spider(vec2(p.x, p.y - 1.33), 1.25);
-      col = mix(col, uBlack, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
+      float big = uStyle > 0.5 && uStyle < 1.5 ? 1.9 : uStyle > 3.5 && uStyle < 4.5 ? 1.6 : 1.25;
+      float d = spider(vec2(p.x, p.y - 1.33), big);
+      vec3 ec = uStyle > 3.5 && uStyle < 4.5 ? uRed : uStyle > 5.5 ? uBlue : uBlack;
+      col = mix(col, ec, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
+      if (uStyle > 4.5 && uStyle < 5.5) gGlow = max(gGlow, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
     } else if (p.z < -0.04) {
-      float d = spider(vec2(p.x, p.y - 1.3), 1.7);
+      float big = uStyle > 0.5 && uStyle < 1.5 ? 2.2 : 1.7;
+      float d = spider(vec2(p.x, p.y - 1.3), big);
       float fw = fwidth(d) * 1.5;
-      col = mix(col, uRed, 1.0 - smoothstep(0.0, fw, d));
-      col = mix(col, uBlack, 1.0 - smoothstep(0.0035, 0.0035 + fw, abs(d)));
+      if (uStyle > 0.5 && uStyle < 1.5) col = mix(col, uBlack, 1.0 - smoothstep(0.0, fw, d));
+      else {
+        col = mix(col, uRed, 1.0 - smoothstep(0.0, fw, d));
+        col = mix(col, uStyle > 5.5 ? uBlue : uBlack, 1.0 - smoothstep(0.0035, 0.0035 + fw, abs(d)));
+      }
     }
   }
   // Eye lenses: two big teardrops, pointed toward the nose, swept up and out, in thick black
@@ -206,16 +226,18 @@ vec3 paintSuit(vec3 p) {
       // The lenses after lighting: bright white with a faint cool shade, never grey.
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
 ${SHADOW_ALPHA}
+	gl_FragColor.rgb = mix(gl_FragColor.rgb, uBlack * 1.3, gGlow * step(4.5, uStyle) * step(uStyle, 5.5));
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, uLens * (0.92 + 0.08 * clamp(vBind.y * 6.0 - 9.9, 0.0, 1.0)), gLens);
 	if (gLens > 0.5) gl_FragColor.a = 0.0;`);
   };
-  mat.customProgramCacheKey = () => 'suit-v5';
+  mat.customProgramCacheKey = () => 'suit-v6';
   return mat;
 }
 
 export function setSuit(hero, suit) {
   const u = hero.suitMat.userData.suit;
   u.uRed.value.set(suit.red); u.uBlue.value.set(suit.blue); u.uBlack.value.set(suit.black); u.uLens.value.set(suit.lens);
+  u.uStyle.value = suit.style ?? 0;
 }
 
 export const COM_HEIGHT = 0.9; // the physics body's position is this far above the feet

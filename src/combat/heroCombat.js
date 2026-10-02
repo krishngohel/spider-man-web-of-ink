@@ -5,6 +5,7 @@ import { pickTarget, isActive, ARCHETYPES } from './enemies.js';
 // ground for lunges and launchers, the web for strikes and yanks, kicks pushing off an enemy's body
 // to stay up in the air. The combat system never moves the hero by teleport.
 
+// The base values; progression (skills, mods) rewrites COMBAT from these.
 export const COMBAT = {
   hp: 100,
   punch: 10, comboBonus: 1.5, uppercutLift: 11, airLift: 4.6, slamDmg: 14, slamRadius: 4.5,
@@ -13,6 +14,8 @@ export const COMBAT = {
   focusPerHit: 0.09, focusPerfect: 0.4, healAmount: 38,
   regenDelay: 4, regenRate: 14,
 };
+
+export const COMBAT_BASE = { ...COMBAT };
 
 const WORDS = ['POW!', 'THWACK!', 'BAM!', 'WHAM!', 'KRAK!', 'SMACK!'];
 
@@ -23,6 +26,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     iframes: 0, outOfCombat: 9, attackHeldT: 0, buffered: false, punchN: 0,
     timeScale: 1, slowT: 0, stopT: 0, finisherHoldT: 0, defeated: false, lastWord: 0,
     dmgMul: 1, // skills raise this (Plan 4)
+    strikeMul: 1, comboKeep: 2.2, armor: 0, resilient: false, resilientUsed: false, focusMul: 1, brutalMul: 1,
   };
   const P = () => hero.body.p, V = () => hero.body.v;
   const toward = (e) => { const p = P(), q = e.body.p; const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz) || 1; return { x: dx / d, z: dz / d, d, dy: q.y - p.y }; };
@@ -37,7 +41,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     const r = enemies.hit(e, { dmg: dmg * c.dmgMul, dir: { x: u.x, z: u.z }, push, lift, kind, from: P() });
     if (r.blocked) { word('CLANG!', e); onEvent({ type: 'blocked' }); return r; }
     c.combo++; c.comboT = 0;
-    c.focus = Math.min(3, c.focus + COMBAT.focusPerHit);
+    c.focus = Math.min(3, c.focus + COMBAT.focusPerHit * c.focusMul);
     hitstop(heavy ? 0.09 : 0.05);
     if (c.combo % 2 === 0 || heavy) word(WORDS[(c.punchN + c.combo) % WORDS.length], e, heavy ? 'hit' : 'small');
     onEvent({ type: 'heroHit', e, heavy, kind });
@@ -49,11 +53,11 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     const { camFwd } = intent;
     c.t += dt;
     c.comboT += dt;
-    if (c.comboT > 2.2) c.combo = 0;
+    if (c.comboT > c.comboKeep) c.combo = 0;
     c.iframes = Math.max(0, c.iframes - dt);
     const engaged = enemies.engaged;
     c.outOfCombat = engaged.length ? 0 : c.outOfCombat + dt;
-    if (c.outOfCombat > COMBAT.regenDelay) c.hp = Math.min(c.maxHp, c.hp + COMBAT.regenRate * dt);
+    if (c.outOfCombat > COMBAT.regenDelay) { c.hp = Math.min(c.maxHp, c.hp + COMBAT.regenRate * dt); c.resilientUsed = false; }
     // Keep a target while it is valid and near; else pick the one the camera points at.
     if (!c.target || !isActive(c.target) || toward(c.target).d > COMBAT.strikeRange + 4) c.target = null;
     const pick = pickTarget(P(), camFwd, enemies.list, COMBAT.strikeRange);
@@ -94,7 +98,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       applyDv(hero.body, 'rope', (dx / d * s - v.x) * Math.min(1, dt * 14), (dy / d * s - v.y) * Math.min(1, dt * 14), (dz / d * s - v.z) * Math.min(1, dt * 14));
       onEvent({ type: 'strikeLine', from: p, to: q });
       if (d < 1.7 || c.t > 0.9) {
-        landHit(tgt, { dmg: COMBAT.punch * 1.6, push: 8, lift: 3, heavy: true });
+        landHit(tgt, { dmg: COMBAT.punch * 1.6 * c.strikeMul, push: 8, lift: 3, heavy: true });
         const v2 = V(); applyDv(hero.body, 'surface', -v2.x * 0.8, Math.max(0, 5 - v2.y), -v2.z * 0.8);
         c.state = 'free';
         onEvent({ type: 'strikeEnd' });
@@ -236,14 +240,15 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   // An enemy's hit lands on the hero (called by the enemies).
   function takeHit({ dmg, dir, from, unblockable }) {
     if (c.iframes > 0 || c.defeated) return false;
-    c.hp -= dmg;
-    c.combo = 0;
+    c.hp -= dmg * (1 - c.armor);
+    if (!c.keepComboOnHit) c.combo = 0;
     c.state = 'hurt'; c.t = 0;
     c.iframes = 0.5;
     const v = V();
     applyDv(hero.body, 'surface', dir.x * 6 - v.x * 0.5, 2.5, dir.z * 6 - v.z * 0.5);
     if (hero.swing.active) { hero.swing.release(); hero.state = 'air'; }
     onEvent({ type: 'heroHurt', dmg, from, unblockable });
+    if (c.hp <= 0 && c.resilient && !c.resilientUsed) { c.hp = 1; c.resilientUsed = true; word('NOT TODAY!', null, 'big'); }
     if (c.hp <= 0) { c.hp = 0; c.defeated = true; slowmo(1.2); onEvent({ type: 'heroDefeated' }); }
     return true;
   }

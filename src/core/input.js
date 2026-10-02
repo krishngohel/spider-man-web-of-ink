@@ -18,6 +18,7 @@ export function padActions(pad, out = new Set()) {
   if (btn(PAD.web)) out.add('web');
   if (btn(PAD.finisher)) out.add('finisher');
   if (btn(PAD.gadget)) out.add('gadget');
+  if (btn(PAD.suitPower)) out.add('suitPower');
   if (btn(PAD.help)) out.add('help');
   if (btn(PAD.map)) out.add('map');
   if (btn(PAD.pause)) out.add('pause');

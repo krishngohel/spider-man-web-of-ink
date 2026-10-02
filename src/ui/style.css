@@ -189,3 +189,40 @@ button { font: inherit; }
 .cb-slot b { display: block; font-size: 16px; font-weight: 400; }
 .cb-slot span { font-size: 14px; }
 .cb-slot.on { background: #f7e36a; transform: translate(-50%, -50%) scale(1.12); }
+
+/* XP toast. */
+.xpbox { position: absolute; right: 24px; bottom: 86px; text-align: right; font-family: var(--head); color: #fff; -webkit-text-stroke: 1px var(--ink); text-shadow: 2px 2px 0 var(--ink); }
+.xpbox.hidden { display: none; }
+.xpbox b { display: block; font-size: 22px; font-weight: 400; color: #8ae06a; }
+.xpbar { display: block; width: 150px; height: 7px; margin-left: auto; border: 2px solid var(--ink); background: #3a3440; }
+.xpbar i { display: block; height: 100%; background: #8ae06a; }
+/* Skills and suits. */
+.panel .card.wide { width: min(1100px, calc(100vw - 32px)); }
+.pm-head { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; font-size: 15px; }
+.pm-head b { font-family: var(--head); font-size: 24px; font-weight: 400; }
+.pm-xp { width: 160px; height: 10px; border: 2px solid var(--ink); background: #ddd2b8; }
+.pm-xp i { display: block; height: 100%; background: #6ab04a; }
+.pm-tokens { opacity: 0.85; }
+.pm-tabs { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+.chip.on { background: #f7e36a; }
+.chip.off { opacity: 0.45; }
+.pm-trees { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.pm-tree h3 { margin: 0 0 6px; }
+.pm-skill { display: block; width: 100%; text-align: left; margin-bottom: 6px; padding: 6px 8px; border: 2px solid var(--ink); background: #ece2c8; cursor: pointer; font: inherit; }
+.pm-skill b { display: block; font-family: var(--head); font-weight: 400; font-size: 17px; }
+.pm-skill span { display: block; font-size: 13px; }
+.pm-skill em { font-size: 12px; opacity: 0.7; }
+.pm-skill.have { background: #a8d88a; }
+.pm-skill.can { background: #f7e36a; }
+.pm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; }
+.pm-suit { padding: 8px; border: 2px solid var(--ink); background: #ece2c8; cursor: pointer; font: inherit; text-align: left; }
+.pm-suit b { display: block; font-family: var(--head); font-weight: 400; font-size: 17px; }
+.pm-suit em { font-size: 12px; }
+.pm-suit.on { background: #f7e36a; box-shadow: 3px 3px 0 var(--ink); }
+.pm-suit.have { background: #fff; }
+.pm-suit.can { background: #d8ecc8; }
+.pm-swatch { display: flex; gap: 3px; margin-bottom: 4px; }
+.pm-swatch i { width: 26px; height: 18px; border: 2px solid var(--ink); }
+.pm-list .pm-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 2px dashed rgba(0, 0, 0, 0.2); }
+.pm-row b { font-family: var(--head); font-weight: 400; font-size: 18px; display: block; }
+.pm-row span { font-size: 13px; }

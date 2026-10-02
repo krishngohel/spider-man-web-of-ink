@@ -5,7 +5,7 @@ import { ACTIONS, DEFAULT_BINDINGS, keyLabel, rebind } from '../core/bindings.js
 // Title screen, pause menu, settings and controls (with rebinding). Mouse, keyboard and gamepad
 // (D-pad or left stick to move, A to choose, B to go back, left/right to change a value).
 
-export function createMenus(root, { getSettings, setSettings, input, onPlay, onResume, onRestart, onQuit }) {
+export function createMenus(root, { getSettings, setSettings, input, onPlay, onResume, onRestart, onQuit, onProgress = () => {} }) {
   const C = COPY.settings;
   // Title ---------------------------------------------------------------------------------------
   const title = el('div', { class: 'title hidden' }, el('div', { class: 'card' }, [
@@ -24,6 +24,7 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
     el('h2', {}, COPY.pause),
     el('div', { class: 'buttons' }, [
       el('button', { class: 'mbtn primary', onclick: () => onResume() }, COPY.buttons.resume),
+      el('button', { class: 'mbtn', onclick: () => { hideAll(); onProgress(); } }, COPY.buttons.progress),
       el('button', { class: 'mbtn', onclick: () => openSettings('pause') }, COPY.buttons.settings),
       el('button', { class: 'mbtn', onclick: () => openControls('pause') }, COPY.buttons.controls),
       el('button', { class: 'mbtn', onclick: () => onRestart() }, COPY.buttons.restart),
