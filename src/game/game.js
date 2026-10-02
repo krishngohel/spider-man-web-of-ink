@@ -159,7 +159,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     menus.hideAll();
     hud.show(true);
     input.setEnabled(true);
-    canvas.requestPointerLock?.()?.catch?.(() => {});
+    // The mouse is only captured when the player clicks the game view (never on a menu button).
     sfx.unlock();
   }
   let pausedAt = 0;
@@ -176,7 +176,6 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     resetIntent();
     menus.hideAll();
     input.setEnabled(true);
-    canvas.requestPointerLock?.()?.catch?.(() => {});
   }
   function toTitle() {
     mode = 'title';

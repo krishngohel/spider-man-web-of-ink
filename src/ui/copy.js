@@ -6,7 +6,7 @@ export const COPY = {
   disclaimer: 'Unofficial fan game. Not affiliated with or endorsed by Marvel or Sony. Spider-Man and related characters are trademarks of Marvel. Made for fun, never sold.',
   buttons: { play: 'FREE SWING', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
   pause: 'PAUSED',
-  clickToPlay: 'CLICK TO SWING',
+  clickToPlay: 'CLICK THE GAME TO USE THE MOUSE. ESC GIVES IT BACK.',
   noAnchor: 'MISSED',
   lowPower: 'Your browser is holding the game at 30 frames a second (Low Power Mode or Energy Saver). Plug in, or turn that mode off, for a smoother swing.',
   ok: 'Got it',
