@@ -47,50 +47,45 @@ async function until(fn, ms) {
 }
 async function releaseAll() { for (const k of ['Shift', 'Space', 'KeyD', 'KeyA', 'KeyW', 'KeyQ', 'KeyC']) await page.keyboard.up(k); }
 
-// A. The web sticks fast.
-await teleport(0, 50, -330, 0, 0, 22);
-await page.keyboard.down('Shift');
-const att = await until((h) => h.rope.active, 1500);
-check('web attaches within 250 ms of Shift', !!att && att.t < 250, att ? `${att.t} ms` : 'never attached');
-await releaseAll();
-
-// B. Steering: holding D during a swing turns the hero to its own right (A to the left).
-async function lateral(key) {
-  await teleport(0, 50, -330, 0, 0, 22);
-  const h0 = await H();
-  const fx = h0.v.x / Math.hypot(h0.v.x, h0.v.z), fz = h0.v.z / Math.hypot(h0.v.x, h0.v.z);
-  const rx = -fz, rz = fx; // right of heading (y up, right-handed)
+// Aims the crosshair where a skilled player would web next (heading dx, dz), then holds Shift.
+async function aimAndHold(dx = 0, dz = 1) {
+  const t = await page.evaluate(([x, z]) => window.__game.suggest(x, z), [dx, dz]);
+  if (!t) return null;
+  const hit = await page.evaluate(([x, y, z]) => window.__game.aimAt(x, y, z), [t.x, t.y, t.z]);
   await page.keyboard.down('Shift');
-  if (key) await page.keyboard.down(key);
-  await sleep(1100);
-  const h1 = await H();
-  await releaseAll();
-  return (h1.p.x - h0.p.x) * rx + (h1.p.z - h0.p.z) * rz;
+  return hit;
 }
-const none = await lateral(null), right = await lateral('KeyD'), left = await lateral('KeyA');
-check('D steers right, A steers left (hero frame)', right > none + 2 && left < none - 2, `right ${right.toFixed(1)} m, none ${none.toFixed(1)} m, left ${left.toFixed(1)} m`);
 
-// C. Holding swing chains webs and settles at cruising speed (aim held down the avenue).
-await teleport(0, 45, -400, 0, 0, 16);
-await page.keyboard.down('Shift'); await page.keyboard.down('KeyW');
-let attaches = 0, wasSwing = false;
-const speeds = [];
-const tc = Date.now();
-while (Date.now() - tc < 6000) {
-  const h = await page.evaluate(() => { window.__game.setLook(0, 0.12); return window.__game.hero(); });
-  if (h.swing.active && !wasSwing) attaches++;
-  wasSwing = h.swing.active;
-  if (Date.now() - tc > 3000) speeds.push(h.speed);
-  await sleep(10);
-}
+// A. An aimed web sticks fast, exactly where the crosshair was.
+await teleport(0, 50, -330, 0, 0, 22);
+const aimed = await aimAndHold();
+const att = await until((h) => h.swing.active, 1500);
+check('aimed web sticks within 300 ms', !!aimed && !!att && att.t < 300, att ? `${att.t} ms` : 'never attached');
 await releaseAll();
-const cruise = speeds.reduce((a, b) => a + b, 0) / Math.max(1, speeds.length) * 3.6;
-check('holding swing chains webs', attaches >= 3, `${attaches} webs in 6 s`);
-check('cruising speed above 100 km/h', cruise > 100, `${cruise.toFixed(0)} km/h`);
+
+// B. A miss is a miss: out over the water past the city's edge nothing is in web range, so a
+// press fires nothing (and the hero falls).
+await teleport(700, 40, 0, 0, 0, 10);
+await page.evaluate(() => window.__game.setLook(0, -0.6));
+await page.keyboard.down('Shift');
+const miss = await until((h) => h.swing.active, 600);
+await releaseAll();
+check('a press with nothing in range misses', !miss, miss ? 'a web attached' : 'no web');
+
+// C. A swing carries the hero forward and lets go cleanly on the rise.
+await teleport(0, 50, -330, 0, 0, 22);
+await aimAndHold();
+await until((h) => h.swing.active, 1500);
+const c0 = await H();
+const rel = await until((h) => !h.swing.active || (h.swing.angle > 25 && h.v.y > 0), 3000);
+await releaseAll();
+await sleep(50);
+const after = await H();
+check('a swing carries forward and releases', !!rel && after.state !== 'swing' && after.p.z - c0.p.z > 20 && after.speed > 12, `${(after.p.z - c0.p.z).toFixed(0)} m forward, ${(after.speed * 3.6).toFixed(0)} km/h, ${after.state}`);
 
 // D. Swing-jump: Space mid-swing leaps off with a big boost up.
 await teleport(0, 50, -330, 0, 0, 25);
-await page.keyboard.down('Shift');
+await aimAndHold();
 await until((h) => h.swing.active, 1500);
 await sleep(300);
 const sj0 = await H();
@@ -100,20 +95,26 @@ const sj1 = await H();
 await releaseAll();
 check('swing-jump leaps off the web', sj0.swing.active && !sj1.swing.active && sj1.v.y > sj0.v.y + 4, `vy ${sj0.v.y.toFixed(1)} -> ${sj1.v.y.toFixed(1)}`);
 
-// E2. Autopilot: hold swing and forward, nudge back to the avenue's centre with A / D, aim with the
-// mouse. Covers the length of Midtown without touching the street.
+// E2. A skilled run down the avenue: aim each web, hold, let go on the rise, steer back toward
+// the centre line. Covers the length of Midtown without touching the street.
 await teleport(0, 45, -400, 0, 0, 18);
-await page.keyboard.down('Shift'); await page.keyboard.down('KeyW');
+await page.keyboard.down('KeyW');
 const start = await H();
 const t0 = Date.now();
-let touched = false, walls = 0, wasWall = false, steering = null, maxSpeed = 0;
-while (Date.now() - t0 < 25000) {
-  const h = await page.evaluate(() => { window.__game.setLook(0, 0.12); return window.__game.hero(); });
+let touched = false, walls = 0, wasWall = false, steering = null, maxSpeed = 0, webs = 0, sinceRel = 999, lastT = Date.now(), holding = false;
+while (Date.now() - t0 < 30000) {
+  const h = await H();
+  const now = Date.now(); sinceRel += now - lastT; lastT = now;
   maxSpeed = Math.max(maxSpeed, h.speed);
   if (h.state === 'ground' && h.p.y < 1.5) { touched = true; break; }
   if (h.p.z - start.p.z > 480 || h.p.z > 110) break;
-  if (h.state === 'wall' && !wasWall) { walls++; await page.keyboard.press('Space'); }
+  if (h.state === 'wall' && !wasWall) { walls++; await page.keyboard.up('Shift'); holding = false; await page.keyboard.press('Space'); }
   wasWall = h.state === 'wall';
+  if (holding && h.state === 'swing' && ((h.swing.angle > 25 && h.v.y > 0) || (Math.abs(h.p.x) > 8 && Math.sign(h.p.x) * h.v.x > 5))) { await page.keyboard.up('Shift'); holding = false; sinceRel = 0; }
+  else if (!holding && h.state === 'air' && sinceRel > 150 && (h.v.y < 2 || h.p.y < 20)) {
+    const steerX = Math.max(-0.8, Math.min(0.8, -h.p.x * 0.05 - h.v.x * 0.04));
+    if (await aimAndHold(steerX, 1)) { holding = true; webs++; }
+  }
   const steer = -h.p.x * 0.06 - h.v.x * 0.05;
   const wantKey = steer > 0.25 ? 'KeyA' : steer < -0.25 ? 'KeyD' : null;
   if (wantKey !== steering) { if (steering) await page.keyboard.up(steering); if (wantKey) await page.keyboard.down(wantKey); steering = wantKey; }
@@ -122,7 +123,7 @@ while (Date.now() - t0 < 25000) {
 const end = await H();
 await releaseAll();
 const dist = end.p.z - start.p.z, secs = (Date.now() - t0) / 1000;
-check('autopilot swings the length of Midtown (480 m) without touching the street', !touched && dist >= 480, `${dist.toFixed(0)} m in ${secs.toFixed(1)} s, avg ${(dist / secs * 3.6).toFixed(0)} km/h, top ${(maxSpeed * 3.6).toFixed(0)} km/h, ${walls} wall contacts${touched ? ', touched the ground' : ''}`);
+check('a skilled run covers Midtown (480 m) without touching the street', !touched && dist >= 480, `${dist.toFixed(0)} m in ${secs.toFixed(1)} s, avg ${(dist / secs * 3.6).toFixed(0)} km/h, top ${(maxSpeed * 3.6).toFixed(0)} km/h, ${webs} webs, ${walls} wall contacts${touched ? ', touched the ground' : ''}`);
 
 // E. Wall stick and wall run.
 const tower = await page.evaluate(() => {

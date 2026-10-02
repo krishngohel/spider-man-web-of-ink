@@ -1,21 +1,25 @@
 import * as THREE from 'three';
-import { solveTwoBone } from './limbIK.js';
 import { COM_HEIGHT } from './model.js';
+import { createBodyRig } from './bodyRig.js';
+import { POSES, MIRRORED, LAYOUT, lerpPose } from './poses.js';
 
-// Drives the hero model from the physics state: which clip plays, how the whole body is oriented
-// (upright on the ground, along the web on a swing, flat against a wall, spread out in a glide),
-// and the arm IK that keeps the web hand on the strand. Visual only: it never touches physics.
+// Drives the hero model from the physics state. Two layers:
+//  - On the ground and on walls, Quaternius clips (idle, jog, sprint, crawl) play on the mixer.
+//  - In the air, a procedural body (bodyRig + poses.js) takes over: the swing is a blend of reach,
+//    drop, bottom tuck and rising kick keyed to how far through the arc the hero is, with the web
+//    hand pinned to the strand; releases throw flips and spins; firing a web snaps the arm out in
+//    the thwip sign; falls spread, dive or streamline; hard landings crouch into a superhero
+//    landing. Every pose number is sprung, so limbs follow through instead of snapping.
+// The whole body is oriented by `orient` (along the web on a swing, upright in a fall, flat in a
+// glide, head-first in a dive) with the trick rotations on top. Visual only: never touches physics.
 
-const CLIPS = ['Idle_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop', 'Jump_Loop', 'Jump_Land', 'Roll', 'Crouch_Idle_Loop', 'Crouch_Fwd_Loop', 'A_TPose', 'NinjaJump_Idle_Loop'];
+const CLIPS = ['Idle_Loop', 'Jog_Fwd_Loop', 'Sprint_Loop', 'Jump_Loop', 'Jump_Land', 'Roll', 'Crouch_Idle_Loop', 'Crouch_Fwd_Loop'];
 export const WALL_OFFSET = COM_HEIGHT - 0.4; // lifts the crawl pose off the wall to the capsule's face
 
-const UP = new THREE.Vector3(0, 1, 0);
-const DOWN = new THREE.Vector3(0, -1, 0);
-const fwd2 = new THREE.Vector3();
-const u = new THREE.Vector3(), f = new THREE.Vector3(), r = new THREE.Vector3();
-const m = new THREE.Matrix4(), qTarget = new THREE.Quaternion();
-const target = new THREE.Vector3(), pole = new THREE.Vector3(), tmp = new THREE.Vector3();
-const offTarget = new THREE.Vector3();
+const UP = new THREE.Vector3(0, 1, 0), DOWN = new THREE.Vector3(0, -1, 0);
+const u = new THREE.Vector3(), f = new THREE.Vector3(), r = new THREE.Vector3(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
+const m = new THREE.Matrix4(), qBase = new THREE.Quaternion(), qTrick = new THREE.Quaternion(), qTarget = new THREE.Quaternion();
+const vel = new THREE.Vector3(), shoulder = new THREE.Vector3(), handTarget = new THREE.Vector3(), offTarget = new THREE.Vector3();
 
 // Basis with the model's +y along `up` and +z along `fwd` (made perpendicular to up).
 function basis(up, fwd, out) {
@@ -28,21 +32,78 @@ function basis(up, fwd, out) {
   return out.setFromRotationMatrix(m);
 }
 
+const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+
+// Spring stiffness per pose group (1/s): legs lag behind the arms, which gives follow-through.
+const STIFF = new Float32Array(LAYOUT.SIZE);
+STIFF.fill(16);
+for (let i = 0; i < 5; i++) STIFF[i] = 12;           // spine, head
+for (let i = 5; i < 17; i++) STIFF[i] = 20;          // arms
+for (let i = 17; i < 29; i++) STIFF[i] = 10;         // legs
+for (let i = 29; i < 39; i++) STIFF[i] = 26;         // fingers
+STIFF[43] = 18;                                      // drop
+
+const TRICKS = {
+  frontflip: { axis: [1, 0, 0], turns: 1, dur: 0.7, tuck: 1 },
+  backflip: { axis: [1, 0, 0], turns: -1, dur: 0.8, tuck: 1 },
+  sideflip: { axis: [0, 0, 1], turns: 1, dur: 0.7, tuck: 0.6 },
+  spin: { axis: [0, 1, 0], turns: 1, dur: 0.65, tuck: 0.3 },
+  doubleflip: { axis: [1, 0, 0], turns: 2, dur: 1.0, tuck: 1 },
+};
+
 export function createPoser(heroModel) {
-  const { root, orient, animator, bones } = heroModel;
+  const { root, orient, animator, model } = heroModel;
   animator.prime(CLIPS);
   animator.play('Idle_Loop', { fade: 0 });
-  let once = null, onceT = 0;
-  let webHand = 'r';
+  const rig = createBodyRig(model);
+  const target = new Float32Array(LAYOUT.SIZE);
+  const cur = new Float32Array(LAYOUT.SIZE);
+  const curV = new Float32Array(LAYOUT.SIZE);
+  const blendA = new Float32Array(LAYOUT.SIZE), blendB = new Float32Array(LAYOUT.SIZE);
+  cur.set(POSES.air);
+  let procW = 0;            // 0 = clips, 1 = procedural
+  let webSide = 'r';
   let wasRope = false;
-  let ikW = 0;
-  const vel = new THREE.Vector3();
+  let once = null, onceT = 0;
+  let landT = 0;            // superhero landing hold
+  let shot = null;          // { t, x, y, z } while a web shot animates
+  let trick = null;         // { def, name, t }
+  let lastTrick = '';
+  let trickN = 0;
+  let variant = 0;          // which swing pose set this swing uses (A, B, C)
+  let swings = 0;
+  const webWorld = new THREE.Vector3();
+  const webHand = { side: 'r', world: webWorld };
 
-  function play(name, opts) { if (!once) animator.play(name, opts); }
+  function sideOf(hero, x, z) {
+    // Right of the facing (y up, right-handed): (-fz, fx).
+    const fx = hero.facing.x, fz = hero.facing.z;
+    return (x - hero.body.p.x) * -fz + (z - hero.body.p.z) * fx > 0 ? 'r' : 'l';
+  }
+  function startTrick(kind, hero) {
+    const v = hero.body.v, sp = Math.hypot(v.x, v.y, v.z);
+    if (sp < 14 && kind !== 'swingJump') { trick = null; return; }
+    let name;
+    if (kind === 'swingJump') name = v.y > 4 ? 'backflip' : 'frontflip';
+    else if (kind === 'perfect') name = sp > 30 ? 'doubleflip' : 'frontflip';
+    else {
+      // Vary it, never the same one twice running, sometimes nothing.
+      const pool = ['frontflip', 'spin', 'sideflip', 'none', 'frontflip', 'spin'];
+      name = pool[(trickN++ * 7 + Math.floor(sp)) % pool.length];
+      if (name === lastTrick) name = 'none';
+    }
+    lastTrick = name;
+    trick = name === 'none' ? null : { def: TRICKS[name], name, t: 0 };
+  }
+
+  const choose = (name) => (webSide === 'r' ? POSES : MIRRORED)[name];
+  const shoulderOf = () => model.getObjectByName(webSide === 'r' ? 'upperarm_r' : 'upperarm_l').getWorldPosition(shoulder);
 
   return {
-    get webHand() { return webHand; },
-    handWorld(out) { return (webHand === 'r' ? bones.handR : bones.handL).getWorldPosition(out); },
+    rig,
+    get webHand() { return webSide; },
+    get trick() { return trick ? trick.name : null; },
+    handWorld(out) { return model.getObjectByName(webSide === 'r' ? 'hand_r' : 'hand_l').getWorldPosition(out); },
 
     // at: where to draw the body (the game passes a position interpolated between physics steps).
     update(hero, dt, events, at = hero.body.p) {
@@ -52,102 +113,147 @@ export function createPoser(heroModel) {
       const speed = vel.length();
       const hs = Math.hypot(b.v.x, b.v.z);
       const st = hero.state;
-      const roped = (st === 'swing' && hero.swing.active) || (st === 'zip' && hero.rope.active);
-      // Orientation follows the line to the pivot; the arm reaches for where the strand sticks.
-      const pivot = st === 'swing' ? hero.swing.P : hero.rope.pivot;
-      const grip = st === 'swing' ? hero.swing.R : hero.rope.pivot;
-      if (roped && !wasRope) webHand = webHand === 'r' ? 'l' : 'r';
-      wasRope = roped;
+      const swinging = st === 'swing' && hero.swing.active;
+      const zipping = st === 'zip' && hero.rope.active;
+      const grip = swinging ? hero.swing.R : zipping ? hero.rope.pivots[0] : null;
+      if ((swinging || zipping) && !wasRope && grip) {
+        webSide = sideOf(hero, grip.x, grip.z);
+        // A new swing: pick its pose set (never the same twice running).
+        variant = (variant + 1 + (swings++ % 2)) % 3;
+      }
+      wasRope = swinging || zipping;
 
       for (const e of events) {
-        if (e.type === 'land') {
-          if (e.hard && hs > 8) { once = 'Roll'; onceT = 0.55; animator.play('Roll', { once: true, fade: 0.05, timeScale: 1.3 }); }
+        if (e.type === 'thwip') { webSide = sideOf(hero, e.x, e.z); shot = { t: 0, x: e.x, y: e.y, z: e.z }; trick = null; }
+        else if (e.type === 'release' || e.type === 'perfect' || e.type === 'swingJump') startTrick(e.type, hero);
+        else if (e.type === 'land') {
+          trick = null;
+          if (e.hard && hs < 10) landT = 0.55;
+          else if (e.hard) { once = 'Roll'; onceT = 0.55; animator.play('Roll', { once: true, fade: 0.05, timeScale: 1.3 }); }
           else if (e.impact > 6) { once = 'Jump_Land'; onceT = 0.3; animator.play('Jump_Land', { once: true, fade: 0.05, timeScale: 1.4 }); }
         }
       }
       if (once) { onceT -= dt; if (onceT <= 0 || st !== 'ground') once = null; }
+      const play = (name, opts) => { if (!once) animator.play(name, opts); };
+      if (shot) { shot.t += dt; if (shot.t > 0.22 || swinging) shot = null; }
+      if (trick) { trick.t += dt; if (trick.t >= trick.def.dur || st !== 'air') trick = null; }
+      if (landT > 0) { landT -= dt; if (st !== 'ground' || hs > 3) landT = 0; }
 
+      // Orientation and target pose for this state -------------------------------------------
+      let wantProc = 1;
+      let pin = null;
       offTarget.set(0, 0, 0);
-      switch (st) {
-        case 'ground': {
-          tmp.set(hero.facing.x, 0, hero.facing.z);
-          basis(UP, tmp, qTarget);
+      tmp.set(hero.facing.x, 0, hero.facing.z);
+      if (st === 'ground') {
+        basis(UP, tmp, qBase);
+        if (landT > 0) target.set(POSES.land);
+        else {
+          wantProc = 0;
           if (hs < 0.4) play('Idle_Loop');
           else if (hs < 10.5) play('Jog_Fwd_Loop', { timeScale: Math.max(0.6, hs / 6.5) });
           else play('Sprint_Loop', { timeScale: Math.max(0.8, hs / 11) });
-          break;
         }
-        case 'swing':
-        case 'zip': {
-          const p = pivot;
-          if (p) {
-            tmp.set(p.x - b.p.x, p.y - b.p.y, p.z - b.p.z);
-            // Lean along the line, but not all the way: the body trails a little behind it.
-            u.copy(tmp).normalize().lerp(UP, 0.25);
-            basis(u, speed > 1 ? vel : tmp.set(hero.facing.x, 0, hero.facing.z), qTarget);
+      } else if (st === 'wall') {
+        wantProc = 0;
+        const nx = hero.wall.nx, nz = hero.wall.nz;
+        tmp.set(nx, 0, nz);
+        const side = b.v.x * -nz + b.v.z * nx;
+        if (Math.abs(b.v.y) < 0.8 && Math.abs(side) > 0.8) tmp2.set(-nz * Math.sign(side), 0, nx * Math.sign(side));
+        else tmp2.set(0, b.v.y < -0.8 ? -1 : 1, 0);
+        basis(tmp, tmp2, qBase);
+        offTarget.set(nx * WALL_OFFSET, 0, nz * WALL_OFFSET);
+        if (b.v.y > 4 || hero.wallMomentum) play('Sprint_Loop', { timeScale: 1.1 });
+        else play(Math.hypot(b.v.x, b.v.y, b.v.z) > 0.6 ? 'Crouch_Fwd_Loop' : 'Crouch_Idle_Loop');
+      } else if (swinging || zipping) {
+        // Up along the line toward the pivot, facing the way we're travelling.
+        const P = swinging ? hero.swing.P : hero.rope.pivot;
+        tmp2.set(P.x - b.p.x, P.y - b.p.y, P.z - b.p.z).normalize();
+        basis(tmp2, speed > 1 ? vel : tmp, qBase);
+        if (zipping) target.set(POSES.zip);
+        else {
+          // Keyed to the swing's phase: reach -> drop -> bottom -> rise.
+          const ang = hero.swing.angle(b.p, b.v);
+          const bottom = variant === 1 ? 'bottomSplit' : variant === 2 ? 'bottomWide' : 'bottom';
+          const rise = variant === 1 ? 'riseScissor' : 'rise';
+          lerpPose(choose('reach'), choose('drop'), smoothstep(-65, -25, ang), blendA);
+          lerpPose(blendA, choose(bottom), smoothstep(-25, 0, ang), blendB);
+          lerpPose(blendB, choose(rise), smoothstep(0, 30, ang), target);
+          // Pin the web hand on the strand, arm's length toward where it sticks.
+          shoulderOf();
+          handTarget.set(grip.x, grip.y, grip.z).sub(shoulder).normalize().multiplyScalar(0.6).add(shoulder);
+          webWorld.copy(handTarget);
+          webHand.side = webSide;
+          pin = webHand;
+        }
+      } else if (st === 'glide') {
+        tmp2.set(0, -1, 0);
+        basis(speed > 1 ? vel : UP, tmp2, qBase);
+        target.set(POSES.wings);
+      } else {
+        // Air. A dive goes head first; otherwise upright with a lean into the motion.
+        if (hero.diving && speed > 8) {
+          tmp2.copy(tmp).negate().lerp(DOWN, 0.2);
+          basis(vel, tmp2, qBase);
+          target.set(POSES.dive);
+        } else {
+          // Lean into the flight: fast and level, the body lies along the path, head first, like
+          // a diver; slow, it stays upright.
+          const lean = smoothstep(12, 32, speed) * smoothstep(-0.9, -0.2, vel.y / Math.max(1, speed)) * 0.85;
+          u.set(0, 1, 0).lerp(tmp2.copy(vel).normalize(), lean);
+          basis(u, lean > 0.3 ? DOWN : tmp, qBase);
+          // Pose: rising slow and loose; soaring when fast; spread when dropping steeply.
+          lerpPose(POSES.air, POSES.soar, smoothstep(0.1, 0.5, lean), blendA);
+          lerpPose(blendA, POSES.spread, smoothstep(-6, -24, b.v.y) * (1 - lean), target);
+          // Falling toward the next web: the web arm comes forward, ready.
+          if (b.v.y < -2 && !trick) { lerpPose(target, choose('ready'), smoothstep(-2, -10, b.v.y) * 0.6, blendB); target.set(blendB); }
+          if (trick) {
+            const s = Math.sin(Math.PI * Math.min(1, trick.t / trick.def.dur));
+            lerpPose(target, POSES.tuck, s * trick.def.tuck, blendA);
+            target.set(blendA);
           }
-          play(st === 'zip' ? 'NinjaJump_Idle_Loop' : 'Jump_Loop', { fade: 0.12 });
-          break;
-        }
-        case 'wall': {
-          // The crouch pose, rotated so its floor is the wall: model up = wall normal, facing up
-          // the wall (or along it when crawling sideways).
-          const nx = hero.wall.nx, nz = hero.wall.nz;
-          tmp.set(nx, 0, nz);
-          const side = b.v.x * -nz + b.v.z * nx;
-          if (Math.abs(b.v.y) < 0.8 && Math.abs(side) > 0.8) f.set(-nz * Math.sign(side), 0, nx * Math.sign(side));
-          else f.set(0, b.v.y < -0.8 ? -1 : 1, 0);
-          fwd2.copy(f);
-          basis(tmp, fwd2, qTarget);
-          offTarget.set(nx * WALL_OFFSET, 0, nz * WALL_OFFSET);
-          const moving = Math.hypot(b.v.x, b.v.y, b.v.z) > 0.6;
-          if (b.v.y > 4) play('Sprint_Loop', { timeScale: 1.1 });
-          else play(moving ? 'Crouch_Fwd_Loop' : 'Crouch_Idle_Loop');
-          break;
-        }
-        case 'glide': {
-          // Flat, belly down, head along the flight path, arms out.
-          tmp.set(0, -1, 0);
-          basis(speed > 1 ? vel : UP, tmp, qTarget);
-          play('A_TPose', { fade: 0.2 });
-          break;
-        }
-        default: {
-          // Falling: upright with a lean into the motion; a dive goes head first.
-          if (hero.diving && speed > 8) {
-            tmp.set(hero.facing.x, 0, hero.facing.z);
-            basis(vel, tmp.negate().lerp(DOWN, 0.2), qTarget);
-          } else {
-            u.set(b.v.x * 0.012, 1, b.v.z * 0.012);
-            tmp.set(hero.facing.x, 0, hero.facing.z);
-            basis(u, tmp, qTarget);
+          if (shot) {
+            // Firing: snap the arm out at the target with the thwip sign.
+            target.set(choose('thwip'));
+            shoulderOf();
+            handTarget.set(shot.x, shot.y, shot.z).sub(shoulder).normalize().multiplyScalar(0.62).add(shoulder);
+            webWorld.copy(handTarget);
+            webHand.side = webSide;
+            pin = webHand;
           }
-          play('Jump_Loop', { fade: 0.15 });
         }
       }
-      const k = 1 - Math.exp(-dt * (st === 'swing' ? 10 : 14));
-      orient.quaternion.slerp(qTarget, k);
-      orient.position.lerp(offTarget, 1 - Math.exp(-dt * 12));
-      animator.update(dt);
 
-      // Web arm: reach along the line toward the pivot.
-      const wantIK = roped ? 1 : 0;
-      ikW += (wantIK - ikW) * Math.min(1, dt * 14);
-      if (ikW > 0.01 && grip) {
+      // Trick rotation on top of the base orientation, about a body axis.
+      qTarget.copy(qBase);
+      if (trick) {
+        const d = trick.def, x = Math.min(1, trick.t / d.dur);
+        const e = x * x * (3 - 2 * x);
+        tmp2.set(d.axis[0], d.axis[1], d.axis[2]);
+        qTrick.setFromAxisAngle(tmp2, e * d.turns * Math.PI * 2);
+        qTarget.multiply(qTrick);
+        orient.quaternion.slerp(qTarget, 1 - Math.exp(-dt * 40));
+      } else {
+        orient.quaternion.slerp(qTarget, 1 - Math.exp(-dt * (swinging ? 9 : 12)));
+      }
+
+      // Spring every pose number toward the target (critically damped).
+      const h = Math.min(dt, 1 / 30);
+      for (let i = 0; i < LAYOUT.SIZE; i++) {
+        const w = STIFF[i];
+        const a = w * w * (target[i] - cur[i]) - 2 * w * curV[i];
+        curV[i] += a * h;
+        cur[i] += curV[i] * h;
+      }
+      offTarget.y -= cur[LAYOUT.drop];
+      orient.position.lerp(offTarget, 1 - Math.exp(-dt * 14));
+
+      procW += ((wantProc ? 1 : 0) - procW) * Math.min(1, dt * 10);
+      animator.update(dt);
+      if (procW > 0.01) {
         root.updateMatrixWorld(true);
-        const p = grip;
-        target.set(p.x, p.y, p.z);
-        const up = webHand === 'r' ? bones.upperarmR : bones.upperarmL;
-        const lo = webHand === 'r' ? bones.lowerarmR : bones.lowerarmL;
-        const hand = webHand === 'r' ? bones.handR : bones.handL;
-        pole.set(-hero.facing.x, -0.5, -hero.facing.z);
-        solveTwoBone(up, lo, hand, target, pole, ikW);
-        if (st === 'zip') {
-          const up2 = webHand === 'r' ? bones.upperarmL : bones.upperarmR;
-          const lo2 = webHand === 'r' ? bones.lowerarmL : bones.lowerarmR;
-          const hand2 = webHand === 'r' ? bones.handL : bones.handR;
-          solveTwoBone(up2, lo2, hand2, target, pole, ikW);
-        }
+        rig.snapshot();
+        rig.apply(cur, pin);
+        rig.blendWithSnapshot(procW);
       }
     },
   };

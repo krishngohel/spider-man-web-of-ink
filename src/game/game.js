@@ -11,7 +11,7 @@ import { createInput } from '../core/input.js';
 import { loadSettings, saveSettings } from '../core/settings.js';
 import { STEP, MAX_SUBSTEPS, G, tune } from '../physics/constants.js';
 import { createWorld } from '../physics/world.js';
-import { findAimPoint, findZipPoint } from '../physics/anchors.js';
+import { findAimPoint, findZipPoint, findAnchor } from '../physics/anchors.js';
 import { buildTestCity } from '../world/testCity.js';
 import { buildCityMeshes, setNight } from '../world/cityMesh.js';
 import { createSky } from '../world/sky.js';
@@ -266,6 +266,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const events = [];
 
   const NO_LOOK = { dx: 0, dy: 0 };
+  let camOverride = null;
+  const sideDir = { x: 1, z: 0 };
   function interpolate() {
     const p = hero.body.p;
     // A teleport or respawn jumps: show the new spot, don't sweep to it.
@@ -325,9 +327,22 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     webLine.update(hand, hero.swing, hero.rope, hero.pendingWeb, tune.webTravel);
     sfx.setSpeed(mode === 'play' ? hero.speed : 0, dt);
 
-    camera.position.set(rig.pos.x, rig.pos.y, rig.pos.z);
-    camera.lookAt(rig.pos.x + rig.fwd.x, rig.pos.y + rig.fwd.y, rig.pos.z + rig.fwd.z);
-    if (Math.abs(camera.fov - rig.fov) > 0.01) { camera.fov = rig.fov; camera.updateProjectionMatrix(); }
+    if (camOverride) {
+      // Test hook: a fixed offset from the hero, looking at him (filming poses from the side).
+      // side: metres to the hero's left of travel (negative: right); up: metres above; fov.
+      const o = camOverride;
+      const v = hero.body.v, sh = Math.hypot(v.x, v.z);
+      const hx = sh > 1 ? v.x / sh : hero.facing.x, hz = sh > 1 ? v.z / sh : hero.facing.z;
+      sideDir.x += (hz - sideDir.x) * Math.min(1, dt * 4); sideDir.z += (-hx - sideDir.z) * Math.min(1, dt * 4);
+      const l = Math.hypot(sideDir.x, sideDir.z) || 1;
+      camera.position.set(renderP.x + (sideDir.x / l) * o.side, renderP.y + o.up, renderP.z + (sideDir.z / l) * o.side);
+      camera.lookAt(renderP.x, renderP.y, renderP.z);
+      if (camera.fov !== o.fov) { camera.fov = o.fov; camera.updateProjectionMatrix(); }
+    } else {
+      camera.position.set(rig.pos.x, rig.pos.y, rig.pos.z);
+      camera.lookAt(rig.pos.x + rig.fwd.x, rig.pos.y + rig.fwd.y, rig.pos.z + rig.fwd.z);
+    }
+    if (!camOverride && Math.abs(camera.fov - rig.fov) > 0.01) { camera.fov = rig.fov; camera.updateProjectionMatrix(); }
     sky.follow(camera);
     const hp = hero.body.p;
     sun.target.position.set(Math.round(hp.x / 8) * 8, 0, Math.round(hp.z / 8) * 8);
@@ -359,16 +374,35 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     hero: () => ({
       p: { ...hero.body.p }, v: { ...hero.body.v }, state: hero.state, speed: hero.speed,
       rope: { active: hero.rope.active || hero.swing.active, length: hero.swing.active ? hero.swing.L : hero.rope.length, pivots: hero.rope.pivots.length, tension: hero.swing.active ? hero.swing.tension : hero.rope.tension, stalled: hero.rope.stalled },
-      swing: { active: hero.swing.active, L: hero.swing.L, angle: hero.swing.active ? hero.swing.angle(hero.body.p) : 0 },
+      swing: { active: hero.swing.active, L: hero.swing.L, angle: hero.swing.active ? hero.swing.angle(hero.body.p, hero.body.v) : 0 },
       facing: { ...hero.facing },
     }),
     camera: () => ({ yaw: rig.yaw, pitch: rig.pitch, pos: { ...rig.pos }, fwd: { ...rig.fwd }, fov: rig.fov }),
     teleport(x, y, z, vx = 0, vy = 0, vz = 0, st = 'air', yaw = null) {
       hero.place(x, y, z, vx, vy, vz, st);
+      // Snap the drawn position too, so hooks used right after (aimAt) see the new spot.
+      prevP.x = renderP.x = x; prevP.y = renderP.y = y; prevP.z = renderP.z = z;
       if (yaw !== null) rig.yaw = yaw;
       rig.focus.x = x; rig.focus.y = y + 0.55; rig.focus.z = z;
     },
     setLook(yaw, pitch) { rig.yaw = yaw; rig.pitch = pitch; rig.sinceLook = 0; },
+    // Turns the camera so the crosshair sits on a world point (for scripted play).
+    aimAt(x, y, z) {
+      interpolate();
+      for (let i = 0; i < 4; i++) {
+        const dx = x - rig.pos.x, dy = y - rig.pos.y, dz = z - rig.pos.z, l = Math.hypot(dx, dy, dz) || 1;
+        rig.yaw = Math.atan2(dx, dz); rig.pitch = -Math.asin(dy / l); rig.sinceLook = 0;
+        rig.update(0, NO_LOOK, view, world, settings);
+      }
+      return findAimPoint(world, hero.body, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
+    },
+    // A good point to web next (the skilled-player pick the swing simulator uses).
+    suggest(dirX, dirZ) {
+      const a = findAnchor(world, hero.body, { dirX, dirZ, assist: 'high', g: G[settings.gravity] });
+      return a && { x: a.x, y: a.y, z: a.z };
+    },
+    poser: () => ({ trick: poser.trick, hand: poser.webHand }),
+    setCamOverride(o) { camOverride = o; },
     setSetting(k, v) { applySettings({ ...settings, [k]: v }); },
     get settings() { return settings; },
     play: () => enterPlay(),

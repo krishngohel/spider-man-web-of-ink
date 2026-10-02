@@ -37,20 +37,18 @@ export function createWebLine(scene) {
     // counting down from `travel`.
     update(hand, swing, rope, pending, travel) {
       used = 0;
-      if (swing.active) {
-        b.set(swing.R.x, swing.R.y, swing.R.z);
-        seg(hand, b, 0.028);
-      } else if (rope.active && rope.pivots.length) {
-        // The hand hangs from the last pivot; walk back toward the anchor.
+      const line = swing.active ? swing.rope : rope.active ? rope : null;
+      if (line && line.pivots.length) {
+        // The hand hangs from the last pivot; walk back through any wraps to the anchor.
         a.copy(hand);
-        for (let i = rope.pivots.length - 1; i >= 0; i--) {
-          const p = rope.pivots[i];
+        for (let i = line.pivots.length - 1; i >= 0; i--) {
+          const p = line.pivots[i];
           b.set(p.x, p.y, p.z);
           seg(a, b, 0.028);
           a.copy(b);
         }
       } else if (pending) {
-        const k = 1 - Math.max(0, pending.t) / travel;
+        const k = 1 - Math.max(0, pending.t) / (pending.travel ?? travel);
         b.set(pending.anchor.x, pending.anchor.y, pending.anchor.z);
         a.copy(hand);
         seg(a, b.sub(a).multiplyScalar(k).add(a), 0.024);
