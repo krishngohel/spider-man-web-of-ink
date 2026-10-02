@@ -2,17 +2,17 @@
 
 export const COPY = {
   title: { a: 'SPIDER-MAN', b: 'WEB OF INK' },
-  subtitle: 'Swing test build. Hold swing and the webs chain on their own. Steer, time your releases and fly.',
+  subtitle: 'Swing test build. Aim the crosshair at a building, hold swing, let go and aim the next one. Miss and you fall.',
   disclaimer: 'Unofficial fan game. Not affiliated with or endorsed by Marvel or Sony. Spider-Man and related characters are trademarks of Marvel. Made for fun, never sold.',
   buttons: { play: 'FREE SWING', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
   pause: 'PAUSED',
   clickToPlay: 'CLICK TO SWING',
-  noAnchor: 'NOTHING TO WEB',
+  noAnchor: 'MISSED',
   lowPower: 'Your browser is holding the game at 30 frames a second (Low Power Mode or Energy Saver). Plug in, or turn that mode off, for a smoother swing.',
   ok: 'Got it',
   // First-play tips, in order. Each one leaves when you do the thing it asks.
   tips: [
-    { id: 'swing', text: 'Run off the edge and hold <kbd>{swing}</kbd>. Keep holding and the webs chain on their own. Steer with the mouse or <kbd>{move}</kbd>.', done: 'release' },
+    { id: 'swing', text: 'Put the crosshair on a building (it turns white in range) and hold <kbd>{swing}</kbd>. Let go to fly, then aim the next web.', done: 'release' },
     { id: 'perfect', text: 'Let go of <kbd>{swing}</kbd> just after the bottom of a swing, on the way up, for a perfect release boost.', done: 'perfect' },
     { id: 'jump', text: 'Tap <kbd>{jump}</kbd> mid-swing to leap off the web, high and fast.', done: 'swingJump' },
     { id: 'zip', text: 'Look at a ledge and press <kbd>{zip}</kbd> to zip to it. Press <kbd>{jump}</kbd> the moment you land to launch.', done: 'launch' },
@@ -24,7 +24,7 @@ export const COPY = {
     rows: [
       ['{move}', 'Move and steer (swings follow where you point)'],
       ['Mouse', 'Look'],
-      ['{swing}', 'Hold in the air: swing (webs keep chaining while held). Let go just past the bottom for a boost. Ground: parkour run. Wall: run up'],
+      ['{swing}', 'Web where the crosshair points (white: in range), hold to swing, let go to fly. Let go just past the bottom for a boost. Ground: parkour run. Wall: run up'],
       ['{jump}', 'Jump. Swinging: swing-jump. In the air: web wings'],
       ['{zip}', 'Web zip to where you look. Then {jump} to launch'],
       ['{dive}', 'Dive (hold in the air)'],
@@ -61,7 +61,7 @@ export const COPY = {
     padRows: [
       ['Left stick', 'Move'],
       ['Right stick', 'Look'],
-      ['RT / R2 (hold)', 'Swing (chains while held), parkour run, wall run'],
+      ['RT / R2 (hold)', 'Web at the crosshair and swing, parkour run, wall run'],
       ['A / Cross', 'Jump, swing-jump, web wings'],
       ['LT + RT / L2 + R2', 'Web zip'],
       ['B / Circle (hold)', 'Dive'],

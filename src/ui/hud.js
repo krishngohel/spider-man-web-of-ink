@@ -2,7 +2,7 @@ import { el } from './dom.js';
 import { COPY } from './copy.js';
 import { bindingLabel } from '../core/bindings.js';
 
-const TIPS_KEY = 'web-of-ink-tips-v2'; // v2: tips rewritten for the chained swing
+const TIPS_KEY = 'web-of-ink-tips-v3'; // v3: tips rewritten for aimed webs
 
 // The in-play overlay: reticle, where the next web would stick, speed, frame rate, first-play tips
 // (each leaves when you do what it asks: Gotham lesson, cards that linger get in the way), speed
@@ -83,7 +83,7 @@ export function createHud(root, getSettings) {
     lowPower() { toastText.textContent = COPY.lowPower; toast.classList.remove('hidden'); },
     // Gameplay events from the hero (and 'reel' from the game).
     onEvent(e) {
-      if (e.type === 'noAnchor') noAnchorT = 0.8;
+      if (e.type === 'noAnchor' || e.type === 'miss') noAnchorT = 0.6;
       const t = COPY.tips[tipIndex];
       if (t && e.type === t.done) {
         tipIndex++;
@@ -101,6 +101,8 @@ export function createHud(root, getSettings) {
       stateLabel.textContent = dev ? state : '';
       noAnchorT -= dt;
       noAnchor.classList.toggle('show', noAnchorT > 0);
+      reticle.classList.toggle('valid', !!(anchor && anchor.valid));
+      reticle.classList.toggle('invalid', !!anchor && !anchor.valid);
       if (anchor && anchor.visible) {
         dot.classList.remove('none');
         dot.classList.toggle('zip', !!anchor.zip);

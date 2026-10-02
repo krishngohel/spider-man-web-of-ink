@@ -4,7 +4,7 @@ export const ACTIONS = [
   { id: 'back', label: 'Move back', group: 'Move' },
   { id: 'left', label: 'Move left', group: 'Move' },
   { id: 'right', label: 'Move right', group: 'Move' },
-  { id: 'swing', label: 'Swing (hold; webs chain while held), parkour run and wall run', group: 'Move' },
+  { id: 'swing', label: 'Web at the crosshair and swing (hold), parkour run and wall run', group: 'Move' },
   { id: 'jump', label: 'Jump. While swinging: swing-jump. In the air: web wings', group: 'Move' },
   { id: 'zip', label: 'Web zip to where the camera points', group: 'Move' },
   { id: 'dive', label: 'Dive (hold in the air)', group: 'Move' },

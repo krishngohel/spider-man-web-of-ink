@@ -11,7 +11,7 @@ import { createInput } from '../core/input.js';
 import { loadSettings, saveSettings } from '../core/settings.js';
 import { STEP, MAX_SUBSTEPS, G, tune } from '../physics/constants.js';
 import { createWorld } from '../physics/world.js';
-import { findSwingAnchor, findZipPoint } from '../physics/anchors.js';
+import { findAimPoint, findZipPoint } from '../physics/anchors.js';
 import { buildTestCity } from '../world/testCity.js';
 import { buildCityMeshes, setNight } from '../world/cityMesh.js';
 import { createSky } from '../world/sky.js';
@@ -224,25 +224,20 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const resetIntent = () => { clearEdges(); intent.swing = false; intent.jump = false; consumedSwing = false; consumedJump = false; swingLatch = false; };
 
   // Anchor preview for the HUD, refreshed ten times a second.
-  const preview = { visible: false, x: 0, y: 0, zip: false };
+  const preview = { visible: false, x: 0, y: 0, zip: false, valid: false };
   const pv = new THREE.Vector3();
   let previewT = 0, previewPoint = null;
+  // Every frame: would a web shot now stick, and where? (The same aim test the hero uses.)
+  const aimCam = { x: 0, y: 0, z: 0, fx: 0, fy: 0, fz: 1 };
   function updatePreview(dt) {
     previewT -= dt;
     if (previewT <= 0) {
-      previewT = 0.1;
-      previewPoint = null;
-      if (hero.state === 'air' || hero.state === 'glide') {
-        const m = Math.hypot(intent.moveX, intent.moveZ);
-        const f = m > 0.2 ? { x: intent.moveX / m, z: intent.moveZ / m } : { x: rig.fwd.x, z: rig.fwd.z };
-        const fl = Math.hypot(f.x, f.z) || 1;
-        const a = findSwingAnchor(world, hero.body, { dirX: f.x / fl, dirZ: f.z / fl, g: G[settings.gravity] });
-        previewPoint = a && a.R;
-        preview.zip = false;
-      } else if (hero.state === 'ground' || hero.state === 'wall') {
-        const hit = findZipPoint(world, hero.body, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
-        previewPoint = hit; preview.zip = true;
-      }
+      previewT = 1 / 30;
+      aimCam.x = rig.pos.x; aimCam.y = rig.pos.y; aimCam.z = rig.pos.z;
+      aimCam.fx = rig.fwd.x; aimCam.fy = rig.fwd.y; aimCam.fz = rig.fwd.z;
+      previewPoint = findAimPoint(world, hero.body, aimCam);
+      preview.valid = !!previewPoint;
+      preview.zip = false;
     }
     preview.visible = false;
     if (previewPoint) {

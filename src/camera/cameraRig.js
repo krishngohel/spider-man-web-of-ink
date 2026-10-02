@@ -13,8 +13,10 @@ export const CAM = {
   minPitch: -1.25, maxPitch: 1.35,
   wallClear: 0.3, groundClear: 0.6,
   look: 0.0024,
+  shoulder: 0.85, shoulderUp: 0.25,
 };
 
+const RAY = { ground: true };
 const smooth = (t) => { const x = Math.min(1, Math.max(0, t)); return x * x * (3 - 2 * x); };
 
 export function speedCurves(speed, fovSetting = 60) {
@@ -82,17 +84,28 @@ export function createCameraRig() {
     },
   };
 
+  // Over the right shoulder: the crosshair (screen centre) looks past the hero, never through him.
+  const sh = { x: 0, y: 0, z: 0 };
   function place(world) {
     const f = rig.focus, d = rig.fwd;
-    let dist = rig.dist;
-    // Back along -fwd from the focus; stop short of anything in between.
+    // Right of the view direction (y up, right-handed): f x up.
+    const hl = Math.hypot(d.x, d.z) || 1;
+    const rx = -d.z / hl, rz = d.x / hl;
+    let side = CAM.shoulder;
     if (world) {
-      const hit = world.raycast(f.x, f.y, f.z, -d.x, -d.y, -d.z, dist + CAM.wallClear, { ground: true });
+      const hit = world.raycast(f.x, f.y, f.z, rx, 0, rz, side + CAM.wallClear, RAY);
+      if (hit) side = Math.max(0, hit.t - CAM.wallClear);
+    }
+    sh.x = f.x + rx * side; sh.y = f.y + CAM.shoulderUp; sh.z = f.z + rz * side;
+    let dist = rig.dist;
+    // Back along -fwd from the shoulder point; stop short of anything in between.
+    if (world) {
+      const hit = world.raycast(sh.x, sh.y, sh.z, -d.x, -d.y, -d.z, dist + CAM.wallClear, RAY);
       if (hit) dist = Math.max(0.4, hit.t - CAM.wallClear);
     }
-    rig.pos.x = f.x - d.x * dist;
-    rig.pos.y = f.y - d.y * dist;
-    rig.pos.z = f.z - d.z * dist;
+    rig.pos.x = sh.x - d.x * dist;
+    rig.pos.y = sh.y - d.y * dist;
+    rig.pos.z = sh.z - d.z * dist;
     if (world) {
       const under = world.groundHeight(rig.pos.x, rig.pos.y, rig.pos.z);
       rig.pos.y = Math.max(rig.pos.y, under + CAM.groundClear);
