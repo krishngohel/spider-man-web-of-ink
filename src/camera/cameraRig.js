@@ -8,7 +8,7 @@ export const CAM = {
   baseDist: 4.6, speedDist: 3.2,
   baseFov: 60, speedFov: 22,
   fullSpeed: 60,
-  followDelay: 0.8, followRate: 1.6,
+  followDelay: 0.5, followRate: 2.6,
   focusHeight: 0.55,
   minPitch: -1.25, maxPitch: 1.35,
   wallClear: 0.3, groundClear: 0.6,

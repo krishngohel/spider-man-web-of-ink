@@ -11,7 +11,7 @@ import { createInput } from '../core/input.js';
 import { loadSettings, saveSettings } from '../core/settings.js';
 import { STEP, MAX_SUBSTEPS, G, tune } from '../physics/constants.js';
 import { createWorld } from '../physics/world.js';
-import { findAnchor, findZipPoint } from '../physics/anchors.js';
+import { findSwingAnchor, findZipPoint } from '../physics/anchors.js';
 import { buildTestCity } from '../world/testCity.js';
 import { buildCityMeshes, setNight } from '../world/cityMesh.js';
 import { createSky } from '../world/sky.js';
@@ -236,7 +236,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         const m = Math.hypot(intent.moveX, intent.moveZ);
         const f = m > 0.2 ? { x: intent.moveX / m, z: intent.moveZ / m } : { x: rig.fwd.x, z: rig.fwd.z };
         const fl = Math.hypot(f.x, f.z) || 1;
-        previewPoint = findAnchor(world, hero.body, { dirX: f.x / fl, dirZ: f.z / fl, assist: settings.swingAssist, g: G[settings.gravity] });
+        const a = findSwingAnchor(world, hero.body, { dirX: f.x / fl, dirZ: f.z / fl, g: G[settings.gravity] });
+        previewPoint = a && a.R;
         preview.zip = false;
       } else if (hero.state === 'ground' || hero.state === 'wall') {
         const hit = findZipPoint(world, hero.body, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
@@ -305,7 +306,6 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         if (i === 0) clearEdges();
       }
       alpha = adv.alpha;
-      if (hero.state === 'swing' && intent.jump && hero.rope.reelRate > 0 && !hero.rope.stalled && hero.rope.tension > 0) hud.onEvent({ type: 'reel' });
       events.push(...hero.events);
       hero.events.length = 0;
       for (const e of events) { sfx.event(e); hud.onEvent(e); }
@@ -327,7 +327,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (mode !== 'play' && mode !== 'title') interpolate();
     poser.update(hero, dt, events, renderP);
     poser.handWorld(hand);
-    webLine.update(hand, hero.rope, hero.pendingWeb, tune.webTravel);
+    webLine.update(hand, hero.swing, hero.rope, hero.pendingWeb, tune.webTravel);
     sfx.setSpeed(mode === 'play' ? hero.speed : 0, dt);
 
     camera.position.set(rig.pos.x, rig.pos.y, rig.pos.z);
@@ -363,7 +363,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     get mode() { return mode; },
     hero: () => ({
       p: { ...hero.body.p }, v: { ...hero.body.v }, state: hero.state, speed: hero.speed,
-      rope: { active: hero.rope.active, length: hero.rope.length, pivots: hero.rope.pivots.length, tension: hero.rope.tension, stalled: hero.rope.stalled },
+      rope: { active: hero.rope.active || hero.swing.active, length: hero.swing.active ? hero.swing.L : hero.rope.length, pivots: hero.rope.pivots.length, tension: hero.swing.active ? hero.swing.tension : hero.rope.tension, stalled: hero.rope.stalled },
+      swing: { active: hero.swing.active, L: hero.swing.L, angle: hero.swing.active ? hero.swing.angle(hero.body.p) : 0 },
       facing: { ...hero.facing },
     }),
     camera: () => ({ yaw: rig.yaw, pitch: rig.pitch, pos: { ...rig.pos }, fwd: { ...rig.fwd }, fov: rig.fov }),

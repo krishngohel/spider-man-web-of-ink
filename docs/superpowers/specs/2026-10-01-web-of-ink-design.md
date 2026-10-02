@@ -71,36 +71,35 @@ core is our own fixed-step, deterministic code so it can be unit-tested exactly.
 - Air drag: quadratic, F = -k |v| v. k is set per pose from a drag area so free-fall terminal
   velocity is 60 m/s in the normal pose and 85 m/s in a dive tuck (smaller frontal area).
 
-### 4.2 The rule
-Every change in the hero's velocity comes from exactly one of: gravity, air drag, web
-wing lift/drag, rope tension (a rope can only pull, toward its pivot), or a push off a real
-surface (ground, wall, perch, enemy). There are no mid-air jumps and no scripted arcs. Story
-set pieces obey the same rule.
+### 4.2 The feel rule (revised 2026-10-01 after the owner's playtest)
+The first build kept strictly real physics (webs on real wall points, true pendulum). The owner's
+playtest: swinging was not fluid, webs went to odd places, arcs were slow, timing was hard, and
+swings pulled him into walls. Decision: Insomniac-style feel, fun first. Gravity, drag, the rope
+constraint and collisions stay physical, and game-feel forces are added on top and logged in the
+ledger as a sixth source, 'assist' (steering the swing plane, pumping toward cruise speed,
+release boosts, air control, wall-run momentum). Velocity still only changes through the ledger.
 
-### 4.3 Web line
-- A web is a rope from the hero's hand to an anchor on real geometry. Length L is set to the
-  current distance at the moment it sticks (no yank on attach).
-- Slack (distance < L): no force. Taut: inextensible constraint with a small elastic give (up to
-  3% stretch through a stiff damped spring, then a hard clamp). The constraint removes only the
-  outward radial velocity component, so a swing with drag off conserves energy.
-- Max web length 70 m, min 6 m. Webs take 0.06 s to travel (visible THWIP line) and cannot
-  pass through geometry (line-of-sight raycast).
-- Rope wrapping: if the line from the hero to the pivot crosses a building edge, a new pivot is
-  inserted at that edge (remaining length shrinks accordingly). It unwraps when the hero swings
-  back past the edge plane. This is what gives corner whips.
-- Moving anchors: a web can attach to moving bodies (Vulture, Goblin glider, helicopters,
-  cars). Tension acts on both bodies in proportion to their masses.
+### 4.3 Swing line
+- The swing pivot is placed where a good arc needs it: ahead of and above the hero on his
+  heading, at a length that grows with speed (16 to 34 m), starting about 50 degrees behind it.
+- The strand attaches to the nearest real building surface at the pivot's height (rays from the
+  ideal pivot to the sides and forward, up to 45 m). The pivot's height is capped by that
+  building. No building in range (park lawns, open water): no swing; trees work in the park.
+- The swing is planar: sideways velocity relative to the heading is damped, and steering turns
+  the heading (and the pivot with it) at up to about 2.2 rad/s, so arcs carve around corners.
+- The line shortens so the bottom of an arc stays at least 2 m over the ground.
+- Zips and future web yanks still use the real rope (src/physics/rope.js) with wrapping.
 
-### 4.4 Anchor selection
-- No sky hooks. Anchors are points on real geometry: building top edges and corners, ledges,
-  water towers, cranes, signs, bridge cables, park trees (short). Precomputed per building into
-  a spatial hash.
-- Score candidates by: height above hero (at least 5 m), angle from travel and camera direction
-  (within 70 degrees), distance near an ideal that grows with speed, and clear line of sight.
-- Over open water or the middle of Central Park there may be no anchor: you zip, run, glide or
-  dive instead. The HUD shows a faint "no anchor" reticle state.
-- Setting "Swing assist" (Off / Normal / High) only changes which real anchor is picked. It never
-  moves the hero.
+### 4.4 Swing flow
+- Pump: through the bottom of each arc the hero accelerates toward the cruise speed (about
+  34 m/s), so momentum builds over a few swings and holds.
+- Holding swing chains automatically: the hero lets go at the sweet spot (about 45 degrees past
+  the bottom, rising) with a boost, and fires the next web near the top of the flight.
+- Letting go by hand inside the sweet window (25 to 60 degrees past the bottom) gives a bigger
+  "perfect release" boost. Jump during a swing is the swing-jump: a big forward and upward boost.
+- Hitting a wall during a swing becomes a wall run that keeps the speed (projected onto the wall,
+  with a bias upward). Holding swing runs up; at the top the hero vaults off with his speed.
+- Air control is strong: the velocity turns toward the stick or camera heading at any speed.
 
 ### 4.5 Moves
 - Swing: hold the swing input. Release to let go; momentum carries.
@@ -136,7 +135,7 @@ set pieces obey the same rule.
 - The camera uses its own sphere-cast and is clamped above the ground under it (Gotham fix).
 
 ### 4.7 Physics tests (vitest)
-- Energy is conserved within 1% over 20 s of a swing with drag off.
+- Rope (zip line): energy is conserved within 1% over 20 s with drag off.
 - Angular momentum about the pivot is conserved within 2% during a reel-in.
 - The rope never exceeds L x 1.03.
 - No tunneling: 10,000 random high-speed trajectories against boxes never end inside one.
@@ -147,8 +146,10 @@ set pieces obey the same rule.
 
 ### 4.8 Scripted feel checks
 - `scripts/swing-check.mjs` presses real keys in a frozen build and measures in the hero's own
-  frame: steering direction, reel speed gain, release carry, wall stick, no "no-anchor" dead
-  zones on the main avenues, average swing speed down 5th Avenue analog.
+  frame: steering direction, chained swings holding one key, cruise speed, swing-jump boost,
+  wall run keeping speed, zip and launch.
+- `scripts/swing-sim.mjs`: deterministic bot battery over the city; tracks clean runs, average
+  speed, speed smoothness and wall contacts.
 - Owner playtest gate after Plan 1: swinging must feel right before anything is built on top.
 
 ## 5. City

@@ -32,11 +32,15 @@ export function createWebLine(scene) {
     s.scale.set(width, len, width);
   }
   return {
-    // hand: world position of the web hand. pivots: rope pivots, anchor first. pending: a shot in
-    // flight { anchor, t } with t counting down from `travel`.
-    update(hand, rope, pending, travel) {
+    // hand: world position of the web hand. swing: the swing line (strand to where it sticks).
+    // rope: the zip line, pivots anchor first. pending: a shot in flight { anchor, t } with t
+    // counting down from `travel`.
+    update(hand, swing, rope, pending, travel) {
       used = 0;
-      if (rope.active && rope.pivots.length) {
+      if (swing.active) {
+        b.set(swing.R.x, swing.R.y, swing.R.z);
+        seg(hand, b, 0.028);
+      } else if (rope.active && rope.pivots.length) {
         // The hand hangs from the last pivot; walk back toward the anchor.
         a.copy(hand);
         for (let i = rope.pivots.length - 1; i >= 0; i--) {

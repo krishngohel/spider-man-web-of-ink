@@ -1,7 +1,8 @@
-// The physics rule, enforced: a body's velocity only ever changes through applyDv, and only for
-// one of these physical reasons. Anything else throws. Each body keeps a running sum per source,
-// so a test can check that the sources add up to the whole change in velocity.
-export const SOURCES = ['gravity', 'drag', 'lift', 'rope', 'surface'];
+// A body's velocity only ever changes through applyDv, for one of these reasons. Anything else
+// throws. Each body keeps a running sum per source, so a test can check that the sources add up to
+// the whole change in velocity. 'assist' is game feel on top of the physics (swing steering and
+// pumping, release boosts, air control, wall-run momentum): see spec 4.2.
+export const SOURCES = ['gravity', 'drag', 'lift', 'rope', 'surface', 'assist'];
 const ALLOWED = new Set(SOURCES);
 
 export function createBody({ mass = 80, x = 0, y = 0, z = 0 } = {}) {

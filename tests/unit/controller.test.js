@@ -81,16 +81,26 @@ describe('swinging', () => {
   // rather than speed, so speed alone is the wrong measure).
   const energy = (h) => 0.5 * h.speed ** 2 + 19.62 * h.body.p.y;
 
-  it('reeling in near the bottom of the arc pumps energy into the swing', () => {
-    const after = (reel) => {
-      const w = city();
-      const h = createHero(w);
-      h.place(0, 40, 0, 0, 0, 20);
-      const i = emptyIntent(); i.swing = true; i.swingPressed = true;
-      run(h, i, 1.6, () => { i.jump = reel && h.state === 'swing' && Math.abs(h.body.v.y) < 6; });
-      return energy(h);
-    };
-    expect(after(true)).toBeGreaterThan(after(false) + 20);
+  it('holding swing chains arcs and builds speed toward cruise speed', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(0, 45, -150, 0, 0, 12);
+    const i = emptyIntent(); i.swing = true; i.swingPressed = true; i.moveZ = 1;
+    let swings = 0, last = '';
+    run(h, i, 6, () => { if (h.state === 'swing' && last !== 'swing') swings++; last = h.state; });
+    expect(swings).toBeGreaterThanOrEqual(3);
+    expect(h.speed).toBeGreaterThan(22);
+    expect(h.body.p.z).toBeGreaterThan(-150 + 100);
+    expect(h.body.p.y).toBeGreaterThan(3);
+  });
+  it('a swing keeps to its plane: no sideways yank toward the wall it is stuck to', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(0, 45, -150, 0, 0, 20);
+    const i = emptyIntent(); i.swing = true; i.swingPressed = true; i.moveZ = 1;
+    let maxSide = 0;
+    run(h, i, 1.5, () => { maxSide = Math.max(maxSide, Math.abs(h.body.p.x)); });
+    expect(maxSide).toBeLessThan(4);
   });
   it('no air jumps: a jump press in mid-air adds no speed', () => {
     const w = city();
@@ -121,14 +131,25 @@ describe('swinging', () => {
 });
 
 describe('walls', () => {
-  it('sticks to a wall, removing the speed into it', () => {
+  it('a slow hit sticks to the wall, removing the speed into it', () => {
     const w = city();
     const h = createHero(w);
-    h.place(5, 30, 25, 20, 0, 5);
-    const i = emptyIntent();
-    run(h, i, 1);
+    h.place(12, 30, 25, 5, 0, 1);
+    run(h, emptyIntent(), 0.6);
     expect(h.state).toBe('wall');
     expect(Math.abs(h.body.v.x)).toBeLessThan(1);
+  });
+  it('a fast hit becomes a wall run that keeps most of the speed', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(12, 30, 25, 20, 0, 6);
+    const before = Math.hypot(20, 6);
+    let ran = null;
+    run(h, emptyIntent(), 0.6, () => { if (!ran && h.state === 'wall') ran = { speed: h.speed, vx: h.body.v.x, vy: h.body.v.y }; });
+    expect(ran).not.toBe(null);
+    expect(ran.speed).toBeGreaterThan(before * 0.6);
+    expect(Math.abs(ran.vx)).toBeLessThan(1);
+    expect(ran.vy).toBeGreaterThan(2);
   });
   it('wall run climbs', () => {
     const w = city();

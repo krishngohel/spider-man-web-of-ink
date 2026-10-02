@@ -1,17 +1,21 @@
 import { G, tune } from '../physics/constants.js';
 import { createBody, applyDv, placeBody } from '../physics/ledger.js';
-import { applyGravity, applyDrag, applyBodyLift, applyGlide, dragK } from '../physics/aero.js';
+import { applyGravity, applyDrag, applyGlide, dragK } from '../physics/aero.js';
 import { createRope } from '../physics/rope.js';
-import { findAnchor, findZipPoint } from '../physics/anchors.js';
+import { createSwing, releaseBoost, swingJump, airControl } from '../physics/swing.js';
+import { findSwingAnchor, findZipPoint } from '../physics/anchors.js';
 
 // The hero's movement, free of Three.js. One call to step() is one fixed physics step. States:
 //   ground  running, parkour (swing held), jumping, point launch after a zip
-//   air     falling; body-lift steering; swing shoots a web, a new jump press opens web wings
-//   swing   hanging on a web: reel (hold jump), release flick (tap jump near the release)
-//   zip     winching to a point; arrival perches on a roof or sticks to a wall
-//   wall    stuck to a facade: crawl, wall run (hold swing), jump off, vault over the top
+//   air     falling, with air control; swing shoots a web (holding swing chains webs), a new jump
+//           press opens web wings
+//   swing   an Insomniac-style arc (physics/swing.js): steer, auto release at the sweet spot
+//           while held, perfect release by hand, jump for a swing-jump
+//   zip     winching to a point on the real rope; arrival perches on a roof or sticks to a wall
+//   wall    on a facade: momentum from a swing carries into a wall run; crawl, run up (hold
+//           swing), jump off, vault over the top
 //   glide   web wings
-// Every velocity change goes through the ledger (gravity, drag, lift, rope, surface).
+// Every velocity change goes through the ledger (gravity, drag, lift, rope, surface, assist).
 
 export const HALF_SEG = 0.5;
 const SUBMOVE = 0.3;
@@ -25,7 +29,6 @@ const REACH = 1.6;
 const CONTACT_FRESH = 0.07;
 const ZIP_TIMEOUT = 3;
 const WEB_RETRY = 0.12;
-const AUTO_SHOOT_AIR = 0.12;
 const WALL_ACCEL = 30;
 const RUN_UP_ACCEL = 60;
 const ADHESION = 0.5;
@@ -43,11 +46,12 @@ export function emptyIntent() {
 export function createHero(world, { gravity = 'comic', assist = 'normal' } = {}) {
   const body = createBody({ mass: tune.mass });
   const rope = createRope();
+  const swing = createSwing();
   const touch = { ground: false, wall: false, ceiling: false, nx: 0, nz: 0, box: null, groundBox: null, impact: 0 };
   const c = {};
 
   const hero = {
-    body, rope, touch,
+    body, rope, swing, touch,
     state: 'air',
     gravity, assist,
     time: 0,
@@ -60,7 +64,6 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     webRetry: 0,
     shootNow: false,
     lastJumpPress: -10,
-    flick: 0,
     zip: null,
     zipTime: 0,
     launchUntil: -1,
@@ -68,6 +71,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     landing: null,
     contactAge: 0,
     lastNoAnchor: -10,
+    wallMomentum: false,
     // Tests turn this on: a surface push with nothing to push against throws.
     strict: false,
     events: [],
@@ -75,7 +79,9 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     place(x, y, z, vx = 0, vy = 0, vz = 0, state = 'air') {
       placeBody(body, x, y, z, vx, vy, vz);
       rope.release();
-      this.pendingWeb = null; this.zip = null; this.flick = 0;
+      swing.release();
+      this.wallMomentum = false;
+      this.pendingWeb = null; this.zip = null;
       this.state = state;
       this.airTime = 0; this.ungrounded = 0; this.wallLost = 0;
       this.launchUntil = -1; this.webRetry = 0; this.lastJumpPress = -10; this.shootNow = false;
@@ -137,12 +143,12 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (c.wall) { touch.wall = true; touch.nx = c.nx; touch.nz = c.nz; touch.box = c.box; hero.contactAge = 0; }
   }
 
-  function airForces(intent, dt, liftScale = 1) {
+  function airForces(intent, dt) {
     applyGravity(body, g(), dt);
     hero.diving = intent.dive && hero.state === 'air';
     applyDrag(body, dragK(g(), hero.diving ? tune.diveTerminal : tune.terminal), dt);
     const m = Math.hypot(intent.moveX, intent.moveZ);
-    if (m > 0.05) applyBodyLift(body, intent.moveX / m, intent.moveZ / m, m * liftScale, dt);
+    if (m > 0.05) airControl(body, intent.moveX, intent.moveZ, m, dt);
   }
 
   function wantedHeading(intent) {
@@ -155,7 +161,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
 
   function shootWeb(intent) {
     const h = wantedHeading(intent);
-    const a = findAnchor(world, body, { dirX: h.x, dirZ: h.z, assist: hero.assist, g: g() });
+    const a = findSwingAnchor(world, body, { dirX: h.x, dirZ: h.z, g: g() });
     if (!a) {
       hero.webRetry = WEB_RETRY;
       // Holding swing with nothing to web retries every 0.12 s; tell the player twice a second.
@@ -170,7 +176,9 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   function land() {
     const hard = touch.impact > tune.hardLanding;
     if (rope.active) { rope.release(); emit('release'); }
-    hero.pendingWeb = null; hero.zip = null; hero.flick = 0;
+    if (swing.active) { swing.release(); emit('release'); }
+    hero.wallMomentum = false;
+    hero.pendingWeb = null; hero.zip = null;
     hero.state = 'ground';
     hero.ungrounded = 0;
     emit('land', { hard, impact: touch.impact });
@@ -180,7 +188,9 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     const h = Math.hypot(n.nx, n.nz);
     if (h < 0.5) return false; // not a wall (a ceiling or a floor): stay as we are
     if (rope.active) { rope.release(); emit('release'); }
-    hero.pendingWeb = null; hero.zip = null; hero.flick = 0;
+    if (swing.active) { swing.release(); emit('release'); }
+    hero.wallMomentum = false;
+    hero.pendingWeb = null; hero.zip = null;
     hero.state = 'wall';
     hero.wall.nx = n.nx / h; hero.wall.nz = n.nz / h; hero.wall.box = n.box;
     hero.wallLost = 0;
@@ -259,20 +269,22 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     hero.webRetry -= dt;
     airForces(intent, dt);
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
-    const wantShot = intent.swingPressed || hero.shootNow || (intent.swing && hero.airTime > AUTO_SHOOT_AIR && body.v.y < 2);
+    // Holding swing chains webs: the next one fires near the top of the flight.
+    const wantShot = intent.swingPressed || hero.shootNow || (intent.swing && hero.airTime > tune.chainDelay && body.v.y < tune.chainApexVy);
     if (wantShot && !hero.pendingWeb && hero.webRetry <= 0) shootWeb(intent);
     hero.shootNow = false;
     if (hero.pendingWeb) {
       hero.pendingWeb.t -= dt;
       if (!intent.swing) hero.pendingWeb = null;
       else if (hero.pendingWeb.t <= 0) {
-        rope.attach(hero.pendingWeb.anchor, body);
+        const a = hero.pendingWeb.anchor;
+        swing.attach(a, a.hx, a.hz);
         hero.pendingWeb = null;
         hero.state = 'swing';
-        hero.flick = 0;
         emit('attach');
-        moveOnRope(dt);
-        afterRopeContacts();
+        const before = hero.speed;
+        move(dt);
+        swingContacts(before);
         return;
       }
     }
@@ -280,51 +292,78 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       hero.state = 'glide';
       emit('wings');
     }
+    const before = hero.speed;
     move(dt);
     if (touch.ground && body.v.y <= 0.01) land();
-    else if (touch.wall) enterWall(touch);
+    else if (touch.wall) wallWithMomentum(before);
   }
 
   // Swing ----------------------------------------------------------------------------------
   function swingStep(intent, dt) {
     hero.airTime += dt;
-    airForces(intent, dt, 0.6);
-    if (hero.flick > 0) {
-      rope.setReel(tune.flickSpeed, tune.flickTension);
-      hero.flick -= dt;
-      if (hero.flick <= 0) { releaseRope(); move(dt); airContacts(); return; }
-    } else {
-      rope.setReel(intent.jump ? tune.winchSpeed : 0, tune.winchTension);
-      if (!intent.swing) {
-        if (hero.time - hero.lastJumpPress <= tune.flickWindow) {
-          hero.flick = tune.flickTime;
-          emit('flick');
-        } else { releaseRope(); move(dt); airContacts(); return; }
-      }
+    applyGravity(body, g(), dt);
+    applyDrag(body, dragK(g(), tune.swingTerminal), dt);
+    const m = Math.hypot(intent.moveX, intent.moveZ);
+    if (m > 0.05) swing.steer(body, intent.moveX, intent.moveZ, m, dt);
+    const p = body.p, v = body.v;
+    swing.step(body, dt, world.groundHeight(p.x, p.y - 0.9, p.z));
+    const before = hero.speed;
+    move(dt);
+    if (swingContacts(before)) return;
+    const ang = swing.angle(p);
+    if (intent.jumpPressed) {
+      // Swing-jump: off the line with a big push forward and up.
+      swing.release();
+      swingJump(body, swing.hx, swing.hz);
+      toAir();
+      emit('swingJump');
+      return;
     }
-    moveOnRope(dt);
-    afterRopeContacts();
+    if (!intent.swing) {
+      // Let go by hand: a bigger boost inside the sweet window.
+      const perfect = ang >= tune.perfectMin && ang <= tune.perfectMax && v.y > 0;
+      swing.release();
+      if (ang > 0) releaseBoost(body, perfect);
+      toAir();
+      emit(perfect ? 'perfect' : 'release');
+      return;
+    }
+    // Holding: let go at the sweet spot, or when the arc has run out.
+    const spent = swing.t > 0.5 && v.y < -1 && ang > 5;
+    if ((ang >= tune.releaseAngle && v.y > 0) || spent || swing.t > 2.6) {
+      swing.release();
+      if (ang > 0) releaseBoost(body, false);
+      toAir();
+      emit('release');
+    }
   }
 
-  function releaseRope() {
-    rope.release();
-    hero.flick = 0;
+  function toAir() {
     hero.state = 'air';
-    hero.airTime = 0.2;
-    emit('release');
+    hero.airTime = 0;
   }
 
-  function afterRopeContacts() {
-    if (touch.ground && body.v.y <= 0.5) land();
-    else if (touch.wall) {
-      // Swung into a facade: let go and stick to it, like landing a hand on a wall.
-      enterWall(touch);
-    }
+  // A swing ends against the ground or a wall. Returns true when the state changed.
+  function swingContacts(before) {
+    if (touch.ground && body.v.y <= 0.5) { land(); return true; }
+    if (touch.wall) { wallWithMomentum(before); return true; }
+    return false;
   }
 
-  function airContacts() {
-    if (touch.ground && body.v.y <= 0.01) land();
-    else if (touch.wall) enterWall(touch);
+  // Into a wall at speed: a wall run that keeps most of the speed, bent upward (Insomniac feel).
+  // Slow contacts just stick, as before.
+  function wallWithMomentum(before) {
+    if (!enterWall(touch)) return;
+    const v = body.v;
+    const keep = before * tune.wallRunKeep;
+    if (keep < tune.wallCrawlSpeed + 2) return;
+    // Direction along the wall: what the collision left, tipped upward.
+    const tl = Math.hypot(v.x, v.z);
+    const dx = v.x, dz = v.z, dy = Math.max(v.y, 0) + tl * 0.6 + 2;
+    const l = Math.hypot(dx, dy, dz) || 1;
+    applyDv(body, 'assist', (dx / l) * keep - v.x, (dy / l) * keep - v.y, (dz / l) * keep - v.z);
+    hero.wallMomentum = true;
+    emit('wallRun');
   }
 
   // Zip ------------------------------------------------------------------------------------
@@ -359,7 +398,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       return;
     }
     if (touch.wall && enterWall(touch)) { hero.launchUntil = hero.time + tune.launchWindow; return; }
-    if (hero.zipTime > ZIP_TIMEOUT) { hero.zip = null; releaseRope(); }
+    if (hero.zipTime > ZIP_TIMEOUT) { hero.zip = null; rope.release(); toAir(); emit('release'); }
   }
 
   // Wall -----------------------------------------------------------------------------------
@@ -377,14 +416,27 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
         push(nx * out - nz * side * 4, tune.wallJumpUp - Math.min(0, v.y), nz * out + nx * side * 4, 'wall jump');
         emit('wallJump');
       }
-      hero.state = 'air'; hero.airTime = 0.1;
+      hero.state = 'air'; hero.airTime = 0.1; hero.wallMomentum = false;
       move(dt);
       return;
     }
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
 
-    // Desired velocity on the wall, reached with limited accelerations (all surface pushes).
     const vn = v.x * nx + v.z * nz;
+    if (hero.wallMomentum) {
+      // Carried in from a swing: run along and up the wall on that speed. Horizontal speed fades
+      // slowly, half of gravity is taken by the legs, holding swing keeps at least the run-up pace.
+      const thx0 = v.x - vn * nx, thz0 = v.z - vn * nz;
+      const th = Math.hypot(thx0, thz0);
+      const k = th > 1e-6 ? Math.max(0, th - tune.wallRunFriction * dt) / th : 0;
+      let dy = g() * 0.5 * dt;
+      if (runningUp(intent) && v.y + dy < tune.wallRunSpeed) dy = Math.min(tune.wallRunSpeed - v.y, RUN_UP_ACCEL * dt);
+      push(thx0 * (k - 1) + (-ADHESION - vn) * nx, dy, thz0 * (k - 1) + (-ADHESION - vn) * nz, 'wall run');
+      if (Math.hypot(th * k, v.y) < tune.wallCrawlSpeed + 1) hero.wallMomentum = false;
+      afterWallMove(intent, dt);
+      return;
+    }
+    // Desired velocity on the wall, reached with limited accelerations (all surface pushes).
     const thx = v.x - vn * nx, thz = v.z - vn * nz; // along the wall, horizontal
     const mx = intent.moveX, mz = intent.moveZ;
     const into = -(mx * nx + mz * nz);
@@ -405,6 +457,13 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     // Adhesion: keep a slight press into the wall so the contact holds.
     const dn = -ADHESION - vn;
     push(dhx + dn * nx, dy, dhz + dn * nz, 'wall');
+    afterWallMove(intent, dt);
+  }
+
+  // Moves along the wall and handles losing it (vault over the top, or let go) and the ground.
+  function afterWallMove(intent, dt) {
+    const v = body.v;
+    const nx = hero.wall.nx, nz = hero.wall.nz;
     move(dt);
     if (touch.wall) {
       hero.wallLost = 0;
@@ -419,7 +478,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
           push(-nx * 4, 5, -nz * 4, 'wall vault', true);
           emit('vault');
         }
-        hero.state = 'air'; hero.airTime = 0.2;
+        hero.state = 'air'; hero.airTime = 0.2; hero.wallMomentum = false;
         return;
       }
     }

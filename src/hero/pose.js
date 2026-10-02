@@ -52,7 +52,10 @@ export function createPoser(heroModel) {
       const speed = vel.length();
       const hs = Math.hypot(b.v.x, b.v.z);
       const st = hero.state;
-      const roped = hero.rope.active && (st === 'swing' || st === 'zip');
+      const roped = (st === 'swing' && hero.swing.active) || (st === 'zip' && hero.rope.active);
+      // Orientation follows the line to the pivot; the arm reaches for where the strand sticks.
+      const pivot = st === 'swing' ? hero.swing.P : hero.rope.pivot;
+      const grip = st === 'swing' ? hero.swing.R : hero.rope.pivot;
       if (roped && !wasRope) webHand = webHand === 'r' ? 'l' : 'r';
       wasRope = roped;
 
@@ -76,7 +79,7 @@ export function createPoser(heroModel) {
         }
         case 'swing':
         case 'zip': {
-          const p = hero.rope.pivot;
+          const p = pivot;
           if (p) {
             tmp.set(p.x - b.p.x, p.y - b.p.y, p.z - b.p.z);
             // Lean along the line, but not all the way: the body trails a little behind it.
@@ -130,9 +133,9 @@ export function createPoser(heroModel) {
       // Web arm: reach along the line toward the pivot.
       const wantIK = roped ? 1 : 0;
       ikW += (wantIK - ikW) * Math.min(1, dt * 14);
-      if (ikW > 0.01 && hero.rope.pivot) {
+      if (ikW > 0.01 && grip) {
         root.updateMatrixWorld(true);
-        const p = hero.rope.pivot;
+        const p = grip;
         target.set(p.x, p.y, p.z);
         const up = webHand === 'r' ? bones.upperarmR : bones.upperarmL;
         const lo = webHand === 'r' ? bones.lowerarmR : bones.lowerarmL;

@@ -151,3 +151,57 @@ export function findZipPoint(world, hero, cam) {
   }
   return null;
 }
+
+// Swing anchor (spec 4.3): the pivot goes where a good arc needs it, ahead of and above the hero
+// on his heading, and the strand sticks to the nearest real building at that height (rays from
+// the ideal pivot to both sides, ahead and diagonally ahead). No building in reach: fall back to
+// the raycast fan (park trees, odd spots), with the pivot moved into the heading's plane. Nothing
+// at all: null (open lawns and water can't be swung over).
+const SWING_RAY = { ground: false };
+export function findSwingAnchor(world, hero, { dirX = 0, dirZ = 1, g = 19.62 } = {}) {
+  const p = hero.p, v = hero.v;
+  const speed = Math.hypot(v.x, v.y, v.z);
+  const sh = Math.hypot(v.x, v.z);
+  let hx = dirX, hz = dirZ;
+  if (sh > 4) { hx += (v.x / sh) * 0.35; hz += (v.z / sh) * 0.35; }
+  const hl = Math.hypot(hx, hz) || 1;
+  hx /= hl; hz /= hl;
+  const L = Math.max(tune.swingLenMin, Math.min(tune.swingLenMax, tune.swingLenBase + tune.swingLenPerSpeed * speed));
+  // Altitude hold: above the working height the arc starts steeper and dips more, below it the
+  // arc is flatter, so a chain of swings settles around altTarget over the ground.
+  const floor0 = world.groundHeight(p.x, p.y - 0.9, p.z);
+  const alt = p.y - floor0;
+  const thDeg = Math.max(30, Math.min(80, tune.swingStartAngle + tune.altGain * (alt - tune.altTarget)));
+  const th = thDeg * DEG;
+  let px = p.x + hx * L * Math.sin(th), py = p.y + L * Math.cos(th), pz = p.z + hz * L * Math.sin(th);
+  // An ideal pivot inside a building: pull it back toward the hero to that building's face.
+  for (let i = 0; i < 12 && world.pointInside(px, py, pz); i++) { px -= hx * 2; pz -= hz * 2; }
+  const sx = -hz, sz = hx;
+  const dirs = [
+    [sx, sz], [-sx, -sz], [hx, hz],
+    [(hx + sx) * Math.SQRT1_2, (hz + sz) * Math.SQRT1_2], [(hx - sx) * Math.SQRT1_2, (hz - sz) * Math.SQRT1_2],
+  ];
+  let R = null;
+  for (let level = 0; level < 5 && !R; level++) {
+    const y = py - level * 6;
+    if (y < p.y + 4) break;
+    let best = null;
+    for (const [dx, dz] of dirs) {
+      const hit = world.raycast(px, y, pz, dx, 0, dz, tune.swingReach, SWING_RAY);
+      if (hit && hit.box && (!best || hit.t < best.t)) best = hit;
+    }
+    if (best) { R = best; py = y; }
+  }
+  if (!R) {
+    const a = findAnchor(world, hero, { dirX: hx, dirZ: hz, assist: 'high', g });
+    if (!a) return null;
+    R = a;
+    // Into the heading's plane, at the strand's height.
+    const off = (a.x - p.x) * sx + (a.z - p.z) * sz;
+    px = a.x - sx * off; pz = a.z - sz * off; py = a.y;
+  }
+  const floor = world.groundHeight(p.x, p.y - 0.9, p.z);
+  if (py - floor - tune.groundClear < 5) return null;
+  const len = Math.hypot(px - p.x, py - p.y, pz - p.z);
+  return { P: { x: px, y: py, z: pz }, R: { x: R.x, y: R.y, z: R.z }, L: len, hx, hz, x: R.x, y: R.y, z: R.z };
+}
