@@ -21,6 +21,7 @@ export function createLizard(ctx) {
   const a = createBossActor(ctx, { char: 'lizard', hp: 440, armor: 0.55, poise: 999, mass: 120, radius: 0.55, at: start, arena: chase ? null : arena, facing: 0 });
   let done = false, failed = false, hits = 0, hitCd = 0, wp = 2, farT = 0, hopT = 2;
   let phase = 1, think = 1.3, pounce = null, roared = 0, webs = 0, minions = [];
+  a.dmgScale = 0.85;
 
   function countHit(w) {
     if (hitCd > 0 || done) return;
@@ -52,7 +53,7 @@ export function createLizard(ctx) {
     fx.shock({ x: a.body.p.x, y: 0.1, z: a.body.p.z }, 8);
     for (let i = 0; i < 2; i++) {
       const ang = Math.random() * Math.PI * 2;
-      minions.push(combat.enemies.spawn({ x: a.body.p.x + Math.cos(ang) * 9, z: a.body.p.z + Math.sin(ang) * 9, faction: 'lizard', arch: i === 2 ? 'whip' : 'brawler', look: i, alert: true }));
+      minions.push(combat.enemies.spawn({ x: a.body.p.x + Math.cos(ang) * 9, z: a.body.p.z + Math.sin(ang) * 9, faction: 'lizard', arch: i === 1 ? 'whip' : 'brawler', look: i, alert: true }));
     }
     a.stun(1.8); // the roar takes it out of him: a short opening
   }
@@ -96,7 +97,7 @@ export function createLizard(ctx) {
       if (!pounce.landed && a.grounded && pounce.t > 0.25) {
         pounce.landed = true;
         fx.shock({ x: a.body.p.x, y: 0.1, z: a.body.p.z }, 3.5);
-        if (t.d < 2.6) a.hurtHero(13, { x: t.ux, z: t.uz }, true);
+        if (t.d < 2.6) a.hurtHero(11, { x: t.ux, z: t.uz }, true);
         // Tiring: after a pounce he slumps (in phase 3 a long one, for the webs).
         if (phase === 3) { a.stun(4); word('EXHAUSTED', a.body.p, 'small'); } else if (Math.random() < 0.5) a.windup({ t: 0.55, reach: 4, arc: 3, dmg: 9, push: 11, pose: 'uppercut', unblockable: true, recover: 1 }); else { a.state('recover'); }
         pounce = null;
@@ -106,7 +107,7 @@ export function createLizard(ctx) {
     }
     if (a.stunned() || a.attacking()) { a.step(dt); return; }
     // Roars at 80% and 45%.
-    if ((roared === 0 && f <= 0.8) || (roared === 1 && f <= 0.45)) { roared++; roar(); a.step(dt); return; }
+    if (roared === 0 && f <= 0.7) { roared++; roar(); a.step(dt); return; }
     a.faceHero(dt, 8);
     const want = t.d > 3 ? 1 : 0;
     a.move(t.ux * want * 6.5, t.uz * want * 6.5, dt);

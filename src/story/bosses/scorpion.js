@@ -17,7 +17,10 @@ export function createScorpion(ctx) {
   const { site, step, hero, fx, say, word, shake, combat } = ctx;
   const chase = step.type === 'chase';
   const deck = { minX: BRIDGE.towers[0] + 5, maxX: BRIDGE.towers[1] - 5, minZ: BRIDGE.z - BRIDGE.width / 2, maxZ: BRIDGE.z + BRIDGE.width / 2, y: BRIDGE.deckY };
-  const start = chase ? { x: BRIDGE.x0 + 95, y: BRIDGE.deckY + 0.9, z: BRIDGE.z } : { x: (deck.minX + deck.maxX) / 2 + 8, y: BRIDGE.deckY + 0.9, z: BRIDGE.z };
+  // Away from the bridge (a pair in Act 4), he fights where the step puts him.
+  const away = !chase && ctx.step.variant === 'duo';
+  if (away) Object.assign(deck, { minX: site.x - 45, maxX: site.x + 45, minZ: site.z - 12, maxZ: site.z + 14, y: 0 });
+  const start = chase ? { x: BRIDGE.x0 + 95, y: BRIDGE.deckY + 0.9, z: BRIDGE.z } : away ? { x: site.x + 4, y: 0.9, z: site.z + 2 } : { x: (deck.minX + deck.maxX) / 2 + 8, y: BRIDGE.deckY + 0.9, z: BRIDGE.z };
   const a = createBossActor(ctx, { char: 'scorpion', hp: 420, armor: 0.6, poise: 999, mass: 95, at: start, arena: chase ? { minX: BRIDGE.x0 - 100, maxX: BRIDGE.x1 + 100, minZ: deck.minZ, maxZ: deck.maxZ, y: deck.y } : deck, facing: Math.PI / 2 });
   let done = false, failed = false, hits = 0, hitCd = 0, farT = 0, dir = 1, hopT = 1.5;
   let phase = 1, think = 1.2, poison = POISON, pounce = null, stingN = 0;
@@ -75,8 +78,9 @@ export function createScorpion(ctx) {
 
   function updateFight(dt) {
     const e = a.e, t = a.toHero(), f = a.hpFrac();
+    if (done) { a.step(dt); return; }
     poison -= dt;
-    ctx.timer?.(phase ? 'POISON' : '', poison);
+    ctx.timer?.('POISON', poison);
     if (poison <= 0 && !done) {
       // The poison wins: you black out (the step starts over).
       poison = POISON;

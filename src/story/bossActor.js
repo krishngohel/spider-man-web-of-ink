@@ -189,7 +189,8 @@ export function createBossActor(ctx, opts) {
     if (t.d < keep && Math.abs(t.dy) < 1.8 && e.state !== 'out') { p.x -= t.ux * (keep - t.d); p.z -= t.uz * (keep - t.d); }
     e.facing = a.facing;
     e.onGround = a.grounded;
-    const st = a.flying ? (a.poseState === 'ground' ? 'glide' : a.poseState) : a.grounded ? 'ground' : 'air';
+    // 'perch': crouched on a branch or a ledge (the poser's ground idle, held in the air).
+    const st = a.poseState === 'perch' ? 'ground' : a.flying ? (a.poseState === 'ground' ? 'glide' : a.poseState) : a.grounded ? 'ground' : 'air';
     setPuppet(puppet, p, v, a.facing, e.state === 'out' && a.grounded ? 'ground' : st);
     poser.update(puppet, dt, poseEvents, p);
     model.updateGear?.(dt, puppet);

@@ -26,7 +26,8 @@ export function createMap(root, city, { onTravel, onWaypoint }) {
   drawBase(base.getContext('2d'));
 
   const view = { cx: 0, cz: 0, zoom: 1 };
-  let open = false, hero = { x: 0, z: 0, yaw: 0 }, stations = new Set(), waypoint = null, hover = null;
+  let open = false, hero = { x: 0, z: 0, yaw: 0 }, stations = new Set(), waypoint = null, hover = null, icons = [];
+  const ICON = { base: ['#d3232e', 'H'], race: ['#5ad0ff', 'R'], challenge: ['#f2c230', 'T'], research: ['#2a5a9a', 'O'], backpack: ['#c8202a', 'B'], mission: ['#f7e36a', '!'] };
   const toScreen = (x, z) => {
     const s = view.zoom / PX;
     return [canvas.width / 2 + (x - view.cx) * s, canvas.height / 2 + (z - view.cz) * s];
@@ -111,6 +112,17 @@ export function createMap(root, city, { onTravel, onWaypoint }) {
       ctx.font = `${10 * dpr}px Bangers, Impact, sans-serif`;
       ctx.fillText('S', x, y + 3.5 * dpr);
     }
+    // What is left to do: hideouts, races, Taskmaster, research, backpacks found nearby, the mission.
+    for (const ic of icons) {
+      const [x, y] = toScreen(ic.x, ic.z);
+      const [col, ch] = ICON[ic.kind] ?? ['#fff', '?'];
+      const r = (ic.kind === 'backpack' ? 4.5 : ic.kind === 'mission' ? 9 : 6.5) * dpr;
+      ctx.globalAlpha = ic.done ? 0.45 : 1;
+      ctx.fillStyle = col; ctx.strokeStyle = '#1a1622'; ctx.lineWidth = 2 * dpr;
+      ctx.beginPath(); ctx.rect(x - r, y - r, r * 2, r * 2); ctx.fill(); ctx.stroke();
+      if (ic.kind !== 'backpack') { ctx.fillStyle = '#1a1622'; ctx.font = `${10 * dpr}px Bangers, Impact, sans-serif`; ctx.fillText(ch, x, y + 3.5 * dpr); }
+      ctx.globalAlpha = 1;
+    }
     // Waypoint.
     if (waypoint) {
       const [x, y] = toScreen(waypoint.x, waypoint.z);
@@ -155,8 +167,8 @@ export function createMap(root, city, { onTravel, onWaypoint }) {
 
   const api = {
     get open() { return open; },
-    show(h, found, wp) {
-      hero = h; stations = new Set(found); waypoint = wp;
+    show(h, found, wp, extra = []) {
+      hero = h; stations = new Set(found); waypoint = wp; icons = extra;
       view.cx = h.x; view.cz = h.z; view.zoom = 1;
       open = true; panel.classList.remove('hidden');
       requestAnimationFrame(draw);

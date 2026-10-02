@@ -7,8 +7,9 @@ import { buildCity, LAND } from '../../src/world/city.js';
 import { newSave, migrate } from '../../src/core/save.js';
 import { ROSTER } from '../../src/roster/characters.js';
 import { PORTRAITS } from '../../src/ui/portraits.js';
+import { SUITS } from '../../src/progress/progression.js';
 
-const TYPES = ['start', 'reach', 'radio', 'broadcast', 'panels', 'title', 'fight', 'defend', 'boss', 'chase'];
+const TYPES = ['start', 'reach', 'radio', 'broadcast', 'panels', 'title', 'fight', 'defend', 'stealth', 'boss', 'chase', 'credits'];
 const DASHES = [String.fromCharCode(8211), String.fromCharCode(8212)];
 function strings(v, out = []) {
   if (typeof v === 'string') out.push(v);
@@ -18,6 +19,15 @@ function strings(v, out = []) {
 }
 
 describe('story steps', () => {
+  it('every story-gated unlock is a real step (the Black Suit, the epilogue roster)', () => {
+    expect(STEPS.some((s) => s.id === 'act3.blackSuit')).toBe(true);
+    expect(STEPS.some((s) => s.id === 'act4.epilogue')).toBe(true);
+    for (const u of SUITS) if (u.story) expect(STEPS.some((s) => s.id === u.story), u.id).toBe(true);
+  });
+  it('the story ends in the credits', () => {
+    expect(STEPS[STEPS.length - 1].type).toBe('credits');
+    expect(ACTS.every((a) => STEPS.some((s) => s.act === a.id))).toBe(true);
+  });
   it('ids are unique and start with their act', () => {
     const ids = STEPS.map((s) => s.id);
     expect(new Set(ids).size).toBe(ids.length);
@@ -29,12 +39,15 @@ describe('story steps', () => {
   it('every step has a known type and what that type needs', () => {
     for (const s of STEPS) {
       expect(TYPES, s.id).toContain(s.type);
-      if (['start', 'reach', 'fight', 'defend', 'boss', 'chase'].includes(s.type)) expect(SITE_DEFS[s.site], s.id).toBeTruthy();
+      if (['start', 'reach', 'fight', 'defend', 'stealth', 'boss', 'chase'].includes(s.type)) expect(SITE_DEFS[s.site], s.id).toBeTruthy();
+      if (s.type === 'stealth') { expect(s.guards.length, s.id).toBeGreaterThan(2); for (const gd of s.guards) expect(gd.route.length, s.id).toBeGreaterThan(0); }
+      if (s.suit) expect(SUITS.some((u) => u.id === s.suit), s.id).toBe(true);
       if (s.char) expect(ROSTER.some((c) => c.id === s.char), s.id).toBe(true);
       if (['radio', 'broadcast'].includes(s.type)) expect(s.lines.length, s.id).toBeGreaterThan(0);
       if (s.type === 'panels') expect(s.pages.length, s.id).toBeGreaterThan(0);
       if (s.type === 'fight' || s.type === 'defend') expect(s.waves.length, s.id).toBeGreaterThan(0);
       if (s.type === 'boss' || s.type === 'chase') expect(BOSSES[s.boss], s.id).toBeTruthy();
+      if (s.boss === 'duo') for (const d of s.duo) expect(BOSSES[d], s.id).toBeTruthy();
     }
   });
   it('every speaker is known, in lines and in balloons', () => {

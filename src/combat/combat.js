@@ -31,6 +31,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   scene.add(strikeLine);
   let encounter = null, encounterCooldown = 25;
   let authority = null; // multiplayer: only the host runs the world
+  let occupation = null; // a faction holding the whole city (Sable in Act 4)
 
   function heroHit(h) { return heroCombat.takeHit(h); }
   const heroInvuln = () => heroCombat.c.iframes > 0;
@@ -111,7 +112,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     switch (e.type) {
       case 'enemyWindup': feedback.sense(e.e, e.unblockable, e.ranged); break;
       case 'enemyShoot': {
-        const p = e.e.body.p, h = hero.body.p, v = hero.body.v;
+        const p = e.e.body.p, h = e.to ?? hero.body.p, v = e.to ? { x: 0, y: 0, z: 0 } : hero.body.v;
         // A little lead: shots aim where the hero will be.
         const lead = e.kind === 'rocket' ? 0.35 : 0.12;
         projectiles.fire(e.kind, { x: p.x, y: p.y + 0.5, z: p.z }, { x: h.x + v.x * lead, y: h.y + v.y * lead + 0.1, z: h.z + v.z * lead }, { dmg: e.dmg });
@@ -162,7 +163,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
 
   function spawnGang(x, z, district, { faction = null, mix = null, level = 1, alert = false, kind = 'gang' } = {}) {
     const facs = DISTRICT_FACTION[district] ?? ['street'];
-    const fac = faction ?? facs[rng.int(0, facs.length - 1)];
+    const fac = faction ?? occupation ?? facs[rng.int(0, facs.length - 1)];
     const arches = mix ?? GANG_MIX[rng.int(0, GANG_MIX.length - 1)];
     const list = arches.map((arch, i) => {
       const a = (i / arches.length) * Math.PI * 2;
@@ -189,6 +190,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     },
     get encounter() { return encounter; },
     clearEncounter() { encounter = null; },
+    setOccupation(f) { occupation = f; },
     clear() { enemies.clear(); projectiles.clear(); gadgets.clear(); encounter = null; },
   };
 }

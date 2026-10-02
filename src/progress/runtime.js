@@ -43,7 +43,7 @@ export function createProgressRuntime({ save: firstSave, heroModel, combat, hero
     R.flags = fx.flags;
     R.mods = mods;
     // The suit (and the Noir suit's black-and-white world): Peter's suits only.
-    const suit = suitById(p.suit);
+    const suit = suitById(R.suitOverride ?? p.suit);
     if (R.charId === 'peter' && R.model.suitMat) { setSuit(R.model, suit); ink.setFilter(suit.id === 'noir' ? 'noir' : 'none'); }
     else ink.setFilter(R.charId === 'noir' ? 'noir' : 'none');
     R.afterApply?.();
@@ -120,6 +120,9 @@ export function createProgressRuntime({ save: firstSave, heroModel, combat, hero
     get powerCooldown() { return R.powerCd; },
     // A different character: its model, and what to layer on top of the skills after each apply.
     useSave(s) { save = s; apply(); },
+    // The story can dress Peter for a while (the Black Suit in Act 3); null puts his own back.
+    setSuitOverride(id) { if ((R.suitOverride ?? null) === (id ?? null)) return; R.suitOverride = id ?? null; apply(); },
+    get suitOverride() { return R.suitOverride ?? null; },
     setCharacter(model, id, afterApply) { R.model = model; R.charId = id; R.afterApply = afterApply; apply(); },
   };
 }

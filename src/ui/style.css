@@ -323,3 +323,50 @@ button { font: inherit; }
 .stimer.hidden { display: none; }
 .stimer.low { color: #ff5a4a; animation: stimerPulse 0.6s infinite alternate; }
 @keyframes stimerPulse { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.08); } }
+
+/* Stealth: an eye over each guard that fills as he notices you, and the takedown prompt. */
+.stealthbox { position: fixed; inset: 0; pointer-events: none; }
+.smark { position: absolute; width: 22px; height: 14px; transform: translate(-50%, -100%); border: 2px solid var(--ink); border-radius: 50%; background: #fff8d8; overflow: hidden; }
+.smark i { position: absolute; left: 0; right: 0; bottom: 0; background: #f2c230; }
+.smark.alert { background: #ff5a4a; }
+.smark.alert i { background: #ff5a4a; }
+.tdprompt { position: fixed; transform: translate(-50%, -100%); font: 18px var(--head); letter-spacing: 1px; color: #fff; -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; text-shadow: 2px 2px 0 var(--ink); pointer-events: none; white-space: nowrap; }
+.tdprompt.hidden { display: none; }
+.tdprompt kbd { font: 15px var(--head); background: var(--ink); color: #fff; padding: 0 6px; border-radius: 3px; -webkit-text-stroke: 0; }
+
+/* The end credits. */
+.credits { position: fixed; inset: 0; z-index: 40; background: rgba(12, 10, 20, 0.96); overflow: hidden; cursor: pointer; }
+.croll { position: absolute; left: 50%; top: 100%; width: min(680px, calc(100vw - 32px)); transform: translateX(-50%); text-align: center; color: var(--paper); animation: croll 25s linear forwards; }
+.croll h2 { font: clamp(28px, 5vw, 48px) var(--head); letter-spacing: 2px; color: var(--red); -webkit-text-stroke: 1.5px var(--ink); paint-order: stroke fill; text-shadow: 4px 4px 0 var(--blue); margin: 60px 0 10px; }
+.croll p { font: 600 20px/1.4 var(--body); margin: 6px 0; }
+@keyframes croll { to { transform: translate(-50%, calc(-100% - 100vh)); } }
+
+/* Hold prompts (defuse a bomb, lift rubble, start research). */
+.holdprompt { position: fixed; left: 50%; bottom: 150px; transform: translateX(-50%); text-align: center; font: 22px var(--head); letter-spacing: 1px; color: #fff; -webkit-text-stroke: 1px var(--ink); paint-order: stroke fill; text-shadow: 2px 2px 0 var(--ink); pointer-events: none; }
+.holdprompt.hidden { display: none; }
+.holdprompt kbd { font: 18px var(--head); background: var(--ink); color: #fff; padding: 0 6px; border-radius: 3px; -webkit-text-stroke: 0; }
+.hbar { width: 180px; height: 8px; margin: 6px auto 0; border: 2px solid var(--ink); background: #fff; }
+.hbar i { display: block; height: 100%; width: 0; background: #f2c230; }
+
+/* Research puzzles. */
+.puzzle { position: fixed; inset: 0; z-index: 30; display: grid; place-items: center; background: rgba(12, 10, 20, 0.85); }
+.puzzle.hidden { display: none; }
+.puzzle .card { width: min(520px, calc(100vw - 32px)); background: var(--paper); border: 4px solid var(--ink); box-shadow: 8px 8px 0 var(--ink); padding: 18px; }
+.phelp { font: 600 16px var(--body); margin: 4px 0 10px; }
+.pipes { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; width: min(300px, 100%); margin: 0 auto; }
+.pipe { aspect-ratio: 1; padding: 0; background: #e8dcc0; border: 2px solid var(--ink); cursor: pointer; }
+.pipe svg { width: 100%; height: 100%; display: block; fill: var(--blue); }
+.pread { font: 700 18px var(--body); margin-top: 10px; }
+.pread.ok { color: #2e9d5f; }
+.pcable svg { width: 100%; max-width: 320px; display: block; margin: 0 auto; }
+
+/* The progress tracker. */
+.tracker .card { width: min(860px, calc(100vw - 32px)); }
+.tscroll { max-height: min(62vh, 560px); overflow: auto; }
+.ttable { width: 100%; border-collapse: collapse; font: 600 15px var(--body); }
+.ttable th, .ttable td { border-bottom: 2px solid rgba(18, 16, 28, 0.2); padding: 4px 6px; text-align: left; }
+.ttable td.full { color: #2e9d5f; }
+.tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.titem { display: flex; justify-content: space-between; gap: 8px; background: #fff; border: 2px solid var(--ink); padding: 4px 8px; font: 600 14px var(--body); }
+.medal { font: 14px var(--head); letter-spacing: 1px; }
+.medal.m0 { color: #888; } .medal.m1 { color: #a0642a; } .medal.m2 { color: #7a8494; } .medal.m3 { color: #c8a020; } .medal.m4 { color: #8a3ac8; }

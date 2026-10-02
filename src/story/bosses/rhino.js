@@ -14,6 +14,7 @@ export function createRhino(ctx) {
   const { site, hero, fx, say, word, shake } = ctx;
   const a = createBossActor(ctx, { char: 'rhino', hp: 460, armor: 0.85, poise: 999, mass: 320, radius: 0.85, half: 0.6, at: { x: site.x - 12, y: 0.9, z: site.z }, facing: Math.PI / 2 });
   let phase = 1, think = 1.5, charge = null, done = false, run = null, slowT = 0, stuns = 0, stuckT = 0, runT = 0, reroutes = 0;
+  const arenaHere = { minX: site.x - 45, maxX: site.x + 45, minZ: site.z - 12, maxZ: site.z + 14, y: 0 };
   const yard = { minX: RAILYARD.minX, maxX: RAILYARD.maxX, minZ: RAILYARD.minZ, maxZ: RAILYARD.maxZ, y: 0 };
 
   a.onYank = () => {
@@ -51,7 +52,8 @@ export function createRhino(ctx) {
     const t = a.toHero(), e = a.e;
     slowT -= dt;
     const slow = slowT > 0 ? 0.7 : 1;
-    if (phase === 1 && a.hpFrac() <= 0.55 && !a.attacking() && !charge) startRun();
+    // In a pair (Act 4) there is no run to the yard: he fights on where he stands.
+    if (phase === 1 && a.hpFrac() <= 0.55 && !a.attacking() && !charge) { if (ctx.step.variant === 'duo') { phase = 3; a.arena = arenaHere; } else startRun(); }
     if (phase === 3 && a.hpFrac() <= 0 && e.state !== 'out') { a.defeat(); done = true; word('DOWN FOR THE COUNT!', a.body.p, 'big'); shake(1); a.step(dt); return; }
 
     if (phase === 2) {

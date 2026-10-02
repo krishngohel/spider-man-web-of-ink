@@ -141,6 +141,18 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       word('UPPERCUT!', tgt, 'hit');
       return;
     }
+    // A silent takedown on a guard who has not seen you.
+    if (intent.attackPressed && enemies.takedownTarget) {
+      const td = enemies.takedownTarget(hero);
+      if (td) {
+        const q = td.e.body.p, p = P();
+        if (td.kind === 'perch') { const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z, d = Math.hypot(dx, dy, dz) || 1; applyDv(hero.body, 'rope', (dx / d) * 16 - V().x, (dy / d) * 16 - V().y, (dz / d) * 16 - V().z); }
+        enemies.takedown(td.e, td.kind);
+        word(td.kind === 'hang' ? 'YOINK!' : td.kind === 'perch' ? 'THWIP!' : 'SHH!', td.e, 'small');
+        c.focus = Math.min(3, c.focus + 0.25);
+        return;
+      }
+    }
     if (intent.attackPressed) {
       if (tgt && near.d < COMBAT.meleeRange + 0.4) { startAttack(intent); return; }
       if (tgt && near.d < COMBAT.strikeRange && hero.state !== 'wall') {
@@ -272,6 +284,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   return {
     c, preStep, takeHit, timeScale,
     revive() { c.hp = c.maxHp; c.defeated = false; c.state = 'free'; c.combo = 0; c.iframes = 1.5; },
+    // Down at once whatever the iframes (a poison clock running out), with the usual defeat event.
+    knockOut() { if (c.defeated) return; c.hp = 0; c.defeated = true; slowmo(1.2); onEvent({ type: 'heroDefeated' }); },
     get inCombat() { return enemies.engaged.length > 0; },
   };
 }

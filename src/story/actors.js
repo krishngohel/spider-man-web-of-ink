@@ -10,11 +10,12 @@ export function createActors({ scene, assets, buildCharacter, createPoser, heroD
   const pool = new Map();
   const ZERO = { x: 0, y: 0, z: 0 };
 
-  function get(who) {
-    const key = who === 'hero' ? `hero:${JSON.stringify(heroDef())}` : who;
+  function get(who, suit = null) {
+    const hd = who === 'hero' ? (suit ? { ...heroDef(), suit: undefined, suitId: suit } : heroDef()) : null;
+    const key = who === 'hero' ? `hero:${JSON.stringify(hd)}` : who;
     let a = pool.get(key);
     if (!a) {
-      const def = who === 'hero' ? heroDef() : CAST[who] ?? characterById(who);
+      const def = who === 'hero' ? hd : CAST[who] ?? characterById(who);
       const model = buildCharacter(assets, def);
       a = { model, poser: createPoser(model), puppet: makePuppet() };
       scene.add(model.root);
@@ -26,8 +27,8 @@ export function createActors({ scene, assets, buildCharacter, createPoser, heroD
   return {
     // Stands a figure at p (feet on y), facing yawDeg (0 = +z).
     // pose 'perch': the rooftop crouch (the poser's own idle on a high ledge).
-    place(who, p, yawDeg = 0, pose = 'stand') {
-      const a = get(who);
+    place(who, p, yawDeg = 0, pose = 'stand', suit = null) {
+      const a = get(who, suit);
       a.model.root.visible = true;
       const at = { x: p.x, y: p.y + 0.9, z: p.z };
       const yaw = (yawDeg * Math.PI) / 180;

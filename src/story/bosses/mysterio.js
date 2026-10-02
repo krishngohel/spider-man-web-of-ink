@@ -17,6 +17,9 @@ import { NEON_PLAZA } from '../../world/city.js';
 
 const L = (who, text) => ({ who, text });
 let droneId = 600000;
+// Shared shapes (attacks come every few seconds; no new geometry each time).
+const GEO = { smallCloud: new THREE.SphereGeometry(1.8, 12, 8), bigCloud: new THREE.SphereGeometry(3, 12, 8), gasRing: new THREE.RingGeometry(2.4, 3, 24), fistRing: new THREE.RingGeometry(3.6, 4.6, 32), fist: new THREE.SphereGeometry(2.6, 14, 10) };
+const FIST_MAT = comicToon({ color: 0x3a8a4a });
 
 export function createMysterio(ctx) {
   const { site, hero, fx, say, word, shake, scene, combat, world } = ctx;
@@ -24,7 +27,8 @@ export function createMysterio(ctx) {
   const rand = () => ({ x: P.minX + 6 + Math.random() * (P.maxX - P.minX - 12), y: 0.9, z: site.z - 40 + Math.random() * 80 });
   const ar = { minX: P.minX + 2, maxX: P.maxX - 2, minZ: site.z - 60, maxZ: site.z + 60, y: 0 };
   const a = createBossActor(ctx, { char: 'mysterio', hp: 380, armor: 0.35, poise: 999, mass: 80, at: rand(), arena: ar });
-  let phase = 1, done = false, think = 1.5, swapT = 9, markT = 0, time = 0, giant = null, giantT = 0;
+  const rematch = ctx.step.variant === 'rematch';
+  let phase = 1, done = false, think = 1.5, swapT = 9, markT = 0, time = 0, giant = null, giantT = 0, disposed = false, scanCd = 0;
   const decoys = [], clouds = [], drones = [], fists = [];
   const cloudMat = new THREE.MeshBasicMaterial({ color: 0x7ad06a, transparent: true, opacity: 0.35, depthWrite: false });
   const ringMat = new THREE.MeshBasicMaterial({ color: 0x7ad06a, transparent: true, opacity: 0.7, depthWrite: false });
@@ -51,12 +55,12 @@ export function createMysterio(ctx) {
     word('POP!', d.body.p, 'small');
     smoke(d.body.p, 1.2);
     d.dispose();
-    setTimeout(() => { const i = decoys.indexOf(d); if (i >= 0) decoys.splice(i, 1); if (phase === 1 && !done) addDecoy(); }, 4500);
+    setTimeout(() => { if (disposed) return; const i = decoys.indexOf(d); if (i >= 0) decoys.splice(i, 1); if (phase === 1 && !done) addDecoy(); }, 4500);
   }
   for (let i = 0; i < 4; i++) addDecoy();
 
   function smoke(p, life = 3, dps = 0) {
-    const m = new THREE.Mesh(new THREE.SphereGeometry(dps ? 3 : 1.8, 12, 8), cloudMat);
+    const m = new THREE.Mesh(dps ? GEO.bigCloud : GEO.smallCloud, cloudMat);
     m.layers.set(LAYER_FX);
     m.position.set(p.x, p.y, p.z);
     scene.add(m);
@@ -66,7 +70,7 @@ export function createMysterio(ctx) {
   function gasBomb(from) {
     const h = hero.body.p;
     const at = { x: h.x, y: world.groundHeight(h.x, h.y + 0.5, h.z) + 0.1, z: h.z };
-    const r = new THREE.Mesh(new THREE.RingGeometry(2.4, 3, 24), ringMat);
+    const r = new THREE.Mesh(GEO.gasRing, ringMat);
     r.layers.set(LAYER_FX); r.rotation.x = -Math.PI / 2; r.position.set(at.x, at.y, at.z);
     scene.add(r);
     fists.push({ kind: 'gas', m: r, at, t: 0.9 });
@@ -79,7 +83,9 @@ export function createMysterio(ctx) {
     const g = ctx.buildCharacter(ctx.assets, def);
     g.root.scale.setScalar(8);
     g.root.position.set((P.minX + P.maxX) / 2, 0, ar.minZ - 30);
-    g.root.traverse((o) => { if (o.material) { o.material = o.material.clone(); o.material.transparent = true; o.material.opacity = 0.82; } });
+    // A projection: see-through, on the giant's own outfit material (one per model, so the comic
+    // shading stays; a cloned material would lose its shader hooks).
+    if (g.outfitMat) { g.outfitMat.transparent = true; g.outfitMat.opacity = 0.82; g.outfitMat.needsUpdate = true; }
     scene.add(g.root);
     const poser = ctx.createPoser(g);
     return { g, poser, puppet: { body: { p: { x: g.root.position.x, y: 0.9 * 8, z: g.root.position.z }, v: { x: 0, y: 0, z: 0 } }, state: 'ground', facing: { x: 0, z: 1 }, swing: { active: false, rope: { pivots: [] } }, rope: { active: false, pivots: [] }, wall: { nx: 0, nz: 1 }, speed: 0 }, events: [] };
@@ -135,8 +141,9 @@ export function createMysterio(ctx) {
   function endGiant() {
     phase = 3;
     scene.remove(giant.g.root);
+    giant.g.outfitMat?.dispose?.();
     giant = null;
-    for (const f of fists) scene.remove(f.m);
+    for (const f of fists) { scene.remove(f.m); if (f.fist) scene.remove(f.fist); }
     fists.length = 0;
     ctx.illusion?.(0.2);
     // The real one, dizzy where the giant stood.
@@ -149,10 +156,10 @@ export function createMysterio(ctx) {
   function slam() {
     const h = hero.body.p;
     const at = { x: h.x, y: world.groundHeight(h.x, h.y + 0.5, h.z) + 0.1, z: h.z };
-    const r = new THREE.Mesh(new THREE.RingGeometry(3.6, 4.6, 32), ringMat);
+    const r = new THREE.Mesh(GEO.fistRing, ringMat);
     r.layers.set(LAYER_FX); r.rotation.x = -Math.PI / 2; r.position.set(at.x, at.y, at.z);
     scene.add(r);
-    const fist = new THREE.Mesh(new THREE.SphereGeometry(2.6, 14, 10), comicToon({ color: 0x3a8a4a }));
+    const fist = new THREE.Mesh(GEO.fist, FIST_MAT);
     fist.position.set(at.x, at.y + 60, at.z);
     scene.add(fist);
     fists.push({ kind: 'fist', m: r, fist, at, t: 1.5 });
@@ -162,7 +169,8 @@ export function createMysterio(ctx) {
   a.floor = () => (phase === 1 ? 0.6 : phase === 2 ? 0.6 : 0);
   a.onYank = () => false;
   ctx.onScan = () => {
-    if (phase !== 1) return;
+    if (phase !== 1 || scanCd > 0) return;
+    scanCd = 7;
     markT = 4;
     word('THE REAL ONE!', a.body.p, 'big');
   };
@@ -180,6 +188,7 @@ export function createMysterio(ctx) {
 
   function update(dt) {
     time += dt;
+    scanCd -= dt;
     // Gas clouds and fists.
     for (let i = clouds.length - 1; i >= 0; i--) {
       const c = clouds[i];
@@ -232,7 +241,8 @@ export function createMysterio(ctx) {
     if (done) { a.step(dt); return; }
     const e = a.e, f = a.hpFrac();
     if (phase === 3 && f <= 0 && e.state !== 'out') { a.defeat(); done = true; ctx.illusion?.(0); word('CURTAIN!', a.body.p, 'big'); a.step(dt); return; }
-    if (phase === 1 && f <= 0.6 && !a.attacking()) { startGiant(); }
+    // The rematch: no giant this time; his own smoke is all he has left.
+    if (phase === 1 && f <= 0.6 && !a.attacking()) { if (rematch) { phase = 3; for (const d of [...decoys]) pop(d); ctx.illusion?.(0.2); } else startGiant(); }
     if (phase === 2) { a.step(dt); return; }
     if (a.stunned() || a.attacking()) { a.step(dt); return; }
     // The real one: keeps his distance, throws gas, swaps with a decoy now and then.
@@ -270,12 +280,13 @@ export function createMysterio(ctx) {
     update,
     setPhase(n) { if (n >= 2 && phase < 2) { a.e.hp = a.e.maxHp * 0.6; startGiant(); } if (n >= 3 && phase < 3) { for (const d of drones) downDrone(d); } },
     dispose() {
+      disposed = true;
       a.dispose();
       for (const d of decoys) if (!d.popped) d.dispose();
       for (const dr of drones) if (!dr.down) { scene.remove(dr.root); const i = combat.enemies.list.indexOf(dr.e); if (i >= 0) combat.enemies.list.splice(i, 1); }
       for (const c of clouds) scene.remove(c.m);
       for (const f of fists) { scene.remove(f.m); if (f.fist) scene.remove(f.fist); }
-      if (giant) scene.remove(giant.g.root);
+      if (giant) { scene.remove(giant.g.root); giant.g.outfitMat?.dispose?.(); }
       scene.remove(markRing);
       ctx.illusion?.(0);
       ctx.onScan = null;

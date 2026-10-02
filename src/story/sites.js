@@ -19,6 +19,13 @@ export const SITE_DEFS = {
   bridgeHarbor: { point: [BRIDGE.x0 + 14, BRIDGE.deckY + 0.9, BRIDGE.z] },
   bridgeDeck: { point: [(BRIDGE.towers[0] + BRIDGE.towers[1]) / 2, BRIDGE.deckY + 0.9, BRIDGE.z], arena: { minX: BRIDGE.towers[0] + 5, maxX: BRIDGE.towers[1] - 5, minZ: BRIDGE.z - BRIDGE.width / 2, maxZ: BRIDGE.z + BRIDGE.width / 2, y: BRIDGE.deckY } },
   neonPlaza: { point: [(NEON_PLAZA.minX + NEON_PLAZA.maxX) / 2, 0.9, -90], arena: { minX: NEON_PLAZA.minX, maxX: NEON_PLAZA.maxX, minZ: -150, maxZ: -30, y: 0 } },
+  parkLawn: { point: [-80, 0.9, -690] },
+  harborWarehouse: { point: [840, 0.9, 840] },
+  shipyard: { point: [960, 0.9, 900] },
+  uniFront: { lm: 'university', at: 'front' },
+  churchStreet: { lm: 'church', at: 'front' },
+  churchRoof: { lm: 'church', at: 'roof', pick: 'largest' },
+  bellTop: { lm: 'church', at: 'roof', dz: 3.5 },
   zooPlaza: { point: [(ZOO.minX + ZOO.maxX) / 2, 0.9, (ZOO.minZ + ZOO.maxZ) / 2], arena: { minX: ZOO.minX, maxX: ZOO.maxX, minZ: ZOO.minZ, maxZ: ZOO.maxZ, y: 0 } },
 };
 

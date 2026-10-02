@@ -18,6 +18,7 @@ export const ACTIONS = [
   { id: 'suitPower', label: 'Suit power', group: 'Fight' },
   { id: 'map', label: 'City map', group: 'Other' },
   { id: 'scan', label: 'Spider-sense scan (Hide and Seek: ping)', group: 'Other' },
+  { id: 'photo', label: 'Take a photo (landmarks, Bugle assignments)', group: 'Other' },
   { id: 'ping', label: 'Multiplayer: ping where you look', group: 'Other' },
   { id: 'chat', label: 'Multiplayer: chat', group: 'Other' },
   { id: 'quickChat', label: 'Multiplayer: quick chat (hold, then 1 to 8)', group: 'Other' },
@@ -48,7 +49,8 @@ export const DEFAULT_BINDINGS = {
   chat: ['Enter'],
   quickChat: ['KeyT'],
   help: ['KeyH'],
-  pause: ['Escape', 'KeyP'],
+  pause: ['Escape'],
+  photo: ['KeyP'],
 };
 
 // Gamepad (standard mapping): fixed layout, shown on the controls screen.

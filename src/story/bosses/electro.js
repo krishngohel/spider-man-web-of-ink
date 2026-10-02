@@ -14,6 +14,7 @@ import { LAYER_FX } from '../../render/layers.js';
 
 const L = (who, text) => ({ who, text });
 const BOLT_COLOR = 0x9ae8ff;
+const GEO = { orb: new THREE.SphereGeometry(0.45, 10, 8), mark: new THREE.RingGeometry(2.2, 3, 28) };
 
 export function createElectro(ctx) {
   const { site, hero, fx, say, word, shake, world, scene, city } = ctx;
@@ -98,7 +99,8 @@ export function createElectro(ctx) {
   }
 
   a.onHit = (args) => {
-    if (charged || a.e.state === 'out') {
+    if (a.e.state === 'out') return { dealt: 0, blocked: true };
+    if (charged) {
       // Live wire: the blow shocks you back and does nothing to him.
       const t = a.toHero();
       if (args.kind !== 'web' && t.d < 4) { applyDv(hero.body, 'surface', t.ux * 9, 4, t.uz * 9); a.hurtHero(6, { x: t.ux, z: t.uz }, true); bolt({ x: a.body.p.x, y: a.body.p.y + 0.6, z: a.body.p.z }, { x: hero.body.p.x, y: hero.body.p.y + 0.5, z: hero.body.p.z }); word('ZZAK!', hero.body.p, 'hit'); }
@@ -133,7 +135,7 @@ export function createElectro(ctx) {
   }
   function ball() {
     const p = a.body.p;
-    const m = new THREE.Mesh(new THREE.SphereGeometry(0.45, 10, 8), orbMat);
+    const m = new THREE.Mesh(GEO.orb, orbMat);
     m.layers.set(LAYER_FX);
     m.position.set(p.x, p.y + 1, p.z);
     scene.add(m);
@@ -141,7 +143,7 @@ export function createElectro(ctx) {
   }
   function markStrike() {
     const h = hero.body.p;
-    const m = new THREE.Mesh(new THREE.RingGeometry(2.2, 3, 28), markMat);
+    const m = new THREE.Mesh(GEO.mark, markMat);
     m.layers.set(LAYER_FX);
     m.rotation.x = -Math.PI / 2;
     const y = world.groundHeight(h.x, h.y + 0.5, h.z) + 0.1;

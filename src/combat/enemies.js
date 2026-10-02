@@ -3,6 +3,7 @@ import { createBody, placeBody, applyDv } from '../physics/ledger.js';
 import { applyGravity } from '../physics/aero.js';
 import { G } from '../physics/constants.js';
 import { buildEnemyModel } from './enemyModel.js';
+import { perceive, patrolWant, takedownKind } from './stealth.js';
 
 // Enemies (spec 8.1): a body each on the same collision world as the hero, a state machine per
 // archetype, and a director that limits how many attack at once. Attacks wind up visibly (the
@@ -144,6 +145,8 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
 
   function step(dt, ctx) {
     const { hero, heroInvuln, difficulty = 'amazing', gravity = 'comic', heroHit } = ctx;
+    const heroCtl = hero; // the real hero (state, body), for the senses of guards on patrol
+    const los = (p, h) => !world.raycast(p.x, p.y + 0.6, p.z, h.x - p.x, h.y + 0.3 - p.y - 0.6, h.z - p.z, 1, { ground: false, unit: true });
     // Everyone they can go for (in multiplayer, every player; alone, the hero).
     const targets = ctx.targets ?? [{ body: hero.body, invuln: heroInvuln, hit: heroHit }];
     const nearest = (p) => { let best = targets[0], bd = Infinity; for (const t of targets) { const d = Math.hypot(t.body.p.x - p.x, t.body.p.z - p.z); if (d < bd) { bd = d; best = t; } } return best; };
@@ -154,6 +157,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     // Alerts spread: anyone near an alerted ally joins in.
     for (const e of list) {
       if (!e.alive || e.puppet || e.isPlayer || e.boss) continue;
+      if (e.stealth) continue; // guards on patrol only learn from their own eyes and ears
       const hp = nearest(e.body.p).body.p;
       const dHero = Math.hypot(e.body.p.x - hp.x, e.body.p.z - hp.z);
       if (!e.alerted && (dHero < 20 || list.some((o) => o.alerted && o !== e && Math.hypot(o.body.p.x - e.body.p.x, o.body.p.z - e.body.p.z) < 25))) {
@@ -174,7 +178,14 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       const ux = dx / dist, uz = dz / dist;
       let wantVx = 0, wantVz = 0, face = null;
 
-      switch (e.state) {
+      // A guard who has not seen you: walks the patrol, looks, listens.
+      const unaware = e.stealth && !e.alerted && !['out', 'webbed', 'pinned', 'air', 'down', 'getup'].includes(e.state);
+      if (unaware) {
+        const w = patrolWant(e, dt);
+        wantVx = w.vx; wantVz = w.vz; face = w.face;
+        e.model.animator.play(w.anim, { timeScale: 1 });
+        if (perceive(e, heroCtl, dt, los, ctx.noise ?? null) === 'alarm') { e.alerted = true; setState(e, 'engage'); onEvent({ type: 'spotted', e }); }
+      } else switch (e.state) {
         case 'idle':
           if (e.alerted) setState(e, 'engage');
           break;
@@ -204,7 +215,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           face = Math.atan2(ux, uz);
           if (e.t >= e.strikeAt) {
             setState(e, 'strike');
-            if (A.ranged && !e.disarmed) onEvent({ type: 'enemyShoot', e, kind: A.shot, dmg: A.dmg * (DIFFICULTY_DMG[difficulty] ?? 1) });
+            if (A.ranged && !e.disarmed) onEvent({ type: 'enemyShoot', e, kind: A.shot, dmg: A.dmg * (DIFFICULTY_DMG[difficulty] ?? 1), to: hero.body === heroCtl.body ? null : { x: hp.x, y: hp.y, z: hp.z } });
             else {
               // Melee lands if the hero is still in reach and in front, and not dodging.
               const reach = e.disarmed ? 1.9 : A.reach;
@@ -337,8 +348,33 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     e.model.animator.update(dt);
   }
 
+  // A silent takedown: webbed up where they stand (out of the fight). Guards who can see the
+  // victim grow suspicious.
+  function takedown(e, kind) {
+    setState(e, 'webbed');
+    e.web = 1;
+    if (kind === 'hang') applyDv(e.body, 'rope', 0, 7, 0);
+    onEvent({ type: 'takedown', e, kind });
+    for (const o of list) {
+      if (o === e || !o.stealth || o.alerted || !o.alive) continue;
+      const dx = e.body.p.x - o.body.p.x, dz = e.body.p.z - o.body.p.z, d = Math.hypot(dx, dz);
+      if (d < 16 && Math.abs(Math.atan2(Math.sin(Math.atan2(dx, dz) - o.facing), Math.cos(Math.atan2(dx, dz) - o.facing))) < 1.2) { o.suspicion = Math.min(1, (o.suspicion ?? 0) + 0.7); o.lastSeen = { ...e.body.p }; }
+    }
+  }
   void tmp;
   const api = {
+    takedown,
+    // The guard nearest the hero open to a takedown, and which kind.
+    takedownTarget(heroCtl) {
+      let best = null, bd = Infinity;
+      for (const e of list) {
+        const kind = takedownKind(e, heroCtl);
+        if (!kind) continue;
+        const d = Math.hypot(e.body.p.x - heroCtl.body.p.x, e.body.p.z - heroCtl.body.p.z);
+        if (d < bd) { bd = d; best = { e, kind }; }
+      }
+      return best;
+    },
     list,
     spawn,
     hit,

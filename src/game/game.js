@@ -56,6 +56,9 @@ import { createStoryUi } from '../ui/storyUi.js';
 import { createSlots } from '../ui/slots.js';
 import { stepById } from '../story/steps.js';
 import { resolveSite } from '../story/sites.js';
+import { createContentWorld } from '../content/world.js';
+import { createPuzzles } from '../ui/puzzles.js';
+import { createTracker } from '../ui/tracker.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
@@ -153,7 +156,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   const hero = createHero(world, { gravity: settings.gravity, assist: settings.swingAssist });
   // Combat: enemies, projectiles, gadgets and the hero's fighting state.
-  const combat = createCombat({ scene, world, assets, hero, city, getSettings: () => (storyOn && director?.quiet ? { ...settings, crimes: false } : settings), feedback: {
+  const combat = createCombat({ scene, world, assets, hero, city, getSettings: () => ({ ...settings, crimes: false }), feedback: {
     splat: (hit) => fx.splat(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz),
     boom: (p) => { fx.ring(p.x, p.y, p.z, 1.6); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.6); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('KA-BOOM!', s.x, s.y, 'hit'); sfx.event({ type: 'land', hard: true, impact: 30 }); },
     sense: (e, unblockable, ranged) => { combatHud.sense(e, unblockable, ranged); sfx.event({ type: 'sense' }); },
@@ -216,7 +219,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     mode = 'map';
     if (document.pointerLockElement) document.exitPointerLock();
     const p = hero.body.p;
-    map.show({ x: p.x, z: p.z, yaw: Math.atan2(hero.facing.x, hero.facing.z) }, save.world.stations, waypoint);
+    const icons = session.active ? [] : content.mapIcons().filter((ic) => ic.kind !== 'backpack' || save.world.districts.includes(city.districts.find((d) => ic.x >= d.minX && ic.x < d.maxX && ic.z >= d.minZ && ic.z < d.maxZ)?.id));
+    if (storyOn && director.marker) icons.push({ ...director.marker, kind: 'mission' });
+    map.show({ x: p.x, z: p.z, yaw: Math.atan2(hero.facing.x, hero.facing.z) }, save.world.stations, waypoint, icons);
   }
   const menus = createMenus(uiRoot, {
     getSettings: () => settings,
@@ -230,6 +235,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onRoster: () => rosterMenu.show(),
     onMultiplayer: () => lobby.show(),
     onStory: () => slots.show(),
+    onTracker: () => tracker.show(),
   });
   const slots = createSlots(uiRoot, { onPick: (slot, fresh) => enterStory(slot, fresh), onBack: () => menus.showTitle() });
   const storyUi = createStoryUi(uiRoot, { getSettings: () => settings, onSound: (k) => sfx.event({ type: k }) });
@@ -400,7 +406,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   function toTitle() {
     if (storyOn) {
-      director.stop(); storyOn = false;
+      director.stop(); storyOn = false; combat.setOccupation(null); content.stop();
+      if (character.id !== 'peter' && !rosterOpen()) switchCharacter('peter');
       // A dev or test story never had a slot: free swing goes back to the real save.
       if (save.slot > 3) loadInto(loadSlot(window.localStorage, lastSlot(window.localStorage) ?? 1) ?? newSave(1));
     }
@@ -723,6 +730,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       }
       if (input.pressed('suitPower')) progress.usePower();
       if (storyOn && !session.active && input.pressed('scan')) director.scan();
+      if (input.pressed('photo') && !session.active) takePhoto();
+      content.update(gdt, { active: !session.active && !(storyOn && director.quiet) });
       for (const e of events) progress.onHeroEvent(e);
       if (combat.heroCombat.c.defeated) defeatStep(dt);
       riverCheck(dt);
@@ -887,12 +896,43 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     snapshot: (cam) => { ink.render(scene, cam, time); return renderer.domElement.toDataURL('image/jpeg', 0.86); },
     character: () => character.id,
     setCharacter: (id) => switchCharacter(id),
+    setSuit: (id) => progress.setSuitOverride?.(id),
+    setOccupation: (f) => combat.setOccupation(f),
+    screen: (x, y, z) => screenOf(x, y, z),
     illusion: (k) => { illusionK = k; },
     onBlock: (on) => {
       if (on && mode === 'play') { mode = 'comic'; input.setEnabled(false); if (locked()) document.exitPointerLock(); }
       else if (!on && mode === 'comic') { mode = 'play'; resetIntent(); input.setEnabled(true); }
     },
   });
+  // Open-world content (spec 11) -------------------------------------------------------------------------
+  const puzzles = createPuzzles(uiRoot, { onSound: (k) => sfx.event({ type: k }) });
+  let crimeWp = null;
+  const content = createContentWorld({
+    scene, world, city, hero, combat, save,
+    reward: (kind, o = {}) => progress.reward(kind, o),
+    say: (lines) => storyUi.say(lines),
+    word: (t, p, kind) => { const sc = screenOf(p.x, (p.y ?? 1) + 1, p.z); if (sc.front) hud.word(t, sc.x, sc.y - 40, kind); },
+    caption: (t, s) => hud.caption(t, s), sfx, persist: () => persist(),
+    stamp: (t) => { storyUi.stamp(t); sfx.event({ type: 'stamp' }); },
+    timer: (label, s) => storyUi.timer(label, s),
+    prompt: (t, k) => storyUi.hold(t, k),
+    hour: () => clock.hour, weather: () => weatherState.to,
+    boom: (p) => { fx.ring(p.x, p.y, p.z, 2.2); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.8); sfx.event({ type: 'land', hard: true, impact: 30 }); const h = hero.body.p; if (Math.hypot(h.x - p.x, h.z - p.z) < 6) combat.heroHit({ dmg: 30, dir: { x: 0, z: 1 }, from: null, unblockable: true }); },
+    crimeWaypoint: (w) => { crimeWp = w; if (w) { if (!waypoint || waypoint.auto) waypoint = { ...w, auto: true }; } else if (waypoint?.auto) waypoint = null; },
+    holding: () => input.down('hang'),
+    pressedHang: () => input.pressed('hang'),
+    busy: () => (storyOn && director.quiet) || session.active || !settings.crimes,
+    puzzle: (kind) => { mode = 'comic'; input.setEnabled(false); if (locked()) document.exitPointerLock(); return puzzles.play(kind).then((ok) => { mode = 'play'; resetIntent(); input.setEnabled(true); return ok; }); },
+  });
+  const tracker = createTracker(uiRoot, { data: () => content.tracker(), onBack: () => menus.showPause() });
+  function takePhoto() {
+    const got = content.photo({ x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
+    hud.flash?.();
+    sfx.event({ type: 'stamp' });
+    if (!got.length) hud.caption('SNAP!', 1);
+  }
+
   // The save object stays the same one everywhere (menus and runtime hold it): a slot loads into it.
   function loadInto(next) {
     for (const k of Object.keys(save)) delete save[k];
@@ -972,6 +1012,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     progress: () => progress,
     switchCharacter: (id) => switchCharacter(id),
     story: () => director.state(),
+    content: () => content.state(),
+    catalog: () => content.catalog,
+    forceCrime: (k) => content.forceCrime(k),
+    tracker: () => content.tracker(),
+    photo: () => takePhoto(),
     storySkip: () => director.skip(),
     storyJump: (id) => director.jump(id),
     storyAt: (id) => devStory(id),

@@ -46,7 +46,7 @@ export function createDirector(g) {
     timer: (label, s) => ui.timer(label, s),
     illusion: (k) => g.illusion?.(k),
     // The poison wins, a fall into the river in a fight: down at once, whatever the iframes.
-    knockOut: () => { const c = combat.heroCombat.c; c.hp = 0; c.defeated = true; },
+    knockOut: () => combat.heroCombat.knockOut(),
   });
   let bctx = null; // the context the running boss module was given (it may hang hooks on it)
 
@@ -65,20 +65,23 @@ export function createDirector(g) {
     // Whose story this is: Miles in his missions, Peter everywhere else.
     const who = step.char ?? 'peter';
     if (g.character && g.character() !== who) g.setCharacter(who);
+    g.setSuit?.(step.suit ?? null);
+    g.setOccupation?.(step.act === 'act4' && !save.story.done.includes('act4.epilogue') ? 'sable' : null);
     if (step.env) setEnv(step.env);
     else if (step.type === 'start') setEnv(null);
     ui.objective(step.text ?? null);
     if (step.tutorial) ui.tips(step.tutorial);
     marker.show(step.type === 'start' ? site : null);
-    g.setWaypoint(site && ['start', 'reach', 'fight', 'defend', 'boss', 'chase'].includes(step.type) ? { x: site.x, z: site.z, story: true } : null);
+    g.setWaypoint(site && ['start', 'reach', 'fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type) ? { x: site.x, z: site.z, story: true } : null);
     const ep = epoch;
     const done = () => { if (ep === epoch) complete(step.id); };
     switch (step.type) {
       case 'radio': say(step.lines).then(done); break;
       case 'broadcast': say(step.lines, { bugle: true }).then(done); break;
       case 'title': ui.card(step.card, actById(step.act)).then(done); break;
+      case 'credits': setBlock(true); ui.credits(COPY.story.credits).then(() => { if (ep === epoch) { setBlock(false); complete(step.id); } }); break;
       case 'panels': cur.phase = 'draw'; cur.drawIn = 2; setBlock(true); break;
-      case 'fight': case 'defend': case 'boss': case 'chase': cur.phase = 'arrive'; break;
+      case 'fight': case 'defend': case 'stealth': case 'boss': case 'chase': cur.phase = 'arrive'; break;
       default: break;
     }
     g.persist();
@@ -87,7 +90,8 @@ export function createDirector(g) {
   function complete(id) {
     const step = runner.step;
     if (!step || step.id !== id) return;
-    if (step.type === 'fight' || step.type === 'defend') g.reward('storyStep');
+    if (step.type === 'fight' || step.type === 'defend' || step.type === 'stealth') g.reward('storyStep');
+    if (step.type === 'stealth' && !cur?.alarm) { g.reward('storyStep'); ui.stamp(COPY.story.ghost); }
     dropGenerator();
     if (step.type === 'boss') g.reward('bossDefeated');
     if (step.type === 'start') combat.clear(); // the mission begins: free-roam gangs clear off
@@ -119,7 +123,7 @@ export function createDirector(g) {
             let d = toCam - toWho; while (d > 180) d -= 360; while (d < -180) d += 360;
             yaw = kind === 'to' ? toWho : toWho + d * 0.5;
           }
-          actors.place(c.who, { x: base.x + c.p[0], y: base.y + c.p[1], z: base.z + c.p[2] }, yaw, c.pose);
+          actors.place(c.who, { x: base.x + c.p[0], y: base.y + c.p[1], z: base.z + c.p[2] }, yaw, c.pose, c.who === 'hero' ? s.suit : null);
         }
         shotCam.fov = s.fov ?? 45;
         shotCam.aspect = g.aspect();
@@ -164,6 +168,7 @@ export function createDirector(g) {
     if (retryT < 1.1) return;
     retryT = -1;
     endBoss();
+    dropGenerator();
     combat.clear();
     props.clear();
     const s = cur?.site;
@@ -218,7 +223,7 @@ export function createDirector(g) {
           if (cur.gen.hp <= 0) { fx.shock(cur.gen.p, 6); word('KA-BLAM!', cur.gen.p, 'big'); dropGenerator(); retry(); break; }
         }
         // Walked away from the fight: the crew packs up and waits for you to come back.
-        if (heroD(site).d > 260) { for (const e of cur.waveList ?? []) combat.enemies.remove(e); combat.clearEncounter(); cur.phase = 'arrive'; break; }
+        if (heroD(site).d > 260) { for (const e of cur.waveList ?? []) combat.enemies.remove(e); combat.clearEncounter(); dropGenerator(); cur.phase = 'arrive'; break; }
         // The wave is over when every one of its own enemies is out (webbed, pinned or down).
         const left = (cur.waveList ?? []).filter((e) => e.alive && !['out', 'webbed', 'pinned'].includes(e.state)).length;
         if (left === 0) {
@@ -228,6 +233,24 @@ export function createDirector(g) {
             if (++cur.wave < step.waves.length) { spawnWave(); g.caption(COPY.combat.more ?? 'MORE OF THEM!'); } else { ui.stamp(COPY.story.missionDone); g.sfx.event({ type: 'stamp' }); complete(step.id); }
           }
         }
+        break;
+      }
+      case 'stealth': {
+        if (cur.phase === 'arrive') {
+          if (heroD(site).d < 90) { cur.phase = 'sneak'; spawnGuards(); }
+          break;
+        }
+        if (heroD(site).d > 260) { for (const e of cur.waveList ?? []) combat.enemies.remove(e); cur.phase = 'arrive'; break; }
+        // The suspicion marks over the guards and the takedown prompt.
+        const marks = [];
+        for (const e of cur.waveList) {
+          if (!e.alive || ['out', 'webbed', 'pinned'].includes(e.state)) continue;
+          marks.push({ p: e.body.p, k: e.alerted ? 1 : e.suspicion ?? 0, alert: !!e.alerted });
+        }
+        const td = combat.enemies.takedownTarget?.(hero);
+        ui.stealth(marks, td ? { p: td.e.body.p, kind: td.kind } : null, g.screen);
+        const left = cur.waveList.filter((e) => e.alive && !['out', 'webbed', 'pinned'].includes(e.state)).length;
+        if (left === 0) { ui.stealth(null); ui.stamp(COPY.story.missionDone); g.sfx.event({ type: 'stamp' }); complete(step.id); }
         break;
       }
       case 'boss': case 'chase': {
@@ -253,6 +276,32 @@ export function createDirector(g) {
         break;
       }
       default: break;
+    }
+  }
+
+  // Guards on patrol for a stealth step; the first one to raise the alarm brings everyone (and more).
+  function spawnGuards() {
+    const step = cur.step, s = cur.site;
+    cur.alarm = false;
+    cur.waveList = step.guards.map((gd, i) => {
+      const r = gd.route.map((q) => ({ x: s.x + q.x, z: s.z + q.z }));
+      const e = combat.enemies.spawn({ x: r[0].x, z: r[0].z, faction: gd.faction ?? step.faction, arch: gd.arch, look: i, alert: false });
+      e.stealth = true; e.patrol = r; e.suspicion = 0; e.facing = Math.random() * Math.PI * 2;
+      return e;
+    });
+  }
+  function raiseAlarm() {
+    if (!cur || cur.step.type !== 'stealth' || cur.alarm) return;
+    cur.alarm = true;
+    for (const e of cur.waveList) if (e.alive && !e.alerted) { e.alerted = true; e.state = 'engage'; }
+    word('ALARM!', hero.body.p, 'big');
+    g.caption(COPY.story.alarm);
+    const rf = cur.step.reinforce;
+    if (rf) {
+      const s = cur.site;
+      const d = city.districts.find((q) => s.x >= q.minX && s.x < q.maxX && s.z >= q.minZ && s.z < q.maxZ);
+      const enc = combat.spawnGang(s.x + 20, s.z + 20, d?.id ?? 'midtown', { faction: rf.faction, mix: rf.mix, alert: true, kind: 'story' });
+      cur.waveList.push(...enc.list);
     }
   }
 
@@ -288,14 +337,14 @@ export function createDirector(g) {
     get blocking() { return blocking; },
     // Free-roam gangs stay away while a mission runs.
     get quiet() { return !!cur && cur.step.type !== 'start'; },
-    get inFight() { return !!cur && ['fight', 'defend', 'boss', 'chase'].includes(cur.step.type) && cur.phase !== 'arrive'; },
+    get inFight() { return !!cur && ['fight', 'defend', 'stealth', 'boss', 'chase'].includes(cur.step.type) && cur.phase !== 'arrive'; },
     get env() { return env; },
     get step() { return runner.step; },
     get finished() { return runner.finished; },
     get marker() { const s = runner.step; return s && s.type === 'start' && cur?.site ? { x: cur.site.x, z: cur.site.z } : null; },
     // From the save's step, or from a given step (chapter select, ?at=).
     start(at = null) { if (!started) { started = true; retries = 0; runner = createStoryRunner(STEPS, save.story); if (at) runner.jump(at); begin(); } },
-    stop() { epoch++; endBoss(); combat.clear(); ui.clear(); marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
+    stop() { epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
     update,
     // Before combat reads the intent: a yank aimed at a loose crate throws it at the boss.
     preStep(intent, cam) {
@@ -316,7 +365,10 @@ export function createDirector(g) {
     // Spider-sense scan (V): the running boss may use it (the real Mysterio).
     scan() { bctx?.onScan?.(); },
     // Combat events a boss cares about (perfect dodges against the poison).
-    onCombatEvent(e) { boss?.onEvent?.(e); },
+    onCombatEvent(e) {
+      boss?.onEvent?.(e);
+      if (e.type === 'spotted') raiseAlarm();
+    },
     // Extra targets the enemies may go for (the generator in a defend step).
     targets() {
       const gen = cur?.gen;
@@ -325,7 +377,8 @@ export function createDirector(g) {
     },
     // Test hooks.
     state() {
-      return { step: runner.step?.id ?? null, type: runner.step?.type ?? null, phase: cur?.phase ?? null, wave: cur?.wave ?? 0, finished: runner.finished, boss: boss ? { ...boss.state } : null, site: cur?.site ? { x: cur.site.x, y: cur.site.y, z: cur.site.z } : null, blocking, talking: ui.talking, retries, gen: cur?.gen ? cur.gen.hp : null, done: [...save.story.done] };
+      return { step: runner.step?.id ?? null, type: runner.step?.type ?? null, phase: cur?.phase ?? null, wave: cur?.wave ?? 0, finished: runner.finished, boss: boss ? { ...boss.state } : null, site: cur?.site ? { x: cur.site.x, y: cur.site.y, z: cur.site.z } : null, blocking, talking: ui.talking, retries, gen: cur?.gen ? cur.gen.hp : null, alarm: !!cur?.alarm,
+        guards: cur?.step?.type === 'stealth' && cur.waveList ? cur.waveList.map((e) => ({ x: e.body.p.x, y: e.body.p.y, z: e.body.p.z, state: e.state, alerted: !!e.alerted, suspicion: e.suspicion ?? 0, facing: e.facing })) : null, done: [...save.story.done] };
     },
     skip() {
       const s = runner.step;
@@ -335,7 +388,7 @@ export function createDirector(g) {
       endBoss(); combat.clear();
       complete(s.id);
     },
-    jump(id) { epoch++; if (retryT >= 0) { retryT = -1; g.fade(false); } endBoss(); combat.clear(); ui.clear(); setBlock(false); if (runner.jump(id)) { started = true; retries = 0; begin(); return true; } return false; },
+    jump(id) { epoch++; if (retryT >= 0) { retryT = -1; g.fade(false); } endBoss(); dropGenerator(); combat.clear(); ui.clear(); setBlock(false); if (runner.jump(id)) { started = true; retries = 0; begin(); return true; } return false; },
     bossPhase(n) { boss?.setPhase(n); },
     get boss() { return boss; },
     props, fx,

@@ -81,9 +81,13 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
   const bossBar = el('div', { class: 'bossbar hidden' }, [bossName, el('div', { class: 'btrack' }, bossFill)]);
   const card = el('div', { class: 'actcard hidden' });
   const timerEl = el('div', { class: 'stimer hidden' });
+  const stealthBox = el('div', { class: 'stealthbox' });
+  const prompt = el('div', { class: 'tdprompt hidden' });
+  const hold = el('div', { class: 'holdprompt hidden' }, [el('span'), el('div', { class: 'hbar' }, el('i'))]);
+  const markPool = [];
   const stamp = el('div', { class: 'stamp hidden' });
   const tips = el('div', { class: 'storytips' });
-  root.append(comic, radio, objective, bossBar, card, stamp, tips, timerEl);
+  root.append(comic, radio, objective, bossBar, card, stamp, tips, timerEl, stealthBox, prompt, hold);
   let cardT = 0, stampT = 0, cardDone = null;
 
   const keys = () => {
@@ -134,6 +138,47 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
       cardT = kind === 'free' ? 3.6 : 3.2;
       return new Promise((r) => { cardDone = r; });
     },
+    // The end credits: lines rolling up the screen; any key or click ends them early.
+    credits(lines) {
+      const roll = el('div', { class: 'credits' }, el('div', { class: 'croll' }, lines.map((l) => el(l.h ? 'h2' : 'p', {}, l.text))));
+      root.append(roll);
+      return new Promise((r) => {
+        let end = null;
+        const finish = () => { if (!end) return; clearTimeout(end); end = null; roll.remove(); window.removeEventListener('keydown', key, true); r(); };
+        const key = (e) => { if (['Escape', 'Space', 'Enter'].includes(e.code)) { e.preventDefault(); finish(); } };
+        end = setTimeout(finish, 26000);
+        window.addEventListener('keydown', key, true);
+        roll.addEventListener('mousedown', finish);
+      });
+    },
+    // Stealth: a meter over each guard (a filling eye, red when alerted) and the takedown prompt.
+    stealth(marks, td = null, screen = null) {
+      if (!marks) { stealthBox.replaceChildren(); markPool.length = 0; prompt.classList.add('hidden'); return; }
+      while (markPool.length < marks.length) { const m = el('div', { class: 'smark' }, el('i')); stealthBox.append(m); markPool.push(m); }
+      markPool.forEach((m, i) => {
+        const mk = marks[i];
+        if (!mk) { m.style.display = 'none'; return; }
+        const s = screen(mk.p.x, mk.p.y + 1.6, mk.p.z);
+        if (!s.front || (mk.k < 0.02 && !mk.alert)) { m.style.display = 'none'; return; }
+        m.style.display = '';
+        m.style.left = `${s.x}px`; m.style.top = `${s.y}px`;
+        m.classList.toggle('alert', mk.alert);
+        m.firstChild.style.height = `${Math.round(Math.min(1, mk.k) * 100)}%`;
+      });
+      if (td) {
+        const s = screen(td.p.x, td.p.y + 2.2, td.p.z);
+        prompt.classList.toggle('hidden', !s.front);
+        prompt.innerHTML = fill(COPY.story.takedown[td.kind]);
+        prompt.style.left = `${s.x}px`; prompt.style.top = `${s.y}px`;
+      } else prompt.classList.add('hidden');
+    },
+    // A hold prompt (null hides it); k is how far the hold has got, 0 to 1.
+    hold(text, k = 0) {
+      hold.classList.toggle('hidden', !text);
+      if (!text) return;
+      hold.firstChild.innerHTML = fill(text);
+      hold.lastChild.firstChild.style.width = `${Math.round(Math.min(1, k) * 100)}%`;
+    },
     // A countdown under the boss bar (the poison); null hides it.
     timer(label, s) {
       timerEl.classList.toggle('hidden', !label);
@@ -162,6 +207,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
     clear() {
       queue = []; line = null; radio.classList.remove('show'); radioDone = null;
       objective.classList.add('hidden'); bossBar.classList.add('hidden'); tips.replaceChildren(); timerEl.classList.add('hidden');
+      stealthBox.replaceChildren(); markPool.length = 0; prompt.classList.add('hidden');
       // Dropped, not resolved: whatever waited on them belongs to a story that has stopped.
       if (resolver) { comic.classList.add('hidden'); resolver = null; }
       if (cardDone) { card.classList.remove('show'); card.classList.add('hidden'); cardDone = null; cardT = 0; }
