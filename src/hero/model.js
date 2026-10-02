@@ -97,7 +97,10 @@ float gLens = 0.0;
 float lineAA(float f, float px) {
   float d = abs(f - floor(f + 0.5));
   float w = fwidth(f);
-  return 1.0 - smoothstep(w * px * 0.5, w * (px * 0.5 + 1.0), d);
+  // Lines packed closer than a few pixels apart (the hero small on screen) fade out, the way an
+  // artist drops the web pattern on a distant figure instead of filling it in black.
+  float spacing = 1.0 / max(w, 1e-4);
+  return (1.0 - smoothstep(w * px * 0.5, w * (px * 0.5 + 1.0), d)) * smoothstep(3.0, 9.0, spacing);
 }
 float sdSeg(vec2 p, vec2 a, vec2 b) {
   vec2 pa = p - a, ba = b - a;
@@ -205,7 +208,7 @@ ${SHADOW_ALPHA}
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, uLens * (0.92 + 0.08 * clamp(vBind.y * 6.0 - 9.9, 0.0, 1.0)), gLens);
 	if (gLens > 0.5) gl_FragColor.a = 0.0;`);
   };
-  mat.customProgramCacheKey = () => 'suit-v4';
+  mat.customProgramCacheKey = () => 'suit-v5';
   return mat;
 }
 

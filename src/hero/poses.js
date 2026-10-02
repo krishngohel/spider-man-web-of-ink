@@ -204,6 +204,13 @@ export const POSES = {
     hr: [-0.1, 0.4, 0.2], er: [-1, 0, 0.3], gr: 'relaxed',
     fl: [0.0, -0.87, 0.02], kl: [0, 0, 1], fr: [0.06, -0.52, -0.3], kr: [-0.4, 0, -1], toe: [0.9, 0.7],
   }),
+  // Mantle: both hands planted on the roof edge in front, pushing down, knees tucked up through.
+  mantle: pose({
+    spine: [0.5, 0, 0], head: [-0.45, 0],
+    hl: [0.14, -0.3, 0.32], el: [0.6, 0, -1], gl: 'open', wrist: [0.9, 0.9],
+    hr: [-0.14, -0.3, 0.32], er: [-0.6, 0, -1], gr: 'open',
+    fl: [0.12, -0.42, 0.38], kl: [0.1, 0.3, 1], fr: [-0.12, -0.5, 0.3], kr: [-0.1, 0.3, 1], toe: [0.5, 0.5],
+  }),
   // Superhero landing: crouched low, right knee down, right fist on the ground, left arm out.
   land: pose({
     spine: [0.95, 0, -0.2], head: [-0.85, 0], drop: 0.6,

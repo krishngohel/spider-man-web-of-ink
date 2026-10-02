@@ -42,7 +42,7 @@ const check = (name, ok, detail) => { results.push({ name, ok, detail }); consol
 const teleport = (x, y, z, vx, vy, vz, st = 'air', yaw = 0) => page.evaluate(([a, b, c, d, e, f, s, w]) => { window.__game.teleport(a, b, c, d, e, f, s, w); window.__game.setLook(w, 0.15); }, [x, y, z, vx, vy, vz, st, yaw]);
 async function until(fn, ms) {
   const t0 = Date.now();
-  while (Date.now() - t0 < ms) { const h = await H(); if (fn(h)) return { h, t: Date.now() - t0 }; await sleep(8); }
+  while (Date.now() - t0 < ms) { const h = await H(); if (await fn(h)) return { h, t: Date.now() - t0 }; await sleep(8); }
   return null;
 }
 async function releaseAll() { for (const k of ['Shift', 'Space', 'KeyD', 'KeyA', 'KeyW', 'KeyQ', 'KeyC']) await page.keyboard.up(k); }
@@ -113,6 +113,30 @@ await sleep(100);
 const hg3 = await H();
 await releaseAll();
 check('hang grabs the line, climbs, slides and lets go', hg0.state === 'hang' && hg1.swing.L < hg0.swing.L - 2.5 && hg2.swing.L > hg1.swing.L + 3 && hg3.state === 'air', `${hg0.state}, L ${hg0.swing.L.toFixed(1)} -> ${hg1.swing.L.toFixed(1)} -> ${hg2.swing.L.toFixed(1)}, then ${hg3.state}`);
+
+// D3. Mantle: flying at a real roof edge a little low grabs it and climbs onto the roof.
+const ledge = await page.evaluate(() => {
+  // A mid-height building whose east face is clear for 8 m.
+  const boxes = window.__game.city.boxes.filter((b) => b.kind === 'building');
+  for (const b of boxes) {
+    const top = b.max[1];
+    if (top < 18 || top > 45 || b.max[2] - b.min[2] < 12) continue;
+    const x = b.max[0] + 5, z = (b.min[2] + b.max[2]) / 2, y = top - 0.6;
+    const clear = !boxes.some((o) => o !== b && x + 1 > o.min[0] && b.max[0] < o.max[0] && z > o.min[2] - 1 && z < o.max[2] + 1 && y < o.max[1] + 2);
+    if (clear) return { x, y, z, top, face: b.max[0] };
+  }
+  return null;
+});
+let mantleOk = false, mantleDetail = 'no ledge found';
+if (ledge) {
+  await page.evaluate(([x, y, z]) => { window.__game.teleport(x, y, z, -10, 3, 0, "air", -Math.PI / 2); }, [ledge.x, ledge.y, ledge.z]);
+  // Events only last a frame: collect them while waiting.
+  const ev = [];
+  const m = await until(async (h) => { ev.push(...await page.evaluate(() => window.__game.events())); return h.state === 'ground'; }, 2500);
+  mantleOk = !!m && Math.abs(m.h.p.y - (ledge.top + 0.9)) < 0.3 && m.h.p.x < ledge.face && ev.includes('mantle');
+  mantleDetail = m ? `landed at y ${m.h.p.y.toFixed(1)} (roof ${ledge.top.toFixed(1)}), events ${[...new Set(ev)].join(' ')}` : 'never landed';
+}
+check('flying a little low at a roof edge mantles onto the roof', mantleOk, mantleDetail);
 
 // E2. A skilled run down the avenue: aim each web, hold, let go on the rise, steer back toward
 // the centre line. Covers the length of Midtown without touching the street.

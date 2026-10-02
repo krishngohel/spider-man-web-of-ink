@@ -73,7 +73,8 @@ export function createPoser(heroModel) {
   let variant = 0;          // which swing pose set this swing uses (A, B, C)
   let lastHeading = 0, bank = 0, flutter = 0, perchT = 0, idleT = 0;
   let swings = 0;
-  let inverted = false;     // hanging upside down: the web runs from the feet
+  let inverted = false;
+  let mantleT = 0;          // hands-on-the-edge pose while going over a ledge     // hanging upside down: the web runs from the feet
   const webWorld = new THREE.Vector3();
   const webHand = { side: 'r', world: webWorld };
 
@@ -139,6 +140,7 @@ export function createPoser(heroModel) {
         else if (e.type === 'launch') { trick = { def: TRICKS.frontflip, name: 'frontflip', t: 0 }; perchT = 0; }
         else if (e.type === 'vault') { trick = { def: TRICKS.sideflip, name: 'sideflip', t: 0 }; }
         else if (e.type === 'perch') perchT = 0.9;
+        else if (e.type === 'mantle') { mantleT = 0.42; trick = null; }
         else if (e.type === 'land') {
           trick = null;
           if (e.hard && hs < 10) landT = 0.6;
@@ -152,6 +154,7 @@ export function createPoser(heroModel) {
       if (trick) { trick.t += dt; if (trick.t >= trick.def.dur || st !== 'air') trick = null; }
       if (landT > 0) { landT -= dt; if (st !== 'ground' || hs > 3) landT = 0; }
       if (perchT > 0) { perchT -= dt; if (st !== 'ground' || hs > 2) perchT = 0; }
+      if (mantleT > 0) { mantleT -= dt; if (st !== 'air') mantleT = 0; }
       // Standing still on a rooftop for a while: drop into a perch crouch, Spider-Man style.
       idleT = st === 'ground' && hs < 0.3 && hero.body.p.y > 6 ? idleT + dt : 0;
 
@@ -235,7 +238,11 @@ export function createPoser(heroModel) {
         target.set(POSES.wings);
       } else {
         // Air. A dive goes head first; otherwise upright with a lean into the motion.
-        if (hero.diving && speed > 8) {
+        if (mantleT > 0) {
+          // Going over a ledge: upright, facing in, hands on the edge.
+          basis(UP, tmp, qBase);
+          target.set(POSES.mantle);
+        } else if (hero.diving && speed > 8) {
           tmp2.copy(tmp).negate().lerp(DOWN, 0.2);
           basis(vel, tmp2, qBase);
           target.set(POSES.dive);

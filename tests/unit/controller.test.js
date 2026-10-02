@@ -440,3 +440,101 @@ describe('hanging on a web', () => {
     expect(h.hangInverted).toBe(false);
   });
 });
+
+describe('ledges, corners and launches', () => {
+  it('coming up just short of a roof grabs the edge and mantles over', () => {
+    const w = city();
+    const h = createHero(w);
+    h.strict = true;
+    h.place(-146, 19.2, 0, -8, 1, 0); // the low building: east face x = -150, roof 20 m
+    const i = emptyIntent(); i.moveX = -1;
+    let mantled = false;
+    run(h, i, 2, () => { if (h.events.some((e) => e.type === 'mantle')) mantled = true; });
+    expect(mantled).toBe(true);
+    expect(h.state).toBe('ground');
+    expect(h.body.p.y).toBeCloseTo(20.9, 1);
+    expect(h.body.p.x).toBeLessThan(-150.3);
+  });
+  it('hitting a wall far below the roof still sticks to the wall', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(-146, 10, 0, -8, 1, 0);
+    const i = emptyIntent();
+    run(h, i, 0.6);
+    expect(h.state).toBe('wall');
+    expect(h.events.some((e) => e.type === 'mantle')).toBe(false);
+  });
+  it('a swing into a roof edge mantles onto the roof instead of slapping the wall', () => {
+    const w = city();
+    const h = createHero(w);
+    h.strict = true;
+    h.place(-145, 19.4, 0, -14, 1, 0);
+    const i = emptyIntent();
+    let mantled = false;
+    run(h, i, 1.5, () => { if (h.events.some((e) => e.type === 'mantle')) mantled = true; });
+    expect(mantled).toBe(true);
+    expect(h.body.p.y).toBeGreaterThan(20.5);
+  });
+  it('swinging round a building corner whips the hero round it with a boost', () => {
+    // Flying east along a street; the web on the south face near the south-east corner. The line
+    // wraps the corner and the hero comes round it, heading north up the avenue.
+    const w = createWorld();
+    w.addBox({ min: [10, 0, 30], max: [40, 100, 80] });
+    w.build();
+    const h = createHero(w);
+    h.place(22, 50, 18, 26, 0, 0);
+    const i = emptyIntent();
+    const cx = 22, cy = 50.6, cz = 18, tx = 37, ty = 68, tz = 30;
+    const l = Math.hypot(tx - cx, ty - cy, tz - cz);
+    i.camPos = { x: cx, y: cy, z: cz }; i.camFwd = { x: (tx - cx) / l, y: (ty - cy) / l, z: (tz - cz) / l };
+    i.swing = true; i.swingPressed = true;
+    let corner = null;
+    run(h, i, 2, () => { const e = h.events.find((x) => x.type === 'corner'); if (e && !corner) corner = e; });
+    expect(corner).not.toBe(null);
+    expect(corner.boost).toBeGreaterThan(0);
+    expect(h.body.v.z).toBeGreaterThan(10); // round the corner, heading north
+  });
+  it('landing near a roof edge opens a point launch for a moment', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(-151.2, 22, 0, 0, -6, 0);
+    const i = emptyIntent(); i.camFwd = { x: 1, y: 0, z: 0 };
+    run(h, i, 0.4);
+    expect(h.state).toBe('ground');
+    i.jumpPressed = true;
+    run(h, i, dt);
+    expect(h.events.some((e) => e.type === 'launch')).toBe(true);
+    expect(Math.hypot(h.body.v.x, h.body.v.z)).toBeGreaterThan(12);
+  });
+  it('landing in the middle of a roof is a plain landing (a jump is a jump)', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(-175, 22, 0, 0, -6, 0);
+    const i = emptyIntent(); i.camFwd = { x: 1, y: 0, z: 0 };
+    run(h, i, 0.4);
+    i.jumpPressed = true;
+    run(h, i, dt);
+    expect(h.events.some((e) => e.type === 'launch')).toBe(false);
+  });
+  it('wall to wall: a wall jump across an alley sticks to the far wall and can jump again', () => {
+    const w = createWorld();
+    w.addBox({ min: [-20, 0, -30], max: [-4, 60, 30] });
+    w.addBox({ min: [4, 0, -30], max: [20, 60, 30] });
+    w.build();
+    const h = createHero(w);
+    h.strict = true;
+    h.place(-3.6, 20, 0, 0, 0, 0, 'wall');
+    h.wall.nx = 1; h.wall.nz = 0;
+    const i = emptyIntent(); i.camFwd = { x: 1, y: 0.2, z: 0 };
+    i.jumpPressed = true;
+    let stuck = false;
+    run(h, i, 1.2, () => { if (h.state === 'wall' && h.body.p.x > 0) stuck = true; });
+    expect(stuck).toBe(true);
+    const y1 = h.body.p.y;
+    i.camFwd = { x: -1, y: 0.2, z: 0 }; i.jumpPressed = true;
+    let back = false;
+    run(h, i, 1.2, () => { if (h.state === 'wall' && h.body.p.x < 0) back = true; });
+    expect(back).toBe(true);
+    expect(h.body.p.y).toBeGreaterThan(y1 - 6);
+  });
+});

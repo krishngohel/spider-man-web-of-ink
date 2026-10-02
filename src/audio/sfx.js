@@ -97,6 +97,9 @@ export function createSfx(getVolume) {
           burst({ freq: 400, freq2: 120, q: 0.7, dur: 0.12 + k * 0.1, gain: 0.1 + k * 0.3, type: 'lowpass' });
           break;
         }
+        case 'corner': burst({ freq: 900, freq2: 2600, q: 1.1, dur: 0.22, gain: 0.26 }); break;
+        case 'mantle': burst({ freq: 420, freq2: 1100, q: 1.2, dur: 0.14, gain: 0.22 }); break;
+        case 'hang': burst({ freq: 300, freq2: 520, q: 3, dur: 0.12, gain: 0.16 }); break;
         case 'wallStick': burst({ freq: 700, freq2: 250, q: 1.5, dur: 0.08, gain: 0.18 }); break;
         case 'perch': tone({ freq: 160, freq2: 70, dur: 0.12, gain: 0.25 }); break;
         case 'noAnchor': tone({ freq: 240, freq2: 200, dur: 0.06, gain: 0.05, type: 'square' }); break;

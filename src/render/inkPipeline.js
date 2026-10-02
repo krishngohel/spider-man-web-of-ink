@@ -112,10 +112,11 @@ void main() {
   bool sky = dc > uFar * 0.9;
   float nearK = 1.0 - smoothstep(25.0, 80.0, dc);
   // Shadows: cross-hatching up close, Ben-Day dots further out (never both at full strength).
-  // Driven by the material's own shadow shape, plus anything simply very dark.
+  // Driven by the material's own shadow shape (a dark colour in sunlight is not a shadow: the
+  // suit's blue stays clean), plus anything nearly black.
   float nearH = 1.0 - smoothstep(9.0, 24.0, dc);
-  float hatchZone = max(smoothstep(0.2, 0.1, L) * nearK, smoothstep(0.45, 0.9, shadowK) * nearH) * uHatch;
-  float rDark = (0.3 * smoothstep(0.24, 0.15, L) + 0.12 * smoothstep(0.1, 0.04, L)) * (1.0 - smoothstep(60.0, 150.0, dc));
+  float hatchZone = max(smoothstep(0.08, 0.04, L) * nearK, smoothstep(0.45, 0.9, shadowK) * nearH) * uHatch;
+  float rDark = 0.2 * smoothstep(0.08, 0.04, L) * (1.0 - smoothstep(60.0, 150.0, dc));
   float rShade = 0.26 * smoothstep(0.3, 0.8, shadowK) * (1.0 - smoothstep(110.0, 300.0, dc));
   float r = max(rDark, rShade) * uHalftoneAmount * (1.0 - hatchZone * 0.8);
   float dotMask = 1.0 - smoothstep(r - 0.06, r + 0.06, length(fract(cell) - 0.5));

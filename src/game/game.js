@@ -313,6 +313,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }
     if (e.type === 'perfect') { const s = screenOf(p.x, p.y + 1, p.z); hud.word('PERFECT!', s.x, s.y - 90, 'big'); }
     if (e.type === 'swingJump') { const s = screenOf(p.x, p.y, p.z); hud.word('WHOOSH!', s.x - 100, s.y + 20, 'small'); }
+    if (e.type === 'corner') {
+      const s = screenOf(p.x, p.y + 0.5, p.z);
+      if (s.front) hud.word('WHIP!', s.x + 90, s.y - 50, 'small');
+      if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.25);
+    }
+    if (e.type === 'launch') { const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('HUP!', s.x - 80, s.y - 40, 'small'); }
   }
   let camOverride = null;
   let camHeading = 0, camRoll = 0;

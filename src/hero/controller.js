@@ -31,6 +31,13 @@ const ZIP_TIMEOUT = 3;
 const WALL_ACCEL = 30;
 const RUN_UP_ACCEL = 60;
 const ADHESION = 0.5;
+// Landing this close to a roof edge opens a point launch (m).
+const EDGE_LAUNCH = 1.8;
+// A ledge within this far above the body centre (m) is grabbed and mantled, not stuck to.
+const MANTLE_UP = 2.4, MANTLE_DOWN = 0.4;
+// Swinging round a building corner: an extra push along the way, at most this (m/s), at most this
+// often (s).
+const CORNER_BOOST = 4, CORNER_GAP = 0.6;
 
 export function emptyIntent() {
   return {
@@ -72,6 +79,9 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     wallMomentum: false,
     hangInverted: false,
     hangStill: 0,
+    lastCorner: -10,
+    mantleUntil: -1,
+    mantleIn: { x: 0, z: 0, s: 0 },
     // Tests turn this on: a surface push with nothing to push against throws.
     strict: false,
     events: [],
@@ -84,7 +94,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       this.pendingWeb = null; this.zip = null;
       this.state = state;
       this.airTime = 0; this.ungrounded = 0; this.wallLost = 0;
-      this.launchUntil = -1; this.lastJumpPress = -10; this.shootNow = false;
+      this.launchUntil = -1; this.lastJumpPress = -10; this.shootNow = false; this.mantleUntil = -1;
       this.contactAge = state === 'ground' || state === 'wall' ? 0 : 1;
     },
 
@@ -179,7 +189,48 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     hero.pendingWeb = null; hero.zip = null;
     hero.state = 'ground';
     hero.ungrounded = 0;
+    // On a roof, near its edge: a jump in the next moment is a point launch off the ledge.
+    const gb = touch.groundBox, p = body.p;
+    if (gb && gb.maxY > 2) {
+      const edge = Math.min(p.x - gb.minX, gb.maxX - p.x, p.z - gb.minZ, gb.maxZ - p.z);
+      if (edge < EDGE_LAUNCH) hero.launchUntil = hero.time + tune.launchWindow;
+    }
     emit('land', { hard, impact: touch.impact });
+  }
+
+  // Up against a wall whose roof edge is within reach: hands on the edge, up and over, keeping most
+  // of the speed along the wall. Returns true when it mantled.
+  function tryMantle() {
+    // Already going over: the hands slide up the face, nothing to stick to, and keep pulling in
+    // toward the roof (the face stops the body until it clears the edge).
+    if (hero.time < hero.mantleUntil) {
+      const m = hero.mantleIn, v = body.v;
+      const cur = v.x * m.x + v.z * m.z;
+      if (cur < m.s) push((m.s - cur) * m.x, 0, (m.s - cur) * m.z, 'mantle: hands pull over', true);
+      return true;
+    }
+    const box = touch.box;
+    if (!box || box.maxY < 2) return false;
+    const p = body.p, v = body.v;
+    const up = box.maxY - p.y;
+    if (up > MANTLE_UP || up < -MANTLE_DOWN || v.y < -14) return false;
+    const h = Math.hypot(touch.nx, touch.nz);
+    if (h < 0.5) return false;
+    const nx = touch.nx / h, nz = touch.nz / h;
+    if (rope.active) rope.release();
+    if (swing.active) swing.release();
+    hero.pendingWeb = null; hero.zip = null; hero.wallMomentum = false;
+    const vn = v.x * nx + v.z * nz;
+    const tx = (v.x - vn * nx) * 0.7, tz = (v.z - vn * nz) * 0.7;
+    const vy = Math.sqrt(2 * g() * Math.max(0.4, up + 0.8));
+    const inward = Math.max(4, Math.min(9, Math.abs(vn) * 0.6));
+    push(tx - nx * inward - v.x, vy - v.y, tz - nz * inward - v.z, 'mantle over the edge', true);
+    hero.state = 'air'; hero.airTime = 0.2;
+    hero.launchUntil = hero.time + tune.launchWindow + 0.5;
+    hero.mantleUntil = hero.time + 0.45;
+    hero.mantleIn.x = -nx; hero.mantleIn.z = -nz; hero.mantleIn.s = inward;
+    emit('mantle');
+    return true;
   }
 
   function enterWall(n) {
@@ -302,7 +353,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     const before = hero.speed;
     move(dt);
     if (touch.ground && body.v.y <= 0.01) land();
-    else if (touch.wall) wallWithMomentum(before);
+    else if (touch.wall && !tryMantle()) wallWithMomentum(before);
   }
 
   // Swing ----------------------------------------------------------------------------------
@@ -313,7 +364,18 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     swing.preStep(body, dt, world.groundHeight(p.x, p.y - 0.9, p.z));
     const before = hero.speed;
     move(dt);
+    const wraps = swing.rope.pivots.length;
     swing.postStep(body, world);
+    // The line caught a building corner: whip round it, a push along the way.
+    if (swing.rope.pivots.length > wraps && !swing.rope.pivot.roof && hero.time - hero.lastCorner > CORNER_GAP) {
+      const sh = Math.hypot(v.x, v.z);
+      if (sh > 8) {
+        const boost = Math.min(CORNER_BOOST, Math.max(0, tune.cruiseSpeed + 6 - sh));
+        if (boost > 0) applyDv(body, 'assist', (v.x / sh) * boost, 0, (v.z / sh) * boost);
+        hero.lastCorner = hero.time;
+        emit('corner', { boost });
+      }
+    }
     if (swingContacts(before)) return;
     if (intent.hangPressed) { hero.state = 'hang'; startHang(); return; }
     if (intent.jumpPressed) {
@@ -431,7 +493,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   // A swing ends against the ground or a wall. Returns true when the state changed.
   function swingContacts(before) {
     if (touch.ground && body.v.y <= 0.5) { land(); return true; }
-    if (touch.wall) { wallWithMomentum(before); return true; }
+    if (touch.wall) { if (!tryMantle()) wallWithMomentum(before); return true; }
     return false;
   }
 
@@ -594,7 +656,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     else if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
     move(dt);
     if (touch.ground && v.y <= 0.01) land();
-    else if (touch.wall) enterWall(touch);
+    else if (touch.wall && !tryMantle()) enterWall(touch);
   }
 
   function capSpeed() {
