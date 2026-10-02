@@ -32,6 +32,8 @@ function check(name, ok, detail) { results.push(ok); console.log(`${ok ? 'PASS' 
 let brawlHits = [], shotAt = 0;
 // Melee: face the boss, close in, punch; dodge just before a blow lands; yank crates into him.
 async function brawl(bossE, h, st, opts = {}) {
+  // Stuck to a wall or a sign (walked into it): hop off, a crawler cannot dodge or punch.
+  if (h.state === 'wall') { await key('KeyW', false); await page.keyboard.press('Space'); await sleep(200); return 'unstick'; }
   const d = Math.hypot(bossE.x - h.p.x, bossE.z - h.p.z);
   const left = bossE.at - bossE.t;
   const threat = bossE.state === 'windup' && (d < (bossE.ranged ? 40 : bossE.reach + 1.6)) && left < 0.3 && left > -0.05;
@@ -83,6 +85,7 @@ async function run(stepId, label, pilot, limit = 150000) {
   await ev((id) => window.__game.storyAt(id), stepId);
   await page.mouse.click(640, 360);
   await sleep(500);
+  if ((await S()).step !== stepId) { console.log(`SKIP  ${label}  (no step ${stepId} in this build)`); return; }
   const t0 = Date.now();
   let minHp = 100, out = 'timeout';
   while (Date.now() - t0 < limit) {
@@ -123,7 +126,7 @@ await run('act1.shocker', 'pilot beats the Shocker on Exchange Street', async ({
 });
 
 // Vulture chase: swing after him, web him when in range.
-await run('act1.vultureChase', 'pilot catches the Vulture in a swing chase', async ({ h, bossE }) => {
+if (!process.env.SKIP_CHASE) await run('act1.vultureChase', 'pilot catches the Vulture in a swing chase', async ({ h, bossE }) => {
   if (!bossE) return;
   const d = Math.hypot(bossE.x - h.p.x, bossE.y - h.p.y, bossE.z - h.p.z);
   if (d < 45 && h.state !== 'swing' && Date.now() - (shotAt ?? 0) > 400) {
@@ -186,6 +189,113 @@ await run('act1.rhino', 'pilot beats the Rhino (street, run to the yard, yard)',
   await ev(([y]) => window.__game.setLook(y, 0.1), [yawTo(h, bossE)]);
   if (bossE.state === 'windup' && !r.charging && d < 4.5 && bossE.at - bossE.t < 0.3) { await page.keyboard.press('KeyC'); await sleep(150); }
 }, 300000);
+
+// Act 2 ---------------------------------------------------------------------------------------------
+
+// A crowd fight (the gate, Miles at the shelter): the nearest one standing, punch, dodge the tells.
+async function crowd({ c, h }) {
+  const live = c.enemies.filter((e) => !e.boss && !['out', 'webbed', 'pinned'].includes(e.state));
+  if (!live.length) { await key('KeyW', false); return; }
+  const near = live.reduce((x, e) => (Math.hypot(e.x - h.p.x, e.z - h.p.z) < Math.hypot(x.x - h.p.x, x.z - h.p.z) ? e : x));
+  const threat = live.some((e) => e.state === 'windup' && Math.hypot(e.x - h.p.x, e.z - h.p.z) < (e.ranged ? 30 : 3.6) && e.at - e.t < 0.3);
+  if (threat) { await key('KeyW', false); await page.keyboard.press('KeyC'); await sleep(120); return; }
+  await ev(([y]) => window.__game.setLook(y, 0.12), [yawTo(h, near)]);
+  const d = Math.hypot(near.x - h.p.x, near.z - h.p.z);
+  await key('KeyW', d > 2.4);
+  // Miles: the venom blast when three or more are close.
+  const close = live.filter((e) => Math.hypot(e.x - h.p.x, e.z - h.p.z) < 5).length;
+  if (close >= 3 && Math.random() < 0.3) { await click('right'); await sleep(80); return; }
+  if (d < 13) await click();
+}
+await run('act2.gate', 'pilot clears the Oscorp gate', crowd);
+await run('act2.milesDefend', 'pilot (Miles) defends the shelter generator', crowd, 240000);
+
+// Electro: short a relay while he is charged, beat him while he is drained.
+await run('act2.electro', 'pilot beats Electro on the power station', async ({ st, h, bossE }) => {
+  if (!bossE) return;
+  const s = st.boss ?? {};
+  if (s.charged && s.relays?.length) {
+    const r = s.relays.reduce((x, q) => (Math.hypot(q.x - h.p.x, q.z - h.p.z) < Math.hypot(x.x - h.p.x, x.z - h.p.z) ? q : x));
+    const d = Math.hypot(r.x - h.p.x, r.z - h.p.z);
+    if (d > 20) { await ev(([y]) => window.__game.setLook(y, 0.1), [Math.atan2(r.x - h.p.x, r.z - h.p.z)]); await key('KeyW', true); }
+    else { await key('KeyW', false); await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [r.x, r.y, r.z]); await sleep(40); await page.keyboard.press('KeyE'); await sleep(200); }
+    // Keep moving under the bolts.
+    if (s.perched) { await key('KeyD', Math.random() < 0.5); }
+    const left = bossE.at - bossE.t;
+    if (bossE.state === 'windup' && left < 0.3 && left > -0.05) { await page.keyboard.press('KeyC'); await sleep(120); }
+    return;
+  }
+  await key('KeyD', false);
+  await brawl(bossE, h, st);
+}, 240000);
+
+// Scorpion: catch him on the bridge, then fight against the poison clock.
+await run('act2.scorpionChase', 'pilot catches the Scorpion on the bridge', async ({ h, bossE }) => {
+  if (!bossE) return;
+  const d = Math.hypot(bossE.x - h.p.x, bossE.y - h.p.y, bossE.z - h.p.z);
+  if (d < 28 && Date.now() - shotAt > 350) {
+    shotAt = Date.now();
+    const k = d / 75;
+    await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [bossE.x + bossE.vx * k, bossE.y + bossE.vy * k, bossE.z + bossE.vz * k]);
+    await click('right');
+    await sleep(50);
+  }
+  await ev(([y]) => window.__game.setLook(y, 0.05), [yawTo(h, bossE)]);
+  await key('KeyW', true);
+  await key('ShiftLeft', true); // parkour run along the deck
+}, 180000);
+await run('act2.scorpion', 'pilot beats the Scorpion before the poison', async ({ st, h, bossE }) => {
+  if (!bossE) return;
+  await brawl(bossE, h, st);
+}, 200000);
+
+// Mysterio: scan for the real one, beat him; then the drones; then him again.
+await run('act2.mysterio', 'pilot beats Mysterio in Neon Square', async ({ st, h, bossE }) => {
+  const s = st.boss ?? {};
+  if (s.phase === 2 && s.drones?.length) {
+    const dr = s.drones.reduce((x, q) => (Math.hypot(q.x - h.p.x, q.z - h.p.z) < Math.hypot(x.x - h.p.x, x.z - h.p.z) ? q : x));
+    const d = Math.hypot(dr.x - h.p.x, dr.z - h.p.z);
+    if (d > 7) { await ev(([y]) => window.__game.setLook(y, 0.1), [Math.atan2(dr.x - h.p.x, dr.z - h.p.z)]); await key('KeyW', true); }
+    else { await key('KeyW', false); await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [dr.x, dr.y, dr.z]); await sleep(40); await page.keyboard.press('KeyE'); await sleep(250); }
+    return;
+  }
+  if (s.phase === 1 && !s.marked) { await page.keyboard.press('KeyV'); await sleep(60); }
+  const real = s.real ? { ...bossE, x: s.real.x, y: s.real.y, z: s.real.z, state: s.state } : bossE;
+  if (!real) return;
+  await brawl(real, h, st);
+}, 240000);
+
+// The Lizard: run him down across the park, then the zoo; webs while he slumps at the end.
+await run('act2.lizardChase', 'pilot catches the Lizard in the park', async ({ h, bossE }) => {
+  if (!bossE) return;
+  const d = Math.hypot(bossE.x - h.p.x, bossE.y - h.p.y, bossE.z - h.p.z);
+  if (d < 28 && Date.now() - shotAt > 350) {
+    shotAt = Date.now();
+    const k = d / 75;
+    await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [bossE.x + bossE.vx * k, bossE.y + bossE.vy * k, bossE.z + bossE.vz * k]);
+    await click('right');
+    await sleep(50);
+  }
+  await ev(([y]) => window.__game.setLook(y, 0.05), [yawTo(h, { x: bossE.x + bossE.vx, z: bossE.z + bossE.vz })]);
+  await key('KeyW', true);
+  await key('ShiftLeft', true);
+  if (d > 25 && h.state === 'ground' && Math.random() < 0.1) await page.keyboard.press('KeyQ');
+}, 180000);
+await run('act2.lizard', 'pilot beats the Lizard and cures Connors', async ({ st, h, bossE }) => {
+  if (!bossE) return;
+  const s = st.boss ?? {};
+  if (s.phase === 3 && bossE.state === 'stun') {
+    await key('KeyW', false);
+    await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [bossE.x, bossE.y, bossE.z]);
+    await click('right');
+    await sleep(160);
+    return;
+  }
+  // Minions first if they crowd in.
+  if (s.minions > 0 && Math.random() < 0.5) { await crowd({ c: await C(), h }); return; }
+  await brawl(bossE, h, st);
+}, 240000);
+
 
 await b.close();
 console.log(errors.length ? errors.slice(0, 6).join('\n') : 'no console errors');

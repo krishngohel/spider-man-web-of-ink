@@ -133,7 +133,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     if (encounter) {
       const left = encounter.list.filter((e) => e.alive && isActive(e)).length;
       if (left === 0) { emit({ type: 'encounterDone', encounter }); encounter = null; encounterCooldown = 70 + rng.range(0, 60); }
-      else if (Math.hypot(encounter.x - hero.body.p.x, encounter.z - hero.body.p.z) > 420) { for (const e of encounter.list) enemies.remove(e); encounter = null; encounterCooldown = 20; }
+      else if (encounter.kind !== 'story' && Math.hypot(encounter.x - hero.body.p.x, encounter.z - hero.body.p.z) > 420) { for (const e of encounter.list) enemies.remove(e); encounter = null; encounterCooldown = 20; }
       return;
     }
     if (!getSettings().crimes || (authority && !authority())) return;
@@ -188,6 +188,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       encounter = { x: enc.x, z: enc.z, list, district: enc.district, faction: enc.faction, kind: enc.kind ?? 'gang' };
     },
     get encounter() { return encounter; },
+    clearEncounter() { encounter = null; },
     clear() { enemies.clear(); projectiles.clear(); gadgets.clear(); encounter = null; },
   };
 }

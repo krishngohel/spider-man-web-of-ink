@@ -62,6 +62,8 @@ export function createProps({ scene, world }) {
 
   // A boss lifts one (held over its head) and throws it.
   function lift(p, holder) { p.state = 'held'; p.holder = holder; }
+  // Let go of anything this holder carries (a stun knocks it out of his hands).
+  function drop(holder) { for (const p of list) if (p.state === 'held' && p.holder === holder) { p.state = 'flying'; p.owner = null; p.v.x = 0; p.v.y = 0; p.v.z = 0; p.age = 0.1; p.holder = null; } }
   function throwAt(p, to, t = 0.8) { launch(p, to, t, 'boss'); p.holder = null; }
 
   function step(dt, { hero, heroInvuln, hitHero, hitBoss, onBreak }) {
@@ -94,7 +96,7 @@ export function createProps({ scene, world }) {
 
   void _v;
   return {
-    list, add, remove, tryYank, lift, throwAt, step,
+    list, add, remove, tryYank, lift, drop, throwAt, step,
     nearest(x, z, state = 'rest') { let b = null, bd = Infinity; for (const p of list) { if (p.state !== state) continue; const d = Math.hypot(p.p.x - x, p.p.z - z); if (d < bd) { bd = d; b = p; } } return b; },
     clear() { while (list.length) remove(list[0]); },
   };

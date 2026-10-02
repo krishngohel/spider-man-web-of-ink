@@ -369,6 +369,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (e.code === 'Escape' && mode === 'paused' && menus.pauseOpen && !input.capturing && performance.now() - pausedAt > 300) { e.preventDefault(); resume(); }
   });
 
+  // Comic pages that began while the game was paused take over again when play resumes.
+  const comicResumes = () => { if (storyOn && director?.blocking) { mode = 'comic'; input.setEnabled(false); return true; } return false; };
+  const padComic = { a: false, b: false };
   function enterPlay() {
     mode = 'play';
     resetIntent();
@@ -377,6 +380,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     input.setEnabled(true);
     // The mouse is only captured when the player clicks the game view (never on a menu button).
     sfx.unlock();
+    comicResumes();
   }
   let pausedAt = 0;
   function pauseGame() {
@@ -392,9 +396,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     resetIntent();
     menus.hideAll();
     input.setEnabled(true);
+    comicResumes();
   }
   function toTitle() {
-    if (storyOn) { director.stop(); storyOn = false; }
+    if (storyOn) {
+      director.stop(); storyOn = false;
+      // A dev or test story never had a slot: free swing goes back to the real save.
+      if (save.slot > 3) loadInto(loadSlot(window.localStorage, lastSlot(window.localStorage) ?? 1) ?? newSave(1));
+    }
     mode = 'title';
     hud.show(false);
     input.setEnabled(false);
@@ -732,7 +741,15 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         interpolate();
         rig.update(dt, NO_LOOK, view, world, settings);
       }
-      if (mode === 'comic') director.update(dt);
+      if (mode === 'comic') {
+        director.update(dt);
+        // A gamepad reads the comic too: A reads on, B skips the scene.
+        const pad = [...(navigator.getGamepads?.() ?? [])].find((q) => q && q.connected);
+        const a = !!pad?.buttons[0]?.pressed, b = !!pad?.buttons[1]?.pressed;
+        if (a && !padComic.a) storyUi.advanceComic();
+        if (b && !padComic.b) storyUi.skipComic();
+        padComic.a = a; padComic.b = b;
+      }
       if (menus.open) menus.padNav();
       if (mode === 'map' && (input.pressed('map') || input.pressed('pause'))) map.hide();
     }
@@ -876,6 +893,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   function enterStory(slot, fresh) {
     if (session.active) return;
+    combat.heroCombat.revive();
     const next = fresh ? newSave(slot) : (loadSlot(window.localStorage, slot) ?? newSave(slot));
     loadInto(next);
     slots.hide();

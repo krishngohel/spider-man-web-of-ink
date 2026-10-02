@@ -28,6 +28,9 @@ export function createDirector(g) {
   let boss = null;      // the boss module of a boss or chase step
   let blocking = false; // comic pages up: play waits
   let retryT = -1, retries = 0;
+  // Bumped whenever the story is stopped or jumped: a pending card, comic or radio from before
+  // must not complete the step that runs now.
+  let epoch = 0;
   let env = null;
   let started = false;
 
@@ -58,10 +61,12 @@ export function createDirector(g) {
     if (step.tutorial) ui.tips(step.tutorial);
     marker.show(step.type === 'start' ? site : null);
     g.setWaypoint(site && ['start', 'reach', 'fight', 'boss', 'chase'].includes(step.type) ? { x: site.x, z: site.z, story: true } : null);
+    const ep = epoch;
+    const done = () => { if (ep === epoch) complete(step.id); };
     switch (step.type) {
-      case 'radio': say(step.lines).then(() => complete(step.id)); break;
-      case 'broadcast': say(step.lines, { bugle: true }).then(() => complete(step.id)); break;
-      case 'title': ui.card(step.card, actById(step.act)).then(() => complete(step.id)); break;
+      case 'radio': say(step.lines).then(done); break;
+      case 'broadcast': say(step.lines, { bugle: true }).then(done); break;
+      case 'title': ui.card(step.card, actById(step.act)).then(done); break;
       case 'panels': cur.phase = 'draw'; cur.drawIn = 2; setBlock(true); break;
       case 'fight': case 'boss': case 'chase': cur.phase = 'arrive'; break;
       default: break;
@@ -184,7 +189,8 @@ export function createDirector(g) {
         if (cur.phase === 'draw' && --cur.drawIn <= 0) {
           cur.phase = 'read';
           const pages = drawPanels(step);
-          ui.comic(pages).then(() => { setBlock(false); complete(step.id); });
+          const ep = epoch;
+          ui.comic(pages).then(() => { if (ep !== epoch) return; setBlock(false); complete(step.id); });
         }
         break;
       case 'fight': {
@@ -192,8 +198,11 @@ export function createDirector(g) {
           if (heroD(site).d < 70) { cur.phase = 'fight'; cur.wave = 0; spawnWave(); }
           break;
         }
-        const enc = combat.encounter;
-        if (!enc || enc.kind !== 'story') {
+        // Walked away from the fight: the crew packs up and waits for you to come back.
+        if (heroD(site).d > 260) { for (const e of cur.waveList ?? []) combat.enemies.remove(e); combat.clearEncounter(); cur.phase = 'arrive'; break; }
+        // The wave is over when every one of its own enemies is out (webbed, pinned or down).
+        const left = (cur.waveList ?? []).filter((e) => e.alive && !['out', 'webbed', 'pinned'].includes(e.state)).length;
+        if (left === 0) {
           cur.waveT += dt;
           if (cur.waveT > 1.4) {
             cur.waveT = 0;
@@ -231,7 +240,7 @@ export function createDirector(g) {
   function spawnWave() {
     const w = cur.step.waves[cur.wave];
     const d = city.districts.find((q) => cur.site.x >= q.minX && cur.site.x < q.maxX && cur.site.z >= q.minZ && cur.site.z < q.maxZ);
-    combat.spawnGang(cur.site.x, cur.site.z, d?.id ?? 'midtown', { faction: w.faction, mix: w.mix, alert: true, kind: 'story', level: w.level ?? 1 });
+    cur.waveList = combat.spawnGang(cur.site.x, cur.site.z, d?.id ?? 'midtown', { faction: w.faction, mix: w.mix, alert: true, kind: 'story', level: w.level ?? 1 }).list;
   }
 
   return {
@@ -245,7 +254,7 @@ export function createDirector(g) {
     get marker() { const s = runner.step; return s && s.type === 'start' && cur?.site ? { x: cur.site.x, z: cur.site.z } : null; },
     // From the save's step, or from a given step (chapter select, ?at=).
     start(at = null) { if (!started) { started = true; retries = 0; runner = createStoryRunner(STEPS, save.story); if (at) runner.jump(at); begin(); } },
-    stop() { endBoss(); combat.clear(); ui.clear(); marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); },
+    stop() { epoch++; endBoss(); combat.clear(); ui.clear(); marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
     update,
     // Before combat reads the intent: a yank aimed at a loose crate throws it at the boss.
     preStep(intent, cam) {
@@ -254,7 +263,12 @@ export function createDirector(g) {
       if (thrown) { intent.yankPressed = false; intent.hangPressed = false; word('YANK!', thrown.p, 'small'); g.sfx.event({ type: 'thwip' }); }
     },
     // The hero went down. In a mission fight the step restarts; true means it was handled.
-    onDefeat() { if (this.inFight && retryT < 0) { retry(); return true; } return retryT >= 0; },
+    onDefeat() {
+      // Knocked out after the boss already went down: no replay, just back on your feet.
+      if (cur?.phase === 'won') { combat.heroCombat.revive(); return true; }
+      if (this.inFight && retryT < 0) { retry(); return true; }
+      return retryT >= 0;
+    },
     // Test hooks.
     state() {
       return { step: runner.step?.id ?? null, type: runner.step?.type ?? null, phase: cur?.phase ?? null, wave: cur?.wave ?? 0, finished: runner.finished, boss: boss ? { ...boss.state } : null, site: cur?.site ? { x: cur.site.x, y: cur.site.y, z: cur.site.z } : null, blocking, talking: ui.talking, retries, done: [...save.story.done] };
@@ -267,7 +281,7 @@ export function createDirector(g) {
       endBoss(); combat.clear();
       complete(s.id);
     },
-    jump(id) { endBoss(); combat.clear(); ui.clear(); setBlock(false); if (runner.jump(id)) { started = true; retries = 0; begin(); return true; } return false; },
+    jump(id) { epoch++; if (retryT >= 0) { retryT = -1; g.fade(false); } endBoss(); combat.clear(); ui.clear(); setBlock(false); if (runner.jump(id)) { started = true; retries = 0; begin(); return true; } return false; },
     bossPhase(n) { boss?.setPhase(n); },
     get boss() { return boss; },
     props, fx,

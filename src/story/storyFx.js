@@ -62,7 +62,7 @@ export function createStoryFx(scene) {
       tetherGeo.attributes.position.setXYZ(1, b.x, b.y, b.z);
       tetherGeo.attributes.position.needsUpdate = true;
     },
-    clear() { for (const f of fxs) scene.remove(f.m); fxs.length = 0; tether.visible = false; },
+    clear() { for (const f of fxs) { scene.remove(f.m); f.m.material.dispose(); } fxs.length = 0; tether.visible = false; },
   };
 }
 
@@ -96,7 +96,7 @@ export function buildHelicopter(scene) {
   return {
     group: g, ladder, length: 14,
     update(dt, t) { hub.rotation.y += dt * 28; tailRotor.rotation.z += dt * 40; ladder.rotation.x = Math.sin(t * 1.3) * 0.05; },
-    dispose() { scene.remove(g); },
+    dispose() { scene.remove(g); g.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } }); },
   };
 }
 

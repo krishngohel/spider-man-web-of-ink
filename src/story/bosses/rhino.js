@@ -1,4 +1,4 @@
-import { applyDv } from '../../physics/ledger.js';
+import { applyDv, placeBody } from '../../physics/ledger.js';
 import { createBossActor } from '../bossActor.js';
 import { RAILYARD, GRID } from '../../world/city.js';
 
@@ -13,7 +13,7 @@ const L = (who, text) => ({ who, text });
 export function createRhino(ctx) {
   const { site, hero, fx, say, word, shake } = ctx;
   const a = createBossActor(ctx, { char: 'rhino', hp: 460, armor: 0.85, poise: 999, mass: 320, radius: 0.85, half: 0.6, at: { x: site.x - 12, y: 0.9, z: site.z }, facing: Math.PI / 2 });
-  let phase = 1, think = 1.5, charge = null, done = false, run = null, slowT = 0, stuns = 0, stuckT = 0;
+  let phase = 1, think = 1.5, charge = null, done = false, run = null, slowT = 0, stuns = 0, stuckT = 0, runT = 0, reroutes = 0;
   const yard = { minX: RAILYARD.minX, maxX: RAILYARD.maxX, minZ: RAILYARD.minZ, maxZ: RAILYARD.maxZ, y: 0 };
 
   a.onYank = () => {
@@ -29,8 +29,9 @@ export function createRhino(ctx) {
   a.hit = (args) => (phase === 2 ? { dealt: 0, blocked: true } : baseHit(args));
 
   // The run to the yard: along his avenue to the z = 0 street, then west into the yard.
-  function startRun() {
+  function startRun(again = false) {
     phase = 2;
+    if (!again) { runT = 0; reroutes = 0; }
     const p = a.body.p;
     // Street centre lines only: out to his street, along it to an avenue, down the avenue to the
     // z = 0 street, west along it into the yard.
@@ -42,7 +43,7 @@ export function createRhino(ctx) {
     stuckT = 0;
     a.arena = null;
     charge = null;
-    say([L('rhino', 'Not here. Somewhere with room to run.'), L('yuri', 'He is heading west, toward the rail yard. Get there first.')]);
+    if (!again) say([L('rhino', 'Not here. Somewhere with room to run.'), L('yuri', 'He is heading west, toward the rail yard. Get there first.')]);
   }
 
   function update(dt) {
@@ -65,7 +66,16 @@ export function createRhino(ctx) {
         if (t.d < 2.2 && Math.abs(t.dy) < 2) a.hurtHero(18, { x: t.ux * 2, z: t.uz * 2 }, true);
         // Blocked (a parked car, a lamp): he backs off and takes the next leg.
         stuckT = Math.hypot(a.body.v.x, a.body.v.z) < 2 ? stuckT + dt : 0;
-        if (stuckT > 1.2 && run.length > 1) { run.shift(); stuckT = 0; }
+        runT += dt;
+        if (stuckT > 1.2) { stuckT = 0; reroutes++; startRun(true); }
+        // Truly wedged (or far too slow): he comes crashing into the yard from off screen.
+        const h = hero.body.p;
+        if ((reroutes > 4 || runT > 40) && Math.hypot(h.x - a.body.p.x, h.z - a.body.p.z) > 80) {
+          placeBody(a.body, RAILYARD.maxX + 6, 0.9, 0);
+          applyDv(a.body, 'surface', -12, 0, 0);
+          run = [{ x: (RAILYARD.minX + RAILYARD.maxX) / 2, z: 0 }];
+          reroutes = 0;
+        }
       }
       a.step(dt);
       return;
@@ -83,7 +93,7 @@ export function createRhino(ctx) {
       const edge = a.arena && (a.body.p.x < a.arena.minX + 1.6 || a.body.p.x > a.arena.maxX - 1.6 || a.body.p.z < a.arena.minZ + 1.6 || a.body.p.z > a.arena.maxZ - 1.6);
       if (a.hitWall || edge) {
         charge = null; stuns++;
-        a.body.v.x = -a.body.v.x * 0.1; a.body.v.z = -a.body.v.z * 0.1;
+        applyDv(a.body, 'surface', -a.body.v.x * 1.1, 0, -a.body.v.z * 1.1);
         a.stun(4);
         fx.shock({ x: a.body.p.x, y: 0.2, z: a.body.p.z }, 5);
         shake(1); word('CRUNCH!', a.body.p, 'big');

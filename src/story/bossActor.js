@@ -169,7 +169,7 @@ export function createBossActor(ctx, opts) {
     world.resolveCapsule(body, radius, opts.half ?? 0.5, C);
     a.hitWall = C.wall && fast > 8 ? { nx: C.nx, nz: C.nz, speed: fast } : null;
     a.grounded = !!C.ground || p.y <= 0.91;
-    if (p.y < 0.9) { p.y = 0.9; if (v.y < 0) v.y = 0; a.grounded = true; }
+    if (p.y < 0.9) { p.y = 0.9; if (v.y < 0) applyDv(body, 'surface', 0, -v.y, 0); a.grounded = true; }
     if (a.grounded && !a.flying && ['stun', 'out', 'windup', 'strike', 'recover'].includes(e.state)) {
       const k = Math.min(1, 8 * dt); applyDv(body, 'surface', -v.x * k, 0, -v.z * k);
     }
@@ -177,10 +177,11 @@ export function createBossActor(ctx, opts) {
     const ar = a.arena;
     if (ar && !a.flying) {
       const m = radius + 0.4;
-      if (p.x < ar.minX + m) { p.x = ar.minX + m; v.x = Math.max(0, v.x); }
-      if (p.x > ar.maxX - m) { p.x = ar.maxX - m; v.x = Math.min(0, v.x); }
-      if (p.z < ar.minZ + m) { p.z = ar.minZ + m; v.z = Math.max(0, v.z); }
-      if (p.z > ar.maxZ - m) { p.z = ar.maxZ - m; v.z = Math.min(0, v.z); }
+      // Like a wall: the position is held and the velocity into it removed (a surface push).
+      if (p.x < ar.minX + m) { p.x = ar.minX + m; if (v.x < 0) applyDv(body, 'surface', -v.x, 0, 0); }
+      if (p.x > ar.maxX - m) { p.x = ar.maxX - m; if (v.x > 0) applyDv(body, 'surface', -v.x, 0, 0); }
+      if (p.z < ar.minZ + m) { p.z = ar.minZ + m; if (v.z < 0) applyDv(body, 'surface', 0, 0, -v.z); }
+      if (p.z > ar.maxZ - m) { p.z = ar.maxZ - m; if (v.z > 0) applyDv(body, 'surface', 0, 0, -v.z); }
     }
     // Keep off the hero (a soft push), unless flying past.
     const t = a.toHero();
@@ -197,6 +198,7 @@ export function createBossActor(ctx, opts) {
 
   a.dispose = () => {
     scene.remove(model.root);
+    model.outfitMat?.dispose?.(); // per model; geometry and gear materials are shared
     const i = combat.enemies.list.indexOf(e);
     if (i >= 0) combat.enemies.list.splice(i, 1);
     e.alive = false;

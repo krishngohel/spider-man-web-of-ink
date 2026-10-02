@@ -153,8 +153,10 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
     clear() {
       queue = []; line = null; radio.classList.remove('show'); radioDone = null;
       objective.classList.add('hidden'); bossBar.classList.add('hidden'); tips.replaceChildren();
-      if (resolver) finishComic();
-      if (cardDone) { card.classList.add('hidden'); const r = cardDone; cardDone = null; r(); }
+      // Dropped, not resolved: whatever waited on them belongs to a story that has stopped.
+      if (resolver) { comic.classList.add('hidden'); resolver = null; }
+      if (cardDone) { card.classList.remove('show'); card.classList.add('hidden'); cardDone = null; cardT = 0; }
+      stamp.classList.add('hidden'); stampT = 0;
     },
   };
 }

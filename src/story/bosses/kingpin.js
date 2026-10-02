@@ -84,7 +84,7 @@ export function createKingpin(ctx) {
       // Hand over hand: a steady climb (his own force), the yanks pull him back down.
       const v = a.body.v;
       applyDv(a.body, 'surface', -v.x, (0.55 - v.y) * Math.min(1, dt * 4) - 0, -v.z);
-      if (a.body.p.y > ladderTop) { a.body.p.y = ladderTop; v.y = 0; }
+      if (a.body.p.y > ladderTop) { a.body.p.y = ladderTop; if (v.y > 0) applyDv(a.body, 'surface', 0, -v.y, 0); }
       a.poseState = 'hang';
       a.step(dt);
       return;
@@ -97,6 +97,7 @@ export function createKingpin(ctx) {
       if (heli.group.position.y > ar.y + 80) { heli.dispose(); heli = null; }
     }
     if (a.hpFrac() <= 0) { a.defeat(); done = true; word('KO!', a.body.p, 'big'); return; }
+    if (a.stunned()) props.drop(a);
     if (a.stunned() || a.attacking()) { a.step(dt); return; }
 
     // A charge in flight.

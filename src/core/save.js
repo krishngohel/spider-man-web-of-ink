@@ -49,7 +49,8 @@ export function migrate(raw, slot = 1) {
     createdAt: num(r.createdAt, d.createdAt),
     updatedAt: num(r.updatedAt, d.updatedAt),
     playTime: num(r.playTime, 0, 0),
-    story: { step: typeof story.step === 'string' ? story.step : d.story.step, done: arr(story.done), choices: obj(story.choices) },
+    // Saves from before the opening comic pointed at the swing with nothing done.
+    story: { step: typeof story.step === 'string' && !(story.step === 'prologue.swing' && !arr(story.done).length) ? story.step : d.story.step, done: arr(story.done), choices: obj(story.choices) },
     world: {
       stations: arr(world.stations), districts: arr(world.districts),
       hour: num(world.hour, d.world.hour, 0, 24), weather: typeof world.weather === 'string' ? world.weather : 'clear',

@@ -33,7 +33,8 @@ const err = await p.evaluate(() => !!document.querySelector('#loading.error'));
 console.log(`${engine} boot ${bootMs} ms${err ? ' (LOADING ERROR)' : ''}`);
 await p.screenshot({ path: `${out}/title.png` });
 if (!err) {
-  await p.locator('.title .mbtn.primary').click();
+  await p.locator('.title .mbtn', { hasText: 'FREE SWING' }).click();
+  await p.waitForFunction(() => window.__game.mode === 'play');
   await p.evaluate(() => {
     window.__game.teleport(0, 50, -330, 0, 0, 22, 'air', 0);
     const t = window.__game.suggest(0, 1);
@@ -45,6 +46,7 @@ if (!err) {
   await p.screenshot({ path: `${out}/swing.png` });
   await p.keyboard.up('Shift');
   console.log(`swing: state ${h.state}, rope ${h.rope.active}, speed ${h.speed.toFixed(1)} m/s, fps ${Math.round(await p.evaluate(() => window.__game.fps))}`);
+  if (!h.rope.active) errors.push('the held swing did not attach');
 }
 console.log(errors.length ? 'errors:\n' + errors.slice(0, 10).join('\n') : 'no console errors');
 await b.close();
