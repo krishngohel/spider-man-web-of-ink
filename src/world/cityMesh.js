@@ -27,7 +27,7 @@ function buildingMaterial() {
     shader.uniforms.uWinLit = { value: new THREE.Color(PALETTE.windowLit) };
     shader.uniforms.uRoof = { value: new THREE.Color(PALETTE.roof) };
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute vec2 aStyle;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nvarying vec2 vStyle;')
+      .replace('#include <common>', '#include <common>\nattribute vec2 aStyle;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nflat varying vec2 vStyle;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;\nvWNrm = normal;\nvStyle = aStyle;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
@@ -35,7 +35,9 @@ uniform float uNight;
 uniform vec3 uWinDark, uWinLit, uRoof;
 varying vec3 vWPos;
 varying vec3 vWNrm;
-varying vec2 vStyle;
+// Flat: a per-building value must not be interpolated (tiny interpolation error, amplified by the
+// window hash, showed up as streaks across the glass).
+flat varying vec2 vStyle;
 float h21(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
 vec3 facade(vec3 base, float style, float seed) {
   bool xFace = abs(vWNrm.x) > 0.5;
@@ -66,7 +68,7 @@ vec3 facade(vec3 base, float style, float seed) {
 `)
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
-  float style = vStyle.x, seed = vStyle.y;
+  float style = floor(vStyle.x + 0.5), seed = floor(vStyle.y * 997.0 + 0.5) / 997.0;
   vec3 base = diffuseColor.rgb;
   if (vWNrm.y > 0.5 && style < 8.5) base = uRoof * (0.85 + 0.3 * fract(seed * 7.3));
   else if (abs(vWNrm.y) < 0.5) base = facade(base, style, seed);
