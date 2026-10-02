@@ -29,9 +29,16 @@ async function click(button = 'left') { await page.mouse.down({ button }); await
 const results = [];
 function check(name, ok, detail) { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}  ${detail}`); }
 
-let brawlHits = [], shotAt = 0;
+let brawlHits = [], shotAt = 0, healAt = 0;
+// Like a player: low on health with focus in the bar, hold the finisher key to patch up.
+async function sustain() {
+  const c = await C();
+  if (c.hp < 45 && c.focus >= 1 && Date.now() - healAt > 1500) { healAt = Date.now(); await key('KeyW', false); await page.keyboard.down('KeyX'); await sleep(800); await page.keyboard.up('KeyX'); return true; }
+  return false;
+}
 // Melee: face the boss, close in, punch; dodge just before a blow lands; yank crates into him.
 async function brawl(bossE, h, st, opts = {}) {
+  if (await sustain()) return 'heal';
   // Stuck to a wall or a sign (walked into it): hop off, a crawler cannot dodge or punch.
   if (h.state === 'wall') { await key('KeyW', false); await page.keyboard.press('Space'); await sleep(200); return 'unstick'; }
   // Knocked off a roof: zip back up to him.
@@ -198,6 +205,7 @@ await run('act1.rhino', 'pilot beats the Rhino (street, run to the yard, yard)',
 
 // A crowd fight (the gate, Miles at the shelter): the nearest one standing, punch, dodge the tells.
 async function crowd({ c, h }) {
+  if (await sustain()) return;
   const live = c.enemies.filter((e) => !e.boss && !['out', 'webbed', 'pinned'].includes(e.state));
   if (!live.length) { await key('KeyW', false); return; }
   const near = live.reduce((x, e) => (Math.hypot(e.x - h.p.x, e.z - h.p.z) < Math.hypot(x.x - h.p.x, x.z - h.p.z) ? e : x));
@@ -360,9 +368,9 @@ await run('act3.sandman', 'pilot beats Sandman at the shipyard', async ({ st, h,
     const hy = near(s.hydrants, bossE);
     if (hy) {
       const dHero = Math.hypot(hy.x - h.p.x, hy.z - h.p.z), dBoss = Math.hypot(hy.x - bossE.x, hy.z - bossE.z);
-      if (dHero > 4) { await ev(([y]) => window.__game.setLook(y, 0.1), [Math.atan2(hy.x - h.p.x, hy.z - h.p.z)]); await key('KeyW', true); return; }
+      if (dHero > 2) { await ev(([y]) => window.__game.setLook(y, 0.1), [Math.atan2(hy.x - h.p.x, hy.z - h.p.z)]); await key('KeyW', true); return; }
       await key('KeyW', false);
-      if (dBoss < 4) { await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [hy.x, hy.y, hy.z]); await sleep(40); await page.keyboard.press('KeyE'); await sleep(250); return; }
+      if (dBoss < 7) { await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [hy.x, hy.y, hy.z]); await sleep(40); await page.keyboard.press('KeyE'); await sleep(250); return; }
       if (bossE.state === 'windup' && bossE.at - bossE.t < 0.35) { await page.keyboard.press('KeyC'); await sleep(150); }
       return;
     }
@@ -431,9 +439,11 @@ await run('act4.ock', 'pilot beats Doctor Octopus up Oscorp Tower', async ({ st,
   const s = st.boss ?? {};
   if (s.phase === 2 && s.top) {
     // Up the tower: zip at the platform edge, run up walls.
-    const tgt = h.p.y < s.top.y - 30 ? { x: s.ock.x, y: Math.min(s.top.y, h.p.y + 50), z: s.ock.z + 2 } : { x: s.top.x, y: s.top.y + 1, z: s.top.z + 3 };
+    // On the wall: crawl straight up. Off it: zip onto the face, or over the platform edge.
+    if (h.state === 'wall') { await ev(() => window.__game.setLook(Math.PI, -0.9)); await key('KeyW', true); if (h.p.y > s.top.y - 12 && Date.now() - shotAt > 900) { shotAt = Date.now(); await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [s.top.x, s.top.y + 1, s.top.z + 3]); await page.keyboard.press('KeyQ'); } return; }
+    await key('KeyW', false);
+    const tgt = h.p.y > s.top.y - 12 ? { x: s.top.x, y: s.top.y + 1, z: s.top.z + 3 } : { x: s.ock.x, y: Math.min(s.top.y - 8, h.p.y + 30), z: s.ock.z - 2 };
     await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [tgt.x, tgt.y, tgt.z]);
-    await key('KeyW', true);
     if (Date.now() - shotAt > 900) { shotAt = Date.now(); await page.keyboard.press('KeyQ'); }
     return;
   }

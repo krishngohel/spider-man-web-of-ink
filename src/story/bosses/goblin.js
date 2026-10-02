@@ -148,8 +148,9 @@ export function createCatchMJ(ctx) {
   scene.add(model.root);
   const poser = ctx.createPoser(model), puppet = makePuppet();
   const body = createBody({ mass: 60 });
-  const x0 = BRIDGE.towers[1] - 10, z0 = BRIDGE.z + BRIDGE.width / 2 + 18;
-  placeBody(body, x0, BRIDGE.deckY + 55, z0);
+  // Off the side of the deck right by you, from the Goblin's glider forty metres up.
+  const x0 = hero.body.p.x + 6, z0 = BRIDGE.z + BRIDGE.width / 2 + 5;
+  placeBody(body, x0, BRIDGE.deckY + 40, z0);
   let t = 0, caught = null, done = false, failed = false, savedT = 0;
   // She is a web target like an enemy (so the web shot finds her), never hurt.
   const e = {
@@ -163,7 +164,7 @@ export function createCatchMJ(ctx) {
     caught = { len: Math.max(4, Math.hypot(hero.body.p.x - body.p.x, hero.body.p.y - body.p.y, hero.body.p.z - body.p.z)) };
     word('GOT YOU!', body.p, 'big');
   }
-  const actor = { name: 'MJ', hpFrac: () => (caught ? 1 : Math.max(0, (body.p.y - 2) / (BRIDGE.deckY + 53))), e };
+  const actor = { name: 'MJ', hpFrac: () => (caught ? 1 : Math.max(0, (body.p.y - 2) / (BRIDGE.deckY + 38))), e };
   return {
     actor,
     get done() { return done; },
@@ -183,7 +184,7 @@ export function createCatchMJ(ctx) {
           applyDv(body, 'drag', -v.x * Math.min(1, dt * 1.5), -v.y * Math.min(1, dt * 1.5), -v.z * Math.min(1, dt * 1.5));
           fx.tether({ x: h.x, y: h.y + 0.5, z: h.z }, { x: p.x, y: p.y + 0.5, z: p.z });
           if (Math.hypot(v.x, v.y, v.z) < 1.5) { savedT += dt; if (savedT > 1 && !done) { done = true; word('SAVED!', p, 'big'); fx.tether(null); } }
-        } else applyDv(body, 'gravity', 0, -22 * dt, 0);
+        } else { applyDv(body, 'gravity', 0, -22 * dt, 0); applyDv(body, 'drag', 0, -v.y * 0.35 * dt, 0); }
         p.x += v.x * dt; p.y += v.y * dt; p.z += v.z * dt;
         if (!caught && Math.hypot(h.x - p.x, h.y - p.y, h.z - p.z) < 2.5) catchHer();
         if (p.y < 1.5 && !caught && !failed) { failed = true; word('NO!', p, 'big'); }

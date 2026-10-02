@@ -44,7 +44,8 @@ export function createContentWorld(g) {
     car: comicToon({ color: 0x3a3a46 }), van: comicToon({ color: 0x8a8f96 }), rubble: comicToon({ color: 0x8a8076 }),
   };
   const geo = { bp: new THREE.BoxGeometry(0.5, 0.6, 0.3), strap: new THREE.BoxGeometry(0.52, 0.08, 0.32), bird: new THREE.SphereGeometry(0.22, 10, 8), head: new THREE.SphereGeometry(0.11, 8, 6), tag: new THREE.CircleGeometry(0.9, 18), ear: new THREE.ConeGeometry(0.3, 0.5, 3), ring: new THREE.TorusGeometry(5, 0.35, 8, 32) };
-  let time = 0;
+  let time = 0, cullT = 0;
+  const startMeshes = [];
 
   // Collectibles ------------------------------------------------------------------------------------
   const items = [];
@@ -112,6 +113,7 @@ export function createContentWorld(g) {
 
   // Crimes ------------------------------------------------------------------------------------------
   let crime = null, crimeCd = 30;
+  let nights = null; // Crime Nights: { score, level, t }
   const crimeObjs = [];
   function districtOf(x, z) { return city.districts.find((d) => x >= d.minX && x < d.maxX && z >= d.minZ && z < d.maxZ) ?? null; }
   function streetSpot(r0 = 90, r1 = 180) {
@@ -141,7 +143,9 @@ export function createContentWorld(g) {
         const b = city.boxes.filter((q) => q.kind === 'building' && Math.hypot((q.min[0] + q.max[0]) / 2 - spot.x, (q.min[2] + q.max[2]) / 2 - spot.z) < 60 && q.max[1] < 60).sort((p1, p2) => p2.max[1] - p1.max[1])[0];
         if (b) { x = (b.min[0] + b.max[0]) / 2; z = (b.min[2] + b.max[2]) / 2; y = b.max[1] + 0.9; }
       }
-      const enc = combat.spawnGang(x, z, spot.district, { mix: C.mix, faction: C.faction ?? null, alert: false, kind: 'crime' });
+      const lvl = nights ? nights.level : 1;
+      const mix = nights && nights.level > 2 ? [...C.mix, 'brawler', nights.level > 4 ? 'brute' : 'gunner'] : C.mix;
+      const enc = combat.spawnGang(x, z, spot.district, { mix, faction: C.faction ?? null, alert: !!nights, kind: 'crime', level: lvl });
       if (y > 1) for (const e of enc.list) e.body.p.y = y;
       crime.list = enc.list;
       if (C.van) addObj(new THREE.Mesh(new THREE.BoxGeometry(2.4, 2.6, 6), mats.van), spot.x + 4, 1.3, spot.z);
@@ -189,14 +193,16 @@ export function createContentWorld(g) {
       act.crimeByDistrict ??= {};
       const n = act.crimeByDistrict[d] = (act.crimeByDistrict[d] ?? 0) + 1;
       g.reward('crime', { tokens: n <= CRIME_QUOTA ? { crime: 1 } : null, at: crime.spot });
+      if (nights) { nights.score++; nights.level = 1 + Math.floor(nights.score / 3); g.caption(`CRIME NIGHTS: ${nights.score} STOPPED, LEVEL ${nights.level}`, 2.5); }
       g.caption(`${crime.C.name}: STOPPED`, 2.2);
       g.persist();
     } else if (crime) g.caption(`${crime.C.name}: TOO LATE`, 2.2);
     g.crimeWaypoint(null);
-    crime = null; crimeCd = 45 + Math.random() * 45;
+    crime = null; crimeCd = nights ? 6 : 45 + Math.random() * 45;
   }
   function updateCrime(dt) {
-    if (!crime) { crimeCd -= dt; if (crimeCd <= 0 && !g.busy()) { crimeCd = 20; startCrime(); } return; }
+    if (nights) nights.t += dt;
+    if (!crime) { crimeCd -= dt; if (crimeCd <= 0 && (nights || !g.busy())) { crimeCd = 20; startCrime(nights ? ['mugging', 'robbery', 'gang', 'hostage', 'van', 'drones', 'sniper'][Math.floor(Math.random() * 7)] : null); } return; }
     crime.t += dt;
     const p = hero.body.p, sp = crime.spot;
     const far = Math.hypot(p.x - sp.x, p.z - sp.z) > 450;
@@ -278,6 +284,7 @@ export function createContentWorld(g) {
     const m = new THREE.Mesh(startGeo, c.kind === 'race' ? mats.ringNext : mats.ring);
     m.layers.set(LAYER_FX); m.rotation.x = -Math.PI / 2; m.position.set(c.x, 0.08, c.z);
     scene.add(m);
+    startMeshes.push({ m, x: c.x, z: c.z });
   }
   function startMarkers() { return [...cat.races, ...cat.challenges]; }
   function updateRuns(dt) {
@@ -447,6 +454,15 @@ export function createContentWorld(g) {
     catalog: cat,
     update(dt, { active }) {
       time += dt;
+      // Only what is near is drawn (a few hundred small meshes add up to draw calls).
+      cullT -= dt;
+      if (cullT <= 0) {
+        cullT = 0.4;
+        const hp = hero.body.p;
+        for (const it of items) it.root.visible = Math.hypot(hp.x - it.q.x, hp.z - it.q.z) < 380;
+        for (const s of startMeshes) s.m.visible = Math.hypot(hp.x - s.x, hp.z - s.z) < 600;
+        for (const k of kiosks) k.k.visible = Math.hypot(hp.x - k.r.x, hp.z - k.r.z) < 500;
+      }
       for (const it of items) {
         if (it.q.kind === 'pigeon') { it.root.position.y = it.q.y + Math.abs(Math.sin(time * 3 + it.q.x)) * 0.1; it.root.rotation.y = Math.sin(time * 0.7 + it.q.z) * 1.2; }
         if (it.q.kind === 'backpack') it.root.rotation.y = time * 1.2;
@@ -460,6 +476,17 @@ export function createContentWorld(g) {
       updateResearch(dt);
     },
     photo,
+    get nights() { return nights ? { ...nights } : null; },
+    startNights() { this.stop(); nights = { score: 0, level: 1, t: 0 }; crimeCd = 2; g.caption('CRIME NIGHTS: HOW LONG CAN YOU LAST?', 3); },
+    // The night ends when you go down: the score is kept if it is a best.
+    endNights() {
+      if (!nights) return;
+      const best = save.postGame.crimeNightsBest ?? 0;
+      if (nights.score > best) save.postGame.crimeNightsBest = nights.score;
+      g.stamp(`CRIME NIGHTS: ${nights.score}${nights.score > best ? ' NEW BEST!' : ''}`);
+      nights = null; g.persist();
+      if (crime) { for (const e of crime.list) combat.enemies.remove(e); endCrime(false); }
+    },
     get busyHere() { return !!(crime || base || run || task); },
     // Map icons: what is still to find or do (collectibles only once you have been near).
     mapIcons() {

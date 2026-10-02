@@ -370,3 +370,13 @@ button { font: inherit; }
 .titem { display: flex; justify-content: space-between; gap: 8px; background: #fff; border: 2px solid var(--ink); padding: 4px 8px; font: 600 14px var(--body); }
 .medal { font: 14px var(--head); letter-spacing: 1px; }
 .medal.m0 { color: #888; } .medal.m1 { color: #a0642a; } .medal.m2 { color: #7a8494; } .medal.m3 { color: #c8a020; } .medal.m4 { color: #8a3ac8; }
+
+/* Accessibility: larger text, colour-blind safe crosshair and prompts. */
+body.text-large .dlg-text { font-size: 24px; } body.text-huge .dlg-text { font-size: 30px; }
+body.text-large .cballoon { font-size: 22px; } body.text-huge .cballoon { font-size: 26px; }
+body.text-large .ccaption { font-size: 23px; } body.text-huge .ccaption { font-size: 28px; }
+body.text-large .otext, body.text-large .stip { font-size: 21px; } body.text-huge .otext, body.text-huge .stip { font-size: 25px; }
+body.cb .reticle.invalid { color: #ffb000; }
+body.cb .reticle.valid { color: #3ab0ff; }
+body.cb .smark.alert, body.cb .smark.alert i { background: #ffb000; }
+body.cb .bfill { background: linear-gradient(#5ab0ff, #1f4fb6); }

@@ -5,7 +5,7 @@ import { ACTIONS, DEFAULT_BINDINGS, keyLabel, rebind } from '../core/bindings.js
 // Title screen, pause menu, settings and controls (with rebinding). Mouse, keyboard and gamepad
 // (D-pad or left stick to move, A to choose, B to go back, left/right to change a value).
 
-export function createMenus(root, { getSettings, setSettings, input, onPlay, onResume, onRestart, onQuit, onProgress = () => {}, onRoster = () => {}, onMultiplayer = () => {}, onStory = () => {}, onTracker = () => {} }) {
+export function createMenus(root, { getSettings, setSettings, input, onPlay, onResume, onRestart, onQuit, onProgress = () => {}, onRoster = () => {}, onMultiplayer = () => {}, onStory = () => {}, onTracker = () => {}, onGauntlet = () => {}, onNights = () => {}, postGame = () => false }) {
   const C = COPY.settings;
   // Title ---------------------------------------------------------------------------------------
   const title = el('div', { class: 'title hidden' }, el('div', { class: 'card' }, [
@@ -28,6 +28,8 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       el('button', { class: 'mbtn primary', onclick: () => onResume() }, COPY.buttons.resume),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onProgress(); } }, COPY.buttons.progress),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onTracker(); } }, COPY.buttons.tracker),
+      el('button', { class: 'mbtn postgame', onclick: () => { hideAll(); onGauntlet(); } }, COPY.buttons.gauntlet),
+      el('button', { class: 'mbtn postgame', onclick: () => { hideAll(); onNights(); } }, COPY.buttons.nights),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onRoster(); } }, COPY.buttons.roster),
       el('button', { class: 'mbtn', onclick: () => openSettings('pause') }, COPY.buttons.settings),
       el('button', { class: 'mbtn', onclick: () => openControls('pause') }, COPY.buttons.controls),
@@ -81,6 +83,11 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       el('h3', {}, C.sections.camera),
       slider(C.sensitivity[0], 0.2, 3, 0.05, () => getSettings().sensitivity, (v) => update({ sensitivity: v })),
       toggle(C.invertY[0], 'invertY'),
+      toggle(C.invertX[0], 'invertX'),
+      el('h3', {}, 'Accessibility'),
+      choice(C.textSize[0], C.textSize[1], ['normal', 'large', 'huge'], 'textSize', C.textSizeValues),
+      toggle(C.colorblind[0], 'colorblind', C.colorblind[1]),
+      toggle(C.slowMo[0], 'slowMo', C.slowMo[1]),
       slider(C.fov[0], 50, 80, 1, () => getSettings().fov, (v) => update({ fov: v })),
       toggle(C.speedLines[0], 'speedLines'),
       toggle(C.soundWords[0], 'soundWords', C.soundWords[1]),
@@ -141,7 +148,7 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
   function hideAll() { for (const n of [title, pause, settingsPanel, controlsPanel]) n.classList.add('hidden'); }
   function focusFirst(node) { requestAnimationFrame(() => node.querySelector('button, input')?.focus({ preventScroll: true })); }
   function showTitle() { hideAll(); title.classList.remove('hidden'); focusFirst(title); }
-  function showPause() { hideAll(); pause.classList.remove('hidden'); focusFirst(pause); }
+  function showPause() { hideAll(); for (const b of pause.querySelectorAll('.postgame')) b.style.display = postGame() ? '' : 'none'; pause.classList.remove('hidden'); focusFirst(pause); }
   const visible = () => [title, pause, settingsPanel, controlsPanel].find((n) => !n.classList.contains('hidden')) ?? null;
 
   // Gamepad navigation, polled by the game loop while a menu is open.

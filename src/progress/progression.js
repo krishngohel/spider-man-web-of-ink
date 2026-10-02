@@ -189,4 +189,14 @@ export function grantXp(save, amount) {
   return after - before;
 }
 
+// A profile at a given level with its points spent (tree by tree, in order): the dev and test entry
+// into the middle of the story plays at the strength a player would have reached there.
+export function autoBuild(save, level, order = ['defender', 'webslinger', 'innovator']) {
+  let xp = 0;
+  for (let l = 1; l < level; l++) xp += xpToNext(l);
+  grantXp(save, xp - save.progress.xp);
+  for (let pass = 0; pass < 5; pass++) for (const t of order) for (const s of SKILLS.filter((q) => q.tree === t)) if (save.progress.skillPoints > 0) learn(save, s.id);
+  return save;
+}
+
 export function suitById(id) { return SUITS.find((s) => s.id === id) ?? SUITS[0]; }

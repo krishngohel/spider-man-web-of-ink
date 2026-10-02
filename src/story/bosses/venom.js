@@ -101,7 +101,9 @@ export function createVenom(ctx) {
     const dh = Math.hypot(h.x - p.x, h.y - p.y, h.z - p.z);
     farT = dh > 220 ? farT + dt : 0;
     if (farT > 10) { failed = true; say([L('peter', 'He is gone. He will go back to the church, he wants me to follow.')]); return; }
-    if (inLeap) { if (a.grounded) { inLeap = false; waitT = 0.5; fx.shock({ x: p.x, y: p.y - 0.8, z: p.z }, 2.5); } return; }
+    if (inLeap) { if (a.grounded) { inLeap = false; waitT = 0.5; applyDv(a.body, 'surface', -a.body.v.x, 0, -a.body.v.z); fx.shock({ x: p.x, y: p.y - 0.8, z: p.z }, 2.5); } return; }
+    // Standing between leaps: feet planted.
+    if (a.grounded) applyDv(a.body, 'surface', -a.body.v.x * Math.min(1, dt * 10), 0, -a.body.v.z * Math.min(1, dt * 10));
     waitT -= dt;
     a.faceHero(dt, 4);
     // Waits for you when you fall behind; bounds on when you are close.

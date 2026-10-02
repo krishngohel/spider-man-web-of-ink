@@ -142,7 +142,8 @@ export function createBossActor(ctx, opts) {
   a.yank = (near) => (a.onYank ? a.onYank(near) : false);
 
   function attackStep(dt) {
-    if (!attack) return;
+    // A recovery (or strike) a module set by hand, with no attack behind it, still ends.
+    if (!attack) { if ((e.state === 'recover' || e.state === 'strike') && e.t > 0.8) a.state('engage'); return; }
     if (e.state === 'windup') {
       if (attack.track) a.faceHero(dt, 5);
       if (e.t >= attack.t) {

@@ -49,6 +49,8 @@ import { createModes } from '../net/modes.js';
 import { createSocial } from '../net/social.js';
 import { createLobby } from '../ui/lobby.js';
 import { unlockedSave } from '../progress/unlocked.js';
+import { autoBuild } from '../progress/progression.js';
+import { newGamePlus } from '../story/gauntlet.js';
 import { ARCHETYPES } from '../combat/enemies.js';
 import { DEFAULTS } from '../physics/constants.js';
 import { createDirector } from '../story/director.js';
@@ -156,7 +158,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   const hero = createHero(world, { gravity: settings.gravity, assist: settings.swingAssist });
   // Combat: enemies, projectiles, gadgets and the hero's fighting state.
-  const combat = createCombat({ scene, world, assets, hero, city, getSettings: () => ({ ...settings, crimes: false }), feedback: {
+  const combat = createCombat({ scene, world, assets, hero, city, getSettings: () => ({ ...settings, crimes: false, difficulty: storyOn && save.postGame?.ngPlus > 0 ? 'ultimate' : settings.difficulty }), feedback: {
     splat: (hit) => fx.splat(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz),
     boom: (p) => { fx.ring(p.x, p.y, p.z, 1.6); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.6); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('KA-BOOM!', s.x, s.y, 'hit'); sfx.event({ type: 'land', hard: true, impact: 30 }); },
     sense: (e, unblockable, ranged) => { combatHud.sense(e, unblockable, ranged); sfx.event({ type: 'sense' }); },
@@ -236,11 +238,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onMultiplayer: () => lobby.show(),
     onStory: () => slots.show(),
     onTracker: () => tracker.show(),
+    postGame: () => !session.active && (save.story.done.includes('act4.epilogue') || !!save.story.choices?.completedOnce),
+    onGauntlet: () => { storyOn = true; enterPlay(); director.startGauntlet(); },
+    onNights: () => { if (storyOn) { director.stop(); storyOn = false; } storyEnv = { hour: 23, weather: 'clear' }; enterPlay(); content.startNights(); },
   });
   const slots = createSlots(uiRoot, { onPick: (slot, fresh) => enterStory(slot, fresh), onBack: () => menus.showTitle() });
   const storyUi = createStoryUi(uiRoot, { getSettings: () => settings, onSound: (k) => sfx.event({ type: k }) });
   // Characters (spec 13): the roster unlocks in solo free roam after the story; ?roster opens it.
-  const rosterOpen = () => params.has('roster') || save.story.done.includes('act4.epilogue');
+  const rosterOpen = () => params.has('roster') || save.story.done.includes('act4.epilogue') || !!save.story.choices?.completedOnce;
   const rosterMenu = createRosterMenu(uiRoot, { isOpen: rosterOpen, current: () => character.id, onPick: (id) => { switchCharacter(id); rosterMenu.hide(); resume(); }, onBack: () => menus.showPause() });
   // Metal for Electro: lamp posts, traffic lights, antennas, cranes and the bridge cables.
   const metal = [
@@ -336,7 +341,13 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       scene.fog.far = quality.viewDistance;
     }
     dynRes.setEnabled(settings.dynamicRes);
+    applyAccess();
     resize();
+  }
+  function applyAccess() {
+    document.body.classList.toggle('cb', !!settings.colorblind);
+    document.body.classList.toggle('text-large', settings.textSize === 'large');
+    document.body.classList.toggle('text-huge', settings.textSize === 'huge');
   }
 
   // Resolution ---------------------------------------------------------------------------------
@@ -353,6 +364,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   addEventListener('resize', resize);
   resize();
+  applyAccess();
 
   // Pointer lock: the first click after the pointer was released only re-locks (Safari needs a
   // real user gesture, and the click must not also fire whatever it's bound to).
@@ -559,6 +571,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Defeated: a slow fall, a fade, and back on your feet at the nearest found subway station.
   let defeatT = 0;
   function defeatStep(dt) {
+    if (content.nights) { content.endNights(); storyEnv = null; }
     if (storyOn && director.onDefeat()) return;
     if (session.active && mpRule.friendlyFire) {
       if (defeatT === 0) session.all({ k: 'ko', by: session.lastHurtBy });
@@ -697,7 +710,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (input.pressed('help')) hud.toggleHelp();
       if (input.pressed('map')) openMap();
       buildIntent();
-      gdt = dt * combat.timeScale(dt);
+      gdt = dt * combat.timeScale(dt) * (settings.slowMo ? 0.75 : 1);
       if (gadgetHold > 12) { if (!combatHud.wheelOpen) combatHud.openWheel(); combatHud.steerWheel(input.look, input.move); wheelUsed = true; }
       else if (combatHud.wheelOpen) { const pick = combatHud.closeWheel(); if (pick) combat.gadgets.select(pick); }
       if (storyOn) director.preStep(intent, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
@@ -883,7 +896,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Story ------------------------------------------------------------------------------------------
   director = createDirector({
     scene, world, city, combat, hero, ui: storyUi, save, assets, buildCharacter, createPoser,
-    getSettings: () => settings,
+    getSettings: () => ({ ...settings, difficulty: save.postGame?.ngPlus > 0 ? 'ultimate' : settings.difficulty }),
     heroDef: () => (character.id === 'peter' ? { ...characterById('peter'), suitId: save.progress.suit ?? 'classic' } : character),
     word: (t, p, kind) => { const sc = screenOf(p.x, p.y + 1, p.z); if (sc.front) hud.word(t, sc.x, sc.y - 40, kind); },
     shake: (k) => { if (settings.cameraShake) rig.shake = Math.max(rig.shake, k); },
@@ -900,6 +913,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     setOccupation: (f) => combat.setOccupation(f),
     screen: (x, y, z) => screenOf(x, y, z),
     illusion: (k) => { illusionK = k; },
+    onGauntletEnd: () => { storyOn = false; },
     onBlock: (on) => {
       if (on && mode === 'play') { mode = 'comic'; input.setEnabled(false); if (locked()) document.exitPointerLock(); }
       else if (!on && mode === 'comic') { mode = 'play'; resetIntent(); input.setEnabled(true); }
@@ -942,7 +956,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   function enterStory(slot, fresh) {
     if (session.active) return;
     combat.heroCombat.revive();
-    const next = fresh ? newSave(slot) : (loadSlot(window.localStorage, slot) ?? newSave(slot));
+    const old = loadSlot(window.localStorage, slot);
+    const next = fresh === 'ngplus' && old ? newGamePlus(old, slot, newSave(slot)) : fresh ? newSave(slot) : (old ?? newSave(slot));
     loadInto(next);
     slots.hide();
     if (character.id !== 'peter') switchCharacter('peter');
@@ -956,7 +971,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   // Dev and test entry: ?at=<step id> plays from that step in a scratch save (never written).
   function devStory(id) {
-    loadInto(newSave(9));
+    // The level a player would have at this point (the story's pace), points spent.
+    const LEVEL_AT = { prologue: 1, act1: 4, act2: 10, act3: 17, act4: 24 };
+    loadInto(autoBuild(newSave(9), LEVEL_AT[stepById(id)?.act] ?? 1));
     storyOn = true;
     director.stop();
     combat.heroCombat.revive();
@@ -1019,6 +1036,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     photo: () => takePhoto(),
     storySkip: () => director.skip(),
     storyJump: (id) => director.jump(id),
+    gauntlet: (from = 0) => { storyOn = true; enterPlay(); director.startGauntlet(from); },
+    nights: () => { storyEnv = { hour: 23, weather: 'clear' }; enterPlay(); content.startNights(); },
+    newGamePlus: (slot) => enterStory(slot, 'ngplus'),
     storyAt: (id) => devStory(id),
     startStory: (slot, fresh = true) => enterStory(slot, fresh),
     bossPhase: (n) => director.bossPhase(n),

@@ -1,15 +1,13 @@
 # Spider-Man: Web of Ink (unofficial fan game)
 
-A comic-book Spider-Man game that runs in the browser. Swinging is Amazing Spider-Man style: put
-the crosshair on a building, hold swing, and you swing on a real rope about that exact point. Let
-go to fly, aim the next web, and miss if you aim at nothing. Gravity, drag, the line and
-collisions are real physics, with a few light assists on top (see spec 4.2 to 4.4).
+A comic-book Spider-Man game that runs in the browser: a 3 by 2 km city drawn in ink, a story in
+four acts with thirteen bosses, an open world full of things to do, nineteen playable characters
+and five-player multiplayer. Swinging is real physics: put the crosshair on a building, hold
+swing, and you swing on a rope about that exact point. Let go to fly, aim the next web, and miss if
+you aim at nothing.
 
 > Unofficial fan game. Not affiliated with or endorsed by Marvel or Sony. Spider-Man and related
 > characters are trademarks of Marvel. Made for fun, never sold.
-
-This is the Plan 1 build: the swing, in a blockout city. See `docs/superpowers/specs/` for the
-full design and `docs/superpowers/plans/` for the build plans.
 
 ## Play
 
@@ -18,56 +16,68 @@ npm install
 npm run dev        # http://localhost:5300
 ```
 
-Click the screen to capture the mouse. A gamepad works too. Every key can be rebound in Settings.
+Title screen: **Story** (three save slots, Continue, New Game, New Game+ after the credits),
+**Free Swing**, **Multiplayer**, Settings and Controls. Click the game to capture the mouse. A
+gamepad works too. Every key can be rebound.
 
 | Action | Keyboard / mouse | Gamepad |
 |---|---|---|
-| Move and steer (swings follow where you point) | W A S D | Left stick |
+| Move and steer | W A S D | Left stick |
 | Look | Mouse | Right stick |
-| Web at the crosshair and swing (hold), parkour run and wall run | Shift | RT / R2 |
-| Jump. Swinging: swing-jump. In the air: web wings | Space | A / Cross |
-| Web zip to where you look, then Space to launch | Q | LT + RT |
-| Dive (hold in the air) | C | B / Circle |
-| Controls help | H | Back |
-| Pause | Esc or P | Start |
-| Physics tuning panel | ` (backquote), or open with `?dev=1` | |
+| Swing (hold), parkour and wall run | Shift | RT / R2 |
+| Jump, swing-jump, web wings (hold in the air) | Space | A / Cross |
+| Web zip, point launch | Q | LT + RT |
+| Web hang, web yank, hold to defuse or lift | E | Y / Triangle |
+| Dive (air), dodge (ground, or a web pull mid-air) | C | B / Circle |
+| Attack (silent takedown on an unaware guard) | Left mouse | X / Square |
+| Web shot | Right mouse | RB / R1 |
+| Finisher (tap), heal (hold) | X | L3 + R3 |
+| Gadget, gadget wheel | F, Tab (hold) | LB |
+| Suit power | Z | L3 |
+| Spider-sense scan | V | R3 |
+| Photo | P | |
+| Map (subway fast travel, waypoints) | M | Back |
+| Pause | Esc | Start |
 
-Tips: the crosshair is white when a web would stick and red when it would not. Aim ahead and up.
-Let go of swing just after the bottom of an arc, on the way up, for a perfect release boost.
-Swing into a wall and you run along it. Settings > Gravity switches between Comic (2g, the
-default) and Real (1g).
+## What is in it
 
-## How the swinging works
-
-- `src/physics/` has no Three.js in it. It steps at a fixed 240 Hz.
-- `ledger.js`: velocity only changes through `applyDv(body, source, ...)`: gravity, drag, lift,
-  rope, surface, or assist (game feel). Tests check the sources add up to the total change.
-- `swing.js`: the swing: a real pendulum on the rope about the aimed point, a gentle pump through
-  the bottom, and the line shortening rather than hit the street.
-- `anchors.js`: `findAimPoint` (where the crosshair's web sticks) and `findAnchor` (the
-  skilled-player pick the simulator and test scripts aim at).
-- `rope.js`: the real rope (SHAKE line, winch, wrapping), used by swings and zips.
-- `src/hero/bodyRig.js`, `poses.js`, `pose.js`: the procedural animation (IK body, pose library,
-  phase blending, tricks, springs). `pose.html` + `scripts/pose-sheet.mjs` show every pose;
-  `scripts/swing-side.mjs` films a swing from the side.
-- `src/hero/controller.js`: the movement state machine.
-- Feel constants live in `constants.js` (tuned by `scripts/swing-tune.mjs` against the swing
-  simulator), and every one of them is a live slider in the dev panel (backquote).
+- **Story** (`src/story/`): Prologue and four acts as data keyed by step ids, comic pages drawn in
+  engine, radio and Jameson broadcasts, act cards, and boss fights for Kingpin, Shocker, Vulture,
+  Rhino, Electro, Scorpion, Mysterio, Lizard, Kraven, Sandman, Venom, Doctor Octopus and the Green
+  Goblin, Miles Morales missions, the Black Suit, the Sinister Six in pairs, the credits.
+- **Open world** (`src/content/`): 55 backpacks with memories, 30 landmark photos, 12 Black Cat
+  tags, 20 lost pigeons, ten kinds of street crime, nine hideouts, twelve Taskmaster challenges,
+  twelve swing races, eight Oscorp research puzzles, ten Daily Bugle assignments, and a tracker.
+- **Post-game**: New Game+ on Ultimate, the Villain Gauntlet (every boss back to back, timed),
+  Crime Nights (escalating crime waves at night, a best score).
+- **Characters** (`src/roster/`, `src/movers/`): 19 heroes and villains, each moving by its own
+  physics (glider, wings, tentacles, sand, magnetism, recoil).
+- **Multiplayer** (`src/net/`, `server/`): up to five players in one world over a Cloudflare
+  Worker and Durable Object relay; free roam, race, tag, brawl, king of the hill, hide and seek.
+  Runs locally with `cd server && npm run dev`; not deployed.
 
 ## Tests and checks
 
 ```
-npm test                              # unit tests (physics invariants, swing battery, settings)
-npm run test:e2e                      # Playwright smoke tests (muted browser)
-node scripts/swing-check.mjs          # real key presses on a frozen build
-node scripts/swing-sim.mjs 24 20      # deterministic swing battery in Node
-node scripts/fps-check.mjs <url>      # frame times along a swing route
-node scripts/webkit-check.mjs <url>   # Safari engine (ENGINE=firefox for Firefox)
+npm test                                   # unit tests
+cd server && npx vitest run                # relay tests
+npm run test:e2e                           # Playwright smoke tests (muted)
+node scripts/swing-check.mjs <url>         # swing feel with real keys
+node scripts/combat-check.mjs <url>        # a combat pilot
+node scripts/roster-check.mjs <url>        # every character
+node scripts/boss-check.mjs <url> [ids]    # a pilot beats every boss, no god mode
+node scripts/story-walk.mjs <dir> <url>    # a contact sheet of every story beat
+node scripts/content-check.mjs <url>       # collectibles, crimes, races, research, tracker
+node scripts/mp-check.mjs                  # five clients on the local relay
+node scripts/playthrough.mjs <url>         # title to credits on a frozen build
+node scripts/fps-check.mjs <url>           # frame budget on a frozen build
+node scripts/load-time.mjs <url>           # under 4 s to the title at 40 Mbps
+node scripts/webkit-check.mjs <url>        # the Safari engine
 ```
 
-Every script browser is muted.
+Every script browser is muted. `?at=<step id>` starts the story at any step in a scratch save.
 
 ## Credits
 
 Character body and animations: Quaternius (CC0). Fonts: Bangers and Barlow Condensed (Google
-Fonts, OFL). Everything else (city, suit, sound) is generated in code.
+Fonts, OFL). Everything else (city, suits, comic art, portraits, sound, story) is made in code.

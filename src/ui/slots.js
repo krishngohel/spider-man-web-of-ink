@@ -26,6 +26,7 @@ export function createSlots(root, { onPick, onBack }) {
       const info = save ? [el('b', {}, `${C.slot} ${slot}`), el('em', {}, `${where(save)}, ${hm(save.playTime)} ${C.played}`)] : [el('b', {}, `${C.slot} ${slot}`), el('em', {}, C.empty)];
       const acts = el('div', { class: 'acts' }, [
         save ? el('button', { class: 'mbtn primary', onclick: () => onPick(slot, false) }, C.continue) : null,
+        save && (save.story.done.includes('act4.epilogue') || save.story.choices?.completedOnce) ? el('button', { class: 'mbtn', onclick: () => onPick(slot, 'ngplus') }, C.ngPlus) : null,
         el('button', { class: 'mbtn', onclick: () => {
           if (save && armed !== slot) { armed = slot; render(); return; }
           armed = null; onPick(slot, true);

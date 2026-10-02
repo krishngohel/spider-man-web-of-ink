@@ -3,6 +3,7 @@ import { STEPS, actById } from './steps.js';
 import { createStoryRunner } from './runner.js';
 import { resolveSite } from './sites.js';
 import { BOSSES } from './bosses/index.js';
+import { GAUNTLET, gauntletMedal } from './gauntlet.js';
 import { createProps } from './props.js';
 import { createStoryFx, buildMarker } from './storyFx.js';
 import { createActors } from './actors.js';
@@ -18,6 +19,7 @@ import { comicToon } from '../render/comicShade.js';
 export function createDirector(g) {
   const { scene, world, city, combat, hero, ui, save } = g;
   let runner = createStoryRunner(STEPS, save.story);
+  let gauntlet = null; // { t, story } while the Villain Gauntlet runs
   const props = createProps({ scene, world });
   const fx = createStoryFx(scene);
   const marker = buildMarker(scene);
@@ -59,10 +61,13 @@ export function createDirector(g) {
   function begin() {
     const step = runner.step;
     cur = null;
+    if (gauntlet && !step) { finishGauntlet(); return; }
     if (!step) { ui.objective(null); marker.show(null); g.setWaypoint(null); setEnv(null); return; }
     const site = step.site ? resolveSite(city, step.site) : null;
     cur = { step, site, t: 0, phase: 'run', wave: 0, waveT: 0 };
     // Whose story this is: Miles in his missions, Peter everywhere else.
+    // The Gauntlet starts each fight at its arena (a post-game mode, not a story beat).
+    if (gauntlet && site) g.placeHero(site.x, site.y + 0.2, site.z + (site.ground ? 8 : 0));
     const who = step.char ?? 'peter';
     if (g.character && g.character() !== who) g.setCharacter(who);
     g.setSuit?.(step.suit ?? null);
@@ -93,13 +98,25 @@ export function createDirector(g) {
     if (step.type === 'fight' || step.type === 'defend' || step.type === 'stealth') g.reward('storyStep');
     if (step.type === 'stealth' && !cur?.alarm) { g.reward('storyStep'); ui.stamp(COPY.story.ghost); }
     dropGenerator();
-    if (step.type === 'boss') g.reward('bossDefeated');
+    if (step.type === 'boss' && !gauntlet) g.reward('bossDefeated');
     if (step.type === 'start') combat.clear(); // the mission begins: free-roam gangs clear off
     runner.complete(id);
     begin();
   }
 
   function setEnv(e) { env = e; g.setEnv(e); }
+  function finishGauntlet() {
+    const t = gauntlet.t, medal = gauntletMedal(t);
+    const pg = save.postGame;
+    const best = pg.gauntlet?.time ?? Infinity;
+    pg.gauntlet = { time: Math.min(best, t), medal: Math.max(pg.gauntlet?.medal ?? 0, medal) };
+    ui.timer(null);
+    ui.stamp(`GAUNTLET ${['', 'BRONZE', 'SILVER', 'GOLD', 'ULTIMATE'][medal]}! ${Math.round(t)} S`);
+    g.reward('bossDefeated', { xp: 5000 });
+    g.persist();
+    gauntlet = null;
+    g.onGauntletEnd?.();
+  }
   function setBlock(on) { blocking = on; g.onBlock?.(on); }
 
   // Comic panels: each shot puts the cast in the city and draws one frame through the ink pipeline.
@@ -188,7 +205,7 @@ export function createDirector(g) {
     cur.t += dt;
     props.step(dt, {
       hero, heroInvuln,
-      hitHero: (p, v) => { const l = Math.hypot(v.x, v.z) || 1; combat.heroHit({ dmg: 16, dir: { x: v.x / l, z: v.z / l }, from: null, unblockable: true }); word('WHAM!', hero.body.p, 'hit'); },
+      hitHero: (p, v) => { const l = Math.hypot(v.x, v.z) || 1; combat.heroHit({ dmg: Math.round(p.K.dmg * 0.27), dir: { x: v.x / l, z: v.z / l }, from: null, unblockable: true }); word('WHAM!', hero.body.p, 'hit'); },
       hitBoss: (target, p) => {
         const b = target.boss;
         if (!b) return;
@@ -344,8 +361,16 @@ export function createDirector(g) {
     get marker() { const s = runner.step; return s && s.type === 'start' && cur?.site ? { x: cur.site.x, z: cur.site.z } : null; },
     // From the save's step, or from a given step (chapter select, ?at=).
     start(at = null) { if (!started) { started = true; retries = 0; runner = createStoryRunner(STEPS, save.story); if (at) runner.jump(at); begin(); } },
-    stop() { epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
-    update,
+    stop() { if (gauntlet) { gauntlet = null; ui.timer(null); runner = createStoryRunner(STEPS, save.story); } epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
+    update(dt) { if (gauntlet && retryT < 0) { gauntlet.t += dt; ui.timer('GAUNTLET', gauntlet.t); } update(dt); },
+    get gauntlet() { return gauntlet ? { t: gauntlet.t, step: runner.step?.id ?? null, index: runner.index } : null; },
+    startGauntlet(from = 0) {
+      this.stop();
+      gauntlet = { t: 0, story: { step: GAUNTLET[from].id, done: GAUNTLET.slice(0, from).map((s) => s.id), choices: {} } };
+      runner = createStoryRunner(GAUNTLET, gauntlet.story);
+      started = true; retries = 0;
+      begin();
+    },
     // Before combat reads the intent: a yank aimed at a loose crate throws it at the boss.
     preStep(intent, cam) {
       if (!intent.yankPressed || !boss) return;

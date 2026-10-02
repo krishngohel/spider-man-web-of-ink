@@ -54,7 +54,7 @@ export function createCameraRig() {
       const sens = settings.sensitivity ?? 1;
       const inv = settings.invertY ? -1 : 1;
       const moved = Math.abs(look.dx) + Math.abs(look.dy) > 0.01;
-      rig.yaw = wrapAngle(rig.yaw - look.dx * CAM.look * sens);
+      rig.yaw = wrapAngle(rig.yaw - look.dx * CAM.look * sens * (settings.invertX ? -1 : 1));
       rig.pitch = Math.min(CAM.maxPitch, Math.max(CAM.minPitch, rig.pitch + look.dy * CAM.look * sens * inv));
       rig.sinceLook = moved ? 0 : rig.sinceLook + dt;
 

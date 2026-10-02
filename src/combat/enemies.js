@@ -14,7 +14,7 @@ export const ARCHETYPES = {
   brute: { hp: 120, speed: 3.2, reach: 2.4, windup: 0.85, recover: 1.0, dmg: 18, ranged: false, mass: 160, clip: 'Sword_Heavy_Combo', unblockable: true, heavy: true },
   shield: { hp: 60, speed: 3.6, reach: 2.0, windup: 0.6, recover: 0.7, dmg: 10, ranged: false, mass: 95, clip: 'Shield_Dash', shield: true },
   gunner: { hp: 35, speed: 4.0, reach: 26, windup: 0.9, recover: 1.1, dmg: 6, ranged: true, keep: [9, 17], mass: 75, clip: 'Spell_Simple_Shoot', shot: 'bullet' },
-  rocket: { hp: 45, speed: 3.4, reach: 34, windup: 1.3, recover: 2.2, dmg: 16, ranged: true, keep: [14, 24], mass: 85, clip: 'OverhandThrow', shot: 'rocket' },
+  rocket: { hp: 45, speed: 3.4, reach: 34, windup: 1.3, recover: 2.2, dmg: 12, ranged: true, keep: [14, 24], mass: 85, clip: 'OverhandThrow', shot: 'rocket' },
   sniper: { hp: 30, speed: 3.6, reach: 60, windup: 1.6, recover: 2.0, dmg: 14, ranged: true, keep: [24, 40], mass: 75, clip: 'Spell_Simple_Shoot', shot: 'bullet' },
   jetpack: { hp: 45, speed: 5.0, reach: 22, windup: 1.0, recover: 1.2, dmg: 7, ranged: true, keep: [8, 14], mass: 85, clip: 'Spell_Simple_Shoot', shot: 'bullet', flies: true },
   whip: { hp: 50, speed: 4.0, reach: 3.6, windup: 0.55, recover: 0.7, dmg: 9, ranged: false, mass: 80, clip: 'Sword_Regular_A' },
