@@ -69,7 +69,13 @@ export function createRope() {
       // so a long swing neither gains nor bleeds energy.
       const qx = rx + v.x * dt, qy = ry + v.y * dt, qz = rz + v.z * dt;
       const q2 = qx * qx + qy * qy + qz * qz;
-      if (q2 <= newLen * newLen) { this.length = newLen; return; } // slack: the rope applies nothing
+      if (q2 <= newLen * newLen) {
+        // Slack: the line applies nothing. The hero hauls the slack in (no load, so no force to
+        // speak of), so a web shot at something ahead goes taut in a moment instead of hanging
+        // loose while he falls.
+        this.length = Math.max(Math.sqrt(q2), newLen - tune.slackTakeUp * dt, this.minLength);
+        return;
+      }
       let s = pull(qx, qy, qz, q2, nx, ny, nz, newLen) / dt;
       if (reeling && (-s * body.mass) / dt > this.reelLimit) {
         // The winch pulls with at most reelLimit. If holding the line already takes more than

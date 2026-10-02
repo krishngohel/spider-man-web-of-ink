@@ -76,6 +76,18 @@ describe('rope swing', () => {
     expect(rope.tension).toBe(0);
   });
 
+  it('hauls in slack without pulling', () => {
+    const body = createBody({ x: 0, y: 70, z: -20 });
+    body.v.z = 15; // moving toward the anchor's side: the line goes slack
+    const rope = createRope();
+    rope.attach({ x: 0, y: 100, z: 20 }, body);
+    const l0 = rope.length;
+    for (let i = 0; i < 24; i++) rope.preStep(body, dt);
+    expect(rope.length).toBeLessThan(l0);
+    expect(rope.length).toBeGreaterThanOrEqual(l0 - tune.slackTakeUp * 0.1 - 1e-9);
+    expect(body.log.rope).toEqual({ x: 0, y: 0, z: 0 });
+  });
+
   it('the winch stalls above its tension limit but the line still holds', () => {
     // Fast swing through the bottom: centripetal tension alone is m v^2 / L = 80 * 3600 / 20.
     const body = createBody({ x: 0, y: 80, z: 0 });

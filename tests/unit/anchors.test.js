@@ -27,6 +27,15 @@ describe('findAnchor', () => {
     expect(Math.abs(a.x)).toBeGreaterThanOrEqual(15 - 1e-6);
   });
 
+  it('picks an anchor whose predicted swing stays clear for the next second', () => {
+    const w = avenue();
+    const hero = createBody({ x: 0, y: 40, z: 0 });
+    hero.v.z = 22;
+    const a = findAnchor(w, hero, { dirX: 0, dirZ: 1 });
+    expect(a.predict.hit).toBe(Infinity);
+    expect(a.predict.vz).toBeGreaterThan(10); // still heading down the avenue
+  });
+
   it('finds nothing over open ground', () => {
     const w = createWorld();
     w.build();

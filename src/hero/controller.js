@@ -22,7 +22,7 @@ const ZIP_TIMEOUT = 3;
 const WEB_RETRY = 0.12;
 const AUTO_SHOOT_AIR = 0.12;
 const WALL_ACCEL = 30;
-const RUN_UP_ACCEL = 40;
+const RUN_UP_ACCEL = 60;
 const ADHESION = 0.5;
 
 export function emptyIntent() {
@@ -133,7 +133,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
 
   function shootWeb(intent) {
     const h = wantedHeading(intent);
-    const a = findAnchor(world, body, { dirX: h.x, dirZ: h.z, assist: hero.assist });
+    const a = findAnchor(world, body, { dirX: h.x, dirZ: h.z, assist: hero.assist, g: g() });
     if (!a) { hero.webRetry = WEB_RETRY; emit('noAnchor'); return false; }
     hero.pendingWeb = { anchor: a, t: tune.webTravel };
     emit('thwip', { x: a.x, y: a.y, z: a.z });

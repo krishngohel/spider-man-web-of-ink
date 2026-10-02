@@ -20,6 +20,8 @@ export const DEFAULTS = {
   webMax: 70,
   webTravel: 0.06,
   ropeGive: 0.03,
+  // How fast a slack line is hauled in (no load on it, so this is just how fast the arm pulls).
+  slackTakeUp: 50,
   winchSpeed: 10,
   winchTension: 12000,
   flickSpeed: 26,

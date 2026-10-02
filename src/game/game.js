@@ -9,7 +9,7 @@ import { LAYER_FX } from '../render/layers.js';
 import { createFixedStep } from '../core/fixedStep.js';
 import { createInput } from '../core/input.js';
 import { loadSettings, saveSettings } from '../core/settings.js';
-import { STEP, MAX_SUBSTEPS, tune } from '../physics/constants.js';
+import { STEP, MAX_SUBSTEPS, G, tune } from '../physics/constants.js';
 import { createWorld } from '../physics/world.js';
 import { findAnchor, findZipPoint } from '../physics/anchors.js';
 import { buildTestCity } from '../world/testCity.js';
@@ -148,7 +148,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   addEventListener('keydown', (e) => {
     sfx.unlock();
     if (e.code === 'Backquote') devPanel.toggle();
-    if (e.code === 'Escape' && mode === 'paused' && menus.pauseOpen && !input.capturing) { e.preventDefault(); resume(); }
+    // Esc with the pointer locked makes the browser release it (which pauses); some browsers then
+    // also deliver the keydown. That one must not resume the game straight away.
+    if (e.code === 'Escape' && mode === 'paused' && menus.pauseOpen && !input.capturing && performance.now() - pausedAt > 300) { e.preventDefault(); resume(); }
   });
 
   function enterPlay() {
@@ -159,9 +161,13 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     canvas.requestPointerLock?.()?.catch?.(() => {});
     sfx.unlock();
   }
+  let pausedAt = 0;
   function pauseGame() {
     mode = 'paused';
+    pausedAt = performance.now();
     input.setEnabled(false);
+    // A locked pointer sends every click to the canvas: release it so the menu can be clicked.
+    if (locked()) document.exitPointerLock();
     menus.showPause();
   }
   function resume() {
@@ -220,7 +226,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         const m = Math.hypot(intent.moveX, intent.moveZ);
         const f = m > 0.2 ? { x: intent.moveX / m, z: intent.moveZ / m } : { x: rig.fwd.x, z: rig.fwd.z };
         const fl = Math.hypot(f.x, f.z) || 1;
-        previewPoint = findAnchor(world, hero.body, { dirX: f.x / fl, dirZ: f.z / fl, assist: settings.swingAssist });
+        previewPoint = findAnchor(world, hero.body, { dirX: f.x / fl, dirZ: f.z / fl, assist: settings.swingAssist, g: G[settings.gravity] });
         preview.zip = false;
       } else if (hero.state === 'ground' || hero.state === 'wall') {
         const hit = findZipPoint(world, hero.body, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
