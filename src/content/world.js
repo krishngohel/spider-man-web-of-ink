@@ -49,8 +49,9 @@ export function createContentWorld(g) {
 
   // Collectibles ------------------------------------------------------------------------------------
   const items = [];
-  function addItem(q, list) {
-    if (has(list, q.id)) return;
+  const KEY = { backpack: 'backpacks', pigeon: 'pigeons', tag: 'tags' };
+  function addItem(q) {
+    if (has(save.collect[KEY[q.kind]], q.id)) return;
     const root = new THREE.Group();
     if (q.kind === 'backpack') { const b = new THREE.Mesh(geo.bp, mats.bp); const s = new THREE.Mesh(geo.strap, mats.bpB); s.position.y = 0.1; root.add(b, s); }
     if (q.kind === 'pigeon') { const b = new THREE.Mesh(geo.bird, mats.bird); b.scale.set(1, 0.8, 1.4); const h = new THREE.Mesh(geo.head, mats.birdHead); h.position.set(0, 0.15, 0.25); root.add(b, h); }
@@ -62,14 +63,19 @@ export function createContentWorld(g) {
     root.position.set(q.x, q.y, q.z);
     root.traverse((o) => { if (o.isMesh) o.castShadow = q.kind !== 'tag'; });
     scene.add(root);
-    items.push({ q, root, list });
+    items.push({ q, root });
   }
-  for (const q of cat.backpacks) addItem(q, save.collect.backpacks);
-  for (const q of cat.pigeons) addItem(q, save.collect.pigeons);
-  for (const q of cat.tags) addItem(q, save.collect.tags);
+  function addAllItems() {
+    for (const it of items) scene.remove(it.root);
+    items.length = 0;
+    for (const q of [...cat.backpacks, ...cat.pigeons, ...cat.tags]) addItem(q);
+  }
+  addAllItems();
 
   function pickup(it) {
-    const { q, list } = it;
+    const { q } = it;
+    const list = save.collect[KEY[q.kind]];
+    if (has(list, q.id)) return;
     list.push(q.id);
     scene.remove(it.root);
     items.splice(items.indexOf(it), 1);
@@ -183,6 +189,7 @@ export function createContentWorld(g) {
   }
   function addObj(m, x, y, z) { m.position.set(x, y, z); m.traverse((o) => { if (o.isMesh) o.castShadow = true; }); scene.add(m); crimeObjs.push(m); }
   function endCrime(won) {
+    g.prompt(null); g.timer(null);
     for (const m of crimeObjs) scene.remove(m);
     crimeObjs.length = 0;
     if (crime?.car) { const i = combat.enemies.list.indexOf(crime.car.e); if (i >= 0) combat.enemies.list.splice(i, 1); }
@@ -218,7 +225,7 @@ export function createContentWorld(g) {
       // Hold the hang key next to it (defuse, or lift the rubble off).
       const near = Math.hypot(p.x - sp.x, p.z - sp.z) < 3 && p.y < 3;
       crime.hold = near && g.holding() ? crime.hold + dt : Math.max(0, crime.hold - dt * 2);
-      if (near) g.prompt(C.objective === 'bomb' ? 'HOLD {hang} TO DEFUSE' : 'HOLD {hang} TO LIFT', crime.hold / 2.2);
+      g.prompt(near ? (C.objective === 'bomb' ? 'HOLD {hang} TO DEFUSE' : 'HOLD {hang} TO LIFT') : null, crime.hold / 2.2);
       if (crime.hold >= 2.2) { g.prompt(null); g.timer(null); g.word(C.objective === 'bomb' ? 'DEFUSED!' : 'HEAVE!', { x: sp.x, y: 1, z: sp.z }, 'big'); endCrime(true); }
       return;
     }
@@ -239,7 +246,7 @@ export function createContentWorld(g) {
       g.crimeWaypoint({ x: b.p.x, z: b.p.z });
       return;
     }
-    const left = crime.list.filter((e) => e.alive && !['out', 'webbed', 'pinned'].includes(e.state)).length;
+    const left = crime.list.filter((e) => e.alive && combat.enemies.list.includes(e) && !['out', 'webbed', 'pinned'].includes(e.state)).length;
     if (crime.list.length && left === 0) endCrime(true);
   }
 
@@ -368,6 +375,9 @@ export function createContentWorld(g) {
 
   // Research stations ---------------------------------------------------------------------------------
   const kiosks = [];
+  function addKiosks() {
+  for (const ks of kiosks) scene.remove(ks.k);
+  kiosks.length = 0;
   for (const r of cat.research) {
     if (has(save.activities.research, r.id)) continue;
     const k = new THREE.Group();
@@ -377,14 +387,17 @@ export function createContentWorld(g) {
     scene.add(k);
     kiosks.push({ r, k });
   }
-  let task = null;
+  }
+  addKiosks();
+  let task = null, kioskPrompt = false;
   function updateResearch(dt) {
     const p = hero.body.p;
     if (!task) {
       for (const ks of kiosks) {
         const near = Math.hypot(p.x - ks.r.x, p.z - ks.r.z) < 3 && Math.abs(p.y - ks.r.y) < 2.5;
-        if (near) { g.prompt('{hang} OSCORP RESEARCH', 0); if (g.pressedHang()) startTask(ks); return; }
+        if (near) { kioskPrompt = true; g.prompt('{hang} OSCORP RESEARCH', 0); if (g.pressedHang()) startTask(ks); return; }
       }
+      if (kioskPrompt) { kioskPrompt = false; g.prompt(null); }
       return;
     }
     task.t += dt;
@@ -442,6 +455,7 @@ export function createContentWorld(g) {
     for (const d of t.drones ?? []) down(d);
     for (const b of t.birds ?? []) scene.remove(b.mesh);
     if (!ok) { g.caption('TRY AGAIN', 2); return; }
+    if (has(save.activities.research, t.ks.r.id)) return;
     save.activities.research.push(t.ks.r.id);
     scene.remove(t.ks.k);
     kiosks.splice(kiosks.indexOf(t.ks), 1);
@@ -519,6 +533,8 @@ export function createContentWorld(g) {
     // Test hooks.
     state() { return { crime: crime ? { kind: crime.kind, x: crime.spot.x, z: crime.spot.z, foes: crime.list.length, car: crime.car ? crime.car.hits : null } : null, base: base ? { id: base.q.id, wave: base.wave } : null, run: run ? { id: run.c.id, i: run.i, t: run.t, count: run.count } : null, task: task ? { id: task.ks.r.id, kind: task.ks.r.task } : null, items: items.length }; },
     forceCrime(kind) { if (crime) endCrime(false); const spot = streetSpot(25, 50); if (!spot) return null; startCrime(kind, spot); return crime && crime.kind; },
-    stop() { if (crime) { for (const e of crime.list) combat.enemies.remove(e); endCrime(false); } if (base) { for (const e of base.list) combat.enemies.remove(e); base = null; } if (run) finishRun(false); if (task) finishTask(false); },
+    // A new save (slot load, New Game+): collectibles and kiosks from what that save has done.
+    reload() { this.stop(); addAllItems(); addKiosks(); },
+    stop() { if (nights) this.endNights(); g.prompt(null); if (crime) { for (const e of crime.list) combat.enemies.remove(e); endCrime(false); } if (base) { for (const e of base.list) combat.enemies.remove(e); base = null; } if (run) finishRun(false); if (task) finishTask(false); },
   };
 }

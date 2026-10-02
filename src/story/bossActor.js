@@ -73,7 +73,9 @@ export function createBossActor(ctx, opts) {
   };
   a.faceHero = (dt, rate = 8) => { const t = a.toHero(); a.face(Math.atan2(t.ux, t.uz), dt, rate); };
   // Feet on the ground: friction toward a wanted velocity.
+  let wantSpeed = 0, stuckT = 0;
   a.move = (vx, vz, dt, accel = 30) => {
+    wantSpeed = Math.hypot(vx, vz);
     if (!a.grounded && !a.flying) return;
     const v = body.v, ax = vx - v.x, az = vz - v.z, l = Math.hypot(ax, az), lim = accel * dt, k = l > lim ? lim / l : 1;
     applyDv(body, 'surface', ax * k, 0, az * k);
@@ -170,6 +172,10 @@ export function createBossActor(ctx, opts) {
     world.resolveCapsule(body, radius, opts.half ?? 0.5, C);
     a.hitWall = C.wall && fast > 8 ? { nx: C.nx, nz: C.nz, speed: fast } : null;
     a.grounded = !!C.ground || p.y <= 0.91;
+    // Walking into something low (a parked car, a bench): after a moment he hops it (his legs).
+    if (a.grounded && !a.flying && wantSpeed > 2 && Math.hypot(v.x, v.z) < 0.6 && e.state === 'engage') stuckT += dt; else stuckT = 0;
+    if (stuckT > 1.2) { stuckT = 0; applyDv(body, 'surface', Math.sin(a.facing) * 4 + (Math.random() - 0.5) * 4, 8, Math.cos(a.facing) * 4 + (Math.random() - 0.5) * 4); }
+    wantSpeed = 0;
     if (p.y < 0.9) { p.y = 0.9; if (v.y < 0) applyDv(body, 'surface', 0, -v.y, 0); a.grounded = true; }
     if (a.grounded && !a.flying && ['stun', 'out', 'windup', 'strike', 'recover'].includes(e.state)) {
       const k = Math.min(1, 8 * dt); applyDv(body, 'surface', -v.x * k, 0, -v.z * k);

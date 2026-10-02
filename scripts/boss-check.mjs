@@ -29,7 +29,7 @@ async function click(button = 'left') { await page.mouse.down({ button }); await
 const results = [];
 function check(name, ok, detail) { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}  ${detail}`); }
 
-let brawlHits = [], shotAt = 0, healAt = 0;
+let brawlHits = [], shotAt = 0, healAt = 0, sandWait = 0;
 // Like a player: low on health with focus in the bar, hold the finisher key to patch up.
 async function sustain() {
   const c = await C();
@@ -364,13 +364,15 @@ await run('act3.sandman', 'pilot beats Sandman at the shipyard', async ({ st, h,
       return;
     }
   }
-  if (!s.soaked && bossE.state !== 'stun') {
+  if (!s.soaked && bossE.state !== 'stun' && !(sandWait && Date.now() - sandWait > 8000 && Date.now() - sandWait < 14000)) {
+    if (sandWait && Date.now() - sandWait > 14000) sandWait = 0;
     const hy = near(s.hydrants, bossE);
     if (hy) {
+      sandWait ||= Date.now();
       const dHero = Math.hypot(hy.x - h.p.x, hy.z - h.p.z), dBoss = Math.hypot(hy.x - bossE.x, hy.z - bossE.z);
       if (dHero > 2) { await ev(([y]) => window.__game.setLook(y, 0.1), [Math.atan2(hy.x - h.p.x, hy.z - h.p.z)]); await key('KeyW', true); return; }
       await key('KeyW', false);
-      if (dBoss < 7) { await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [hy.x, hy.y, hy.z]); await sleep(40); await page.keyboard.press('KeyE'); await sleep(250); return; }
+      if (dBoss < 7) { sandWait = 0; await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [hy.x, hy.y, hy.z]); await sleep(40); await page.keyboard.press('KeyE'); await sleep(250); return; }
       if (bossE.state === 'windup' && bossE.at - bossE.t < 0.35) { await page.keyboard.press('KeyC'); await sleep(150); }
       return;
     }

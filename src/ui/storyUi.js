@@ -207,7 +207,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
     clear() {
       queue = []; line = null; radio.classList.remove('show'); radioDone = null;
       objective.classList.add('hidden'); bossBar.classList.add('hidden'); tips.replaceChildren(); timerEl.classList.add('hidden');
-      stealthBox.replaceChildren(); markPool.length = 0; prompt.classList.add('hidden');
+      stealthBox.replaceChildren(); markPool.length = 0; prompt.classList.add('hidden'); hold.classList.add('hidden');
       // Dropped, not resolved: whatever waited on them belongs to a story that has stopped.
       if (resolver) { comic.classList.add('hidden'); resolver = null; }
       if (cardDone) { card.classList.remove('show'); card.classList.add('hidden'); cardDone = null; cardT = 0; }

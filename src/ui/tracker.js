@@ -14,6 +14,7 @@ const pct = (rows) => {
 export function createTracker(root, { data, onBack }) {
   const panel = el('div', { class: 'menu hidden tracker' });
   root.append(panel);
+  window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { e.preventDefault(); e.stopPropagation(); panel.classList.add('hidden'); onBack(); } }, true);
   function show() {
     const t = data();
     const head = el('tr', {}, ['District', 'Crimes', 'Hideout', 'Backpacks', 'Photos', 'Tags', 'Pigeons', 'Research'].map((h) => el('th', {}, h)));

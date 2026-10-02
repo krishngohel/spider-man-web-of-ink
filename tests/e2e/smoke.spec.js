@@ -87,7 +87,7 @@ test('rebinding a key from the controls screen', async ({ page }) => {
 test('pause menu opens from play and resumes', async ({ page }) => {
   await page.goto('/?at=swing');
   await page.waitForFunction(ready, null, { timeout: 90000 });
-  await page.keyboard.press('KeyP');
+  await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.__game.mode === 'paused');
   await expect(page.locator('.menu .card h2')).toHaveText('PAUSED');
   await page.locator('.menu .mbtn.primary').click();

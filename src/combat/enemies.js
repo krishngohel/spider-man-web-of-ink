@@ -85,6 +85,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
   }
 
   function remove(e) {
+    e.alive = false; // anyone still holding it (a wave list) sees it is gone
     scene.remove(e.model.root);
     e.model.mat.dispose();
     const i = list.indexOf(e);

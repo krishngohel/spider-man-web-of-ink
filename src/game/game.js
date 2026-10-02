@@ -158,7 +158,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   const hero = createHero(world, { gravity: settings.gravity, assist: settings.swingAssist });
   // Combat: enemies, projectiles, gadgets and the hero's fighting state.
-  const combat = createCombat({ scene, world, assets, hero, city, getSettings: () => ({ ...settings, crimes: false, difficulty: storyOn && save.postGame?.ngPlus > 0 ? 'ultimate' : settings.difficulty }), feedback: {
+  const combat = createCombat({ scene, world, assets, hero, city, getSettings: () => ({ ...settings, crimes: session?.active ? settings.crimes : false, difficulty: storyOn && save.postGame?.ngPlus > 0 ? 'ultimate' : settings.difficulty }), feedback: {
     splat: (hit) => fx.splat(hit.x, hit.y, hit.z, hit.nx, hit.ny, hit.nz),
     boom: (p) => { fx.ring(p.x, p.y, p.z, 1.6); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.6); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('KA-BOOM!', s.x, s.y, 'hit'); sfx.event({ type: 'land', hard: true, impact: 30 }); },
     sense: (e, unblockable, ranged) => { combatHud.sense(e, unblockable, ranged); sfx.event({ type: 'sense' }); },
@@ -417,6 +417,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     comicResumes();
   }
   function toTitle() {
+    content.stop(); storyEnv = null;
     if (storyOn) {
       director.stop(); storyOn = false; combat.setOccupation(null); content.stop();
       if (character.id !== 'peter' && !rosterOpen()) switchCharacter('peter');
@@ -582,6 +583,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     defeatT += dt;
     if (defeatT > 1.1 && defeatT - dt <= 1.1) { hud.fade(true); hud.caption(COPY.combat.defeated, 2.5); }
     if (defeatT > 2.0) {
+      content.stop();
       const p = hero.body.p;
       const found = city.stations.filter((st) => save.world.stations.includes(st.id));
       const st = (found.length ? found : city.stations).reduce((a, b) => (Math.hypot(a.x - p.x, a.z - p.z) < Math.hypot(b.x - p.x, b.z - p.z) ? a : b));
@@ -745,6 +747,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (storyOn && !session.active && input.pressed('scan')) director.scan();
       if (input.pressed('photo') && !session.active) takePhoto();
       content.update(gdt, { active: !session.active && !(storyOn && director.quiet) });
+      if (!storyOn) storyUi.update(gdt); // radio lines and stamps from free roam
       for (const e of events) progress.onHeroEvent(e);
       if (combat.heroCombat.c.defeated) defeatStep(dt);
       riverCheck(dt);
@@ -900,7 +903,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     heroDef: () => (character.id === 'peter' ? { ...characterById('peter'), suitId: save.progress.suit ?? 'classic' } : character),
     word: (t, p, kind) => { const sc = screenOf(p.x, p.y + 1, p.z); if (sc.front) hud.word(t, sc.x, sc.y - 40, kind); },
     shake: (k) => { if (settings.cameraShake) rig.shake = Math.max(rig.shake, k); },
-    sfx, reward: (k) => progress.reward(k), caption: (t) => hud.caption(t), fade: (on) => hud.fade(on), persist: () => persist(),
+    sfx, reward: (k, o) => progress.reward(k, o), caption: (t) => hud.caption(t), fade: (on) => hud.fade(on), persist: () => persist(),
     setEnv: (e) => { storyEnv = e; }, setWaypoint: (w) => { waypoint = w; },
     placeHero: (x, y, z) => placeHeroAt(x, y, z, 0, 0, 0, 'air'),
     hideHero: (on) => { heroModel.root.visible = !on; },
@@ -952,6 +955,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     for (const k of Object.keys(save)) delete save[k];
     Object.assign(save, next);
     progress.useSave(save);
+    content.reload();
   }
   function enterStory(slot, fresh) {
     if (session.active) return;

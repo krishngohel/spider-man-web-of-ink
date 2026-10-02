@@ -102,6 +102,7 @@ export function createDirector(g) {
     if (step.type === 'start') combat.clear(); // the mission begins: free-roam gangs clear off
     runner.complete(id);
     begin();
+    g.persist(); // the last step too (begin saves only when there is a next one)
   }
 
   function setEnv(e) { env = e; g.setEnv(e); }
@@ -111,6 +112,7 @@ export function createDirector(g) {
     const best = pg.gauntlet?.time ?? Infinity;
     pg.gauntlet = { time: Math.min(best, t), medal: Math.max(pg.gauntlet?.medal ?? 0, medal) };
     ui.timer(null);
+    ui.objective(null);
     ui.stamp(`GAUNTLET ${['', 'BRONZE', 'SILVER', 'GOLD', 'ULTIMATE'][medal]}! ${Math.round(t)} S`);
     g.reward('bossDefeated', { xp: 5000 });
     g.persist();
@@ -257,13 +259,15 @@ export function createDirector(g) {
           if (heroD(site).d < 90) { cur.phase = 'sneak'; spawnGuards(); }
           break;
         }
-        if (heroD(site).d > 260) { for (const e of cur.waveList ?? []) combat.enemies.remove(e); cur.phase = 'arrive'; break; }
+        if (heroD(site).d > 260) { for (const e of cur.waveList ?? []) combat.enemies.remove(e); ui.stealth(null); cur.phase = 'arrive'; break; }
         // The suspicion marks over the guards and the takedown prompt.
         const marks = [];
         for (const e of cur.waveList) {
           if (!e.alive || ['out', 'webbed', 'pinned'].includes(e.state)) continue;
           marks.push({ p: e.body.p, k: e.alerted ? 1 : e.suspicion ?? 0, alert: !!e.alerted });
         }
+        // A guard hit or webbed in plain view (not a silent takedown) brings everyone.
+        if (!cur.alarm && cur.waveList.some((e) => e.alerted && e.alive && !['out', 'webbed', 'pinned'].includes(e.state))) raiseAlarm();
         const td = combat.enemies.takedownTarget?.(hero);
         ui.stealth(marks, td ? { p: td.e.body.p, kind: td.kind } : null, g.screen);
         const left = cur.waveList.filter((e) => e.alive && !['out', 'webbed', 'pinned'].includes(e.state)).length;
@@ -361,7 +365,7 @@ export function createDirector(g) {
     get marker() { const s = runner.step; return s && s.type === 'start' && cur?.site ? { x: cur.site.x, z: cur.site.z } : null; },
     // From the save's step, or from a given step (chapter select, ?at=).
     start(at = null) { if (!started) { started = true; retries = 0; runner = createStoryRunner(STEPS, save.story); if (at) runner.jump(at); begin(); } },
-    stop() { if (gauntlet) { gauntlet = null; ui.timer(null); runner = createStoryRunner(STEPS, save.story); } epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
+    stop() { g.setOccupation?.(null); if (gauntlet) { gauntlet = null; ui.timer(null); runner = createStoryRunner(STEPS, save.story); } epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
     update(dt) { if (gauntlet && retryT < 0) { gauntlet.t += dt; ui.timer('GAUNTLET', gauntlet.t); } update(dt); },
     get gauntlet() { return gauntlet ? { t: gauntlet.t, step: runner.step?.id ?? null, index: runner.index } : null; },
     startGauntlet(from = 0) {

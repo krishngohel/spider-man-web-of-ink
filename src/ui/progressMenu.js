@@ -41,7 +41,7 @@ export function createProgressMenu(root, { save, onChange, onBack }) {
     } else if (tab === 'suits') {
       body = el('div', { class: 'pm-grid' }, SUITS.map((s) => {
         const have = owned(s.id), on = p.suit === s.id;
-        const storyOk = !s.story || save.story.done.includes(s.story);
+        const storyOk = !s.story || save.story.done.includes(s.story) || !!save.story.choices?.completedOnce;
         const can = !have && storyOk && p.level >= s.level && affordable(save, s.cost);
         const sw = el('div', { class: 'pm-swatch' }, [el('i', { style: `background:${hex(s.red)}` }), el('i', { style: `background:${hex(s.blue)}` }), el('i', { style: `background:${hex(s.black)}` })]);
         return el('button', { class: `pm-suit${on ? ' on' : have ? ' have' : can ? ' can' : ''}`, onclick: () => {

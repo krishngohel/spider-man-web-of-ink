@@ -21,7 +21,7 @@ export function newSave(slot = 1) {
     story: { step: 'prologue.open', done: [], choices: {} },
     world: { stations: [], districts: [], hour: 11, weather: 'clear', position: null },
     collect: { backpacks: [], photos: [], tags: [], pigeons: [] },
-    activities: { crimes: 0, crimeKinds: {}, bases: [], challenges: {}, races: {}, research: [], bugle: [] },
+    activities: { crimes: 0, crimeKinds: {}, crimeByDistrict: {}, bases: [], challenges: {}, races: {}, research: [], bugle: [] },
     progress: {
       xp: 0, level: 1, skillPoints: 0, skills: [],
       tokens: Object.fromEntries(TOKEN_TYPES.map((t) => [t, 0])),
@@ -58,7 +58,7 @@ export function migrate(raw, slot = 1) {
     },
     collect: { backpacks: arr(collect.backpacks), photos: arr(collect.photos), tags: arr(collect.tags), pigeons: arr(collect.pigeons) },
     activities: {
-      crimes: num(act.crimes, 0, 0), crimeKinds: obj(act.crimeKinds), bases: arr(act.bases), challenges: obj(act.challenges),
+      crimes: num(act.crimes, 0, 0), crimeKinds: obj(act.crimeKinds), crimeByDistrict: Object.fromEntries(Object.entries(obj(act.crimeByDistrict)).filter(([, v]) => Number.isFinite(v)).map(([k, v]) => [k, Math.max(0, Math.floor(v))])), bases: arr(act.bases), challenges: obj(act.challenges),
       races: obj(act.races), research: arr(act.research), bugle: arr(act.bugle),
     },
     progress: {

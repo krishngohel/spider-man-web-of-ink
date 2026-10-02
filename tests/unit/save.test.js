@@ -35,4 +35,8 @@ describe('saves', () => {
     expect(loadSlot(st, 1)).toBe(null);
     expect(listSlots(st).length).toBe(3);
   });
+  it('keeps the crime count per district (the token quota) through a load', () => {
+    const m = migrate({ activities: { crimeByDistrict: { midtown: 4, harbor: 'x', neon: 2.7 } } });
+    expect(m.activities.crimeByDistrict).toEqual({ midtown: 4, neon: 2 });
+  });
 });

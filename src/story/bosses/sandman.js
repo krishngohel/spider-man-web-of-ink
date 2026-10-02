@@ -153,6 +153,8 @@ export function createSandman(ctx) {
     if (f <= 0 && e.state !== 'out') { a.defeat(); done = true; word('WASHED UP!', a.body.p, 'big'); a.step(dt); return; }
     if (phase === 1 && f <= 0.6 && !a.attacking()) { phase = 2; setGiant(4); a.dmgScale = 1.2; say([L('sandman', 'You want to see big? I will show you big.'), L('peter', 'Those water tanks on the edge of the yard. If I can tip one...')]); }
     if (phase === 2 && f <= 0.3 && giant < 1.01) { phase = 3; a.dmgScale = 1; }
+    // Both tanks gone and he is still a giant: the spray from the broken mains brings him down.
+    if (phase === 2 && giant > 1.01 && !tanks.some((q) => q.live || (q.fall && !q.landed)) && !a.stunned()) { setGiant(1); soak(5); a.stun(4.5); word('WASHED DOWN!', a.body.p, 'big'); }
     // Back up to giant size while there is still a tank to bring him down; with none left, he stays small.
     if (phase === 2 && giant < 1.01 && !a.stunned() && f > 0.3) { if (tanks.some((q) => q.live)) setGiant(4); else phase = 3; }
     if (a.stunned() || a.attacking()) { a.step(dt); return; }
@@ -166,7 +168,8 @@ export function createSandman(ctx) {
     } else if (think <= 0) {
       think = soakT > 0 ? 2 : 1.3 + Math.random() * 0.7;
       if (t.d < 4) a.windup({ t: 0.6, reach: 3.4, arc: 1.4, dmg: 12, push: 10, pose: 'punch' });
-      else a.windup({ t: 0.85, ranged: true, unblockable: true, reach: 9, recover: 0.6, pose: 'slamStart', onStrike: sandWave });
+      else if (t.d < 8) a.windup({ t: 0.85, ranged: true, unblockable: true, reach: 9, recover: 0.6, pose: 'slamStart', onStrike: sandWave });
+      else a.windup({ t: 0.7, ranged: true, reach: 40, recover: 0.5, pose: 'punch', onStrike: () => { const p = a.body.p, h = hero.body.p, v = hero.body.v; ctx.combat.projectiles.fire('rocket', { x: p.x, y: p.y + 0.8, z: p.z }, { x: h.x + v.x * 0.4, y: h.y, z: h.z + v.z * 0.4 }, { dmg: 10 }); word('FWOOSH!', p, 'small'); } });
     }
     a.step(dt);
   }
