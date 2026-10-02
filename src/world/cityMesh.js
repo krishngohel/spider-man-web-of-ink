@@ -309,7 +309,7 @@ export function buildCityMeshes(city, scene, quality) {
     });
     tm.castShadow = quality.shadows;
     group.add(tm);
-    const cg = new THREE.IcosahedronGeometry(1, 1);
+    const cg = new THREE.SphereGeometry(1, 14, 10);
     const cm = new THREE.InstancedMesh(cg, new THREE.MeshToonMaterial({ color: PALETTE.leaves, gradientMap: toonGradient() }), crowns.length);
     crowns.forEach((b, i) => {
       p.set((b.min[0] + b.max[0]) / 2, (b.min[1] + b.max[1]) / 2 + 0.6, (b.min[2] + b.max[2]) / 2);

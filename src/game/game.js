@@ -15,6 +15,8 @@ import { findAimPoint, findZipPoint, findAnchor } from '../physics/anchors.js';
 import { buildTestCity } from '../world/testCity.js';
 import { buildCityMeshes, setNight } from '../world/cityMesh.js';
 import { createSky } from '../world/sky.js';
+import { buildStreetProps, carBoxes } from '../world/streetProps.js';
+import { buildStreetMeshes } from '../world/streetMesh.js';
 import { createHero, emptyIntent } from '../hero/controller.js';
 import { loadHeroAssets, buildHeroModel } from '../hero/model.js';
 import { createPoser } from '../hero/pose.js';
@@ -59,8 +61,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const city = buildTestCity();
   const world = createWorld();
   for (const b of city.boxes) world.addBox(b);
+  const street = buildStreetProps(city);
+  for (const b of carBoxes(street)) world.addBox(b);
   world.build();
   buildCityMeshes(city, scene, quality);
+  buildStreetMeshes(street, scene, quality);
   onProgress(0.15);
 
   const assets = await loadHeroAssets('./assets/', (f) => onProgress(0.15 + f * 0.7));

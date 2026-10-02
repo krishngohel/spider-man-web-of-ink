@@ -1,0 +1,110 @@
+import * as THREE from 'three';
+import { toonGradient } from '../render/toon.js';
+import { PALETTE } from '../render/palette.js';
+
+// Draws the street furniture as a handful of instanced meshes (one draw call each): lamp posts,
+// traffic lights, parked cars with per-car colours, street trees, hydrants. Stylised and chunky so
+// they read as comic props under the ink pass.
+
+function merge(parts) {
+  const pos = [], nrm = [], col = [];
+  for (const [geo, color] of parts) {
+    // Smooth normals on the indexed shape first, so round things stay round under the ink pass.
+    if (geo.index) geo.computeVertexNormals();
+    const g = geo.index ? geo.toNonIndexed() : geo;
+    if (!geo.index) g.computeVertexNormals();
+    const c = new THREE.Color(color);
+    pos.push(...g.attributes.position.array);
+    nrm.push(...g.attributes.normal.array);
+    for (let i = 0; i < g.attributes.position.count; i++) col.push(c.r, c.g, c.b);
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setAttribute('normal', new THREE.Float32BufferAttribute(nrm, 3));
+  out.setAttribute('color', new THREE.Float32BufferAttribute(col, 3));
+  return out;
+}
+const box = (w, h, d, x = 0, y = 0, z = 0) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return g; };
+const cyl = (r1, r2, h, x = 0, y = 0, z = 0, seg = 8) => { const g = new THREE.CylinderGeometry(r1, r2, h, seg); g.translate(x, y, z); return g; };
+
+function lampGeometry() {
+  const pole = 0x2e3a35;
+  const arm = box(0.12, 0.12, 1.6, 0, 6.2, 0.75);
+  return merge([
+    [cyl(0.12, 0.16, 6.3, 0, 3.15, 0), pole],
+    [cyl(0.22, 0.22, 0.4, 0, 0.2, 0), pole],
+    [arm, pole],
+    [box(0.5, 0.18, 0.8, 0, 6.08, 1.5), pole],
+    [box(0.36, 0.06, 0.6, 0, 5.97, 1.5), 0xfff3c4],
+  ]);
+}
+function trafficGeometry() {
+  const pole = 0x3a3d40, housing = 0x2a2c2e;
+  return merge([
+    [cyl(0.11, 0.14, 5.0, 0, 2.5, 0), pole],
+    [box(0.12, 0.12, 4.0, 0, 4.9, -2.0), pole],
+    [box(0.45, 1.25, 0.4, 0, 4.25, -3.4), housing],
+    [box(0.28, 0.28, 0.06, 0, 4.67, -3.62), 0xd8392b],
+    [box(0.28, 0.28, 0.06, 0, 4.27, -3.62), 0xf2c230],
+    [box(0.28, 0.28, 0.06, 0, 3.87, -3.62), 0x3fbf6a],
+  ]);
+}
+function carGeometry() {
+  // Body colour comes from the instance colour; glass, wheels and lights are baked dark/light.
+  return merge([
+    [box(1.8, 0.75, 4.3, 0, 0.72, 0), 0xffffff],
+    [box(1.6, 0.62, 2.2, 0, 1.4, -0.2), 0xffffff],
+    [box(1.62, 0.44, 2.0, 0, 1.43, -0.2), 0x2f4e6e],
+    [cyl(0.36, 0.36, 0.3, -0.92, 0.38, 1.35, 10).rotateZ(Math.PI / 2), 0x1d1d22],
+    [cyl(0.36, 0.36, 0.3, 0.92, 0.38, 1.35, 10).rotateZ(Math.PI / 2), 0x1d1d22],
+    [cyl(0.36, 0.36, 0.3, -0.92, 0.38, -1.35, 10).rotateZ(Math.PI / 2), 0x1d1d22],
+    [cyl(0.36, 0.36, 0.3, 0.92, 0.38, -1.35, 10).rotateZ(Math.PI / 2), 0x1d1d22],
+    [box(1.5, 0.18, 0.06, 0, 0.82, 2.16), 0xfff3c4],
+    [box(1.5, 0.16, 0.06, 0, 0.82, -2.16), 0xd8392b],
+  ]);
+}
+function treeGeometry() {
+  const crown = new THREE.SphereGeometry(1.9, 14, 10);
+  crown.scale(1, 1.15, 1); crown.translate(0, 5.6, 0);
+  const crown2 = new THREE.SphereGeometry(1.3, 12, 8);
+  crown2.translate(0.9, 4.9, 0.4);
+  return merge([
+    [cyl(0.16, 0.24, 4.6, 0, 2.3, 0), PALETTE.trunk],
+    [box(1.4, 0.08, 1.4, 0, 0.04, 0), 0x6b5a48],
+    [crown, PALETTE.leaves],
+    [crown2, PALETTE.grassDark],
+  ]);
+}
+function hydrantGeometry() {
+  return merge([
+    [cyl(0.2, 0.22, 0.7, 0, 0.35, 0), 0xd8392b],
+    [cyl(0.24, 0.2, 0.14, 0, 0.75, 0), 0xd8392b],
+    [cyl(0.06, 0.06, 0.6, 0, 0.5, 0, 6).rotateZ(Math.PI / 2), 0xd8392b],
+  ]);
+}
+
+export function buildStreetMeshes(props, scene, quality) {
+  const group = new THREE.Group();
+  group.name = 'street';
+  const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() });
+  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+  const add = (geo, list, place, colorOf) => {
+    if (!list.length) return;
+    const mesh = new THREE.InstancedMesh(geo, mat, list.length);
+    list.forEach((it, i) => {
+      place(it);
+      mesh.setMatrixAt(i, m4.compose(p, q, s));
+      if (colorOf) mesh.setColorAt(i, new THREE.Color(colorOf(it)));
+    });
+    mesh.castShadow = quality.shadows;
+    mesh.receiveShadow = quality.shadows;
+    group.add(mesh);
+  };
+  add(lampGeometry(), props.lamps, (l) => { p.set(l.x, 0, l.z); q.setFromAxisAngle(up, l.facing > 0 ? Math.PI / 2 : -Math.PI / 2); s.set(1, 1, 1); });
+  add(trafficGeometry(), props.lights, (l) => { p.set(l.x, 0, l.z); q.setFromAxisAngle(up, Math.PI / 2); s.set(1, 1, 1); });
+  add(carGeometry(), props.cars, (c) => { p.set(c.x, 0, c.z); q.setFromAxisAngle(up, c.yaw); s.set(1, 1, 1); }, (c) => c.color);
+  add(treeGeometry(), props.trees, (t) => { p.set(t.x, 0, t.z); q.setFromAxisAngle(up, t.x * 0.37); s.setScalar(t.s); });
+  add(hydrantGeometry(), props.hydrants, (h) => { p.set(h.x, 0, h.z); q.identity(); s.set(1, 1, 1); });
+  scene.add(group);
+  return group;
+}
