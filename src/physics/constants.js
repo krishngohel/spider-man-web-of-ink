@@ -29,9 +29,6 @@ export const DEFAULTS = {
   zipSpeed: 34,
   zipTension: 30000,
   zipRange: 60,
-  // A web that catches with less radial speed than this is absorbed by the strand's stretch and
-  // given back (the line is elastic); a harder catch loses its radial speed.
-  elasticCatch: 1.5,
   // Aerodynamics. Body lift is the skydiver's "tracking": a lean turns the velocity without
   // changing its size. Glide is the web-wing polar.
   bodyLift: 0.0045,
