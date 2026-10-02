@@ -162,21 +162,24 @@ vec3 paintSuit(vec3 p) {
       col = mix(col, uBlack, 1.0 - smoothstep(0.0035, 0.0035 + fw, abs(d)));
     }
   }
-  // Eye lenses: two big separate teardrops, swept up and out, thick black rims. The lens itself
-  // is painted after lighting (gLens) so it stays bright white in shade.
-  if (p.y > 1.63 && p.z > 0.04) {
-    for (int s = 0; s < 2; s++) {
-      float sx = s == 0 ? -1.0 : 1.0;
-      vec2 q = vec2(p.x - sx * 0.043, p.y - 1.696);
-      float a = sx * 0.42;
-      q = mat2(cos(a), -sin(a), sin(a), cos(a)) * q;
-      // Teardrop: wider at the outer end.
-      q.y *= 1.0 + 0.25 * clamp(q.x * sx * 40.0, -1.0, 1.0);
-      float e = length(q / vec2(0.034, 0.021));
-      float aa = fwidth(e) * 1.5;
-      col = mix(col, uBlack, 1.0 - smoothstep(1.2, 1.2 + aa, e));
-      gLens = max(gLens, 1.0 - smoothstep(1.0, 1.0 + aa, e));
-    }
+  // Eye lenses: two big teardrops, pointed toward the nose, swept up and out, in thick black
+  // frames. Drawn in surface metres around the mask (from yaw and pitch), not projected flat onto the front, so
+  // they keep their shape as they wrap around the head. The lens itself is painted after lighting
+  // (gLens) so it stays bright white in shade.
+  if (p.y > 1.6 && p.z > 0.0) {
+    vec3 d = (p - vec3(0.0, 1.69, 0.0)) / vec3(0.091, 0.124, 0.104);
+    float yaw = atan(d.x, d.z), pitch = asin(clamp(d.y / max(length(d), 1e-4), -1.0, 1.0));
+    // Local frame in metres along the mask: u runs outward from the nose, v up.
+    vec2 q = vec2(abs(yaw) * 0.097 - 0.047, pitch * 0.124 - 0.031);
+    float a = 0.5;
+    q = mat2(cos(a), -sin(a), sin(a), cos(a)) * q; // into the tilted lens frame (outer end up)
+    // Teardrop: full and round at the outer end, narrowing to a point by the nose.
+    float k = clamp(-q.x / 0.039, 0.0, 1.0);
+    q.y /= 1.0 - 0.72 * k * k;
+    float e = length(q / vec2(0.039, 0.025));
+    float aa = fwidth(e) * 1.5;
+    col = mix(col, uBlack, 1.0 - smoothstep(1.3, 1.3 + aa, e));
+    gLens = max(gLens, 1.0 - smoothstep(1.0, 1.0 + aa, e));
   }
   return col;
 }
