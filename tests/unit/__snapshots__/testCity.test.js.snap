@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`test city > layout snapshot (update deliberately when the city changes) 1`] = `
+{
+  "count": 506,
+  "sum": -20378235,
+}
+`;
