@@ -19,6 +19,7 @@ export const WALL_OFFSET = COM_HEIGHT - 0.4; // lifts the crawl pose off the wal
 const UP = new THREE.Vector3(0, 1, 0), DOWN = new THREE.Vector3(0, -1, 0);
 const u = new THREE.Vector3(), f = new THREE.Vector3(), r = new THREE.Vector3(), tmp = new THREE.Vector3(), tmp2 = new THREE.Vector3();
 const m = new THREE.Matrix4(), qBase = new THREE.Quaternion(), qTrick = new THREE.Quaternion(), qTarget = new THREE.Quaternion();
+const qErr = new THREE.Quaternion(), qInv = new THREE.Quaternion(), qStep = new THREE.Quaternion(), wAxis = new THREE.Vector3();
 const vel = new THREE.Vector3(), shoulder = new THREE.Vector3(), handTarget = new THREE.Vector3(), offTarget = new THREE.Vector3();
 
 // Basis with the model's +y along `up` and +z along `fwd` (made perpendicular to up).
@@ -75,7 +76,11 @@ export function createPoser(heroModel) {
   let swings = 0;
   let inverted = false;
   let mantleT = 0;
-  let lastAng = null;       // the swing angle last frame (for the pose lead)          // hands-on-the-edge pose while going over a ledge     // hanging upside down: the web runs from the feet
+  let lastAng = null;       // the swing angle last frame (for the pose lead)
+  const qSmooth = orient.quaternion.clone();  // the body orientation on its rotation spring
+  const angVel = new THREE.Vector3();
+  const qTrickWas = new THREE.Quaternion();
+  let trickWas = false;          // hands-on-the-edge pose while going over a ledge     // hanging upside down: the web runs from the feet
   const webWorld = new THREE.Vector3();
   const webHand = { side: 'r', world: webWorld };
 
@@ -305,18 +310,34 @@ export function createPoser(heroModel) {
         target[LAYOUT.footL + 1] += fy; target[LAYOUT.footR + 1] -= fy;
       }
 
-      // Trick rotation on top of the base orientation, about a body axis.
+      // The body turns toward its target on a critically damped rotation spring: a change of state
+      // (let go of a web, hit a wall, land) eases in and out instead of starting at full speed.
+      // A trick spins on top of that, exactly, so flips stay crisp.
       qTarget.copy(qBase);
       if (st !== 'ground' && st !== 'wall' && Math.abs(bank) > 1e-3) { tmp2.set(0, 0, 1); qTrick.setFromAxisAngle(tmp2, bank); qTarget.multiply(qTrick); }
+      {
+        const h = Math.min(dt, 1 / 30);
+        const w0 = swinging ? 11 : st === 'ground' ? 16 : 13;
+        qErr.copy(qTarget).multiply(qInv.copy(qSmooth).invert());
+        if (qErr.w < 0) { qErr.x = -qErr.x; qErr.y = -qErr.y; qErr.z = -qErr.z; qErr.w = -qErr.w; }
+        const ang = 2 * Math.acos(Math.min(1, qErr.w));
+        const sn = Math.sqrt(Math.max(0, 1 - qErr.w * qErr.w));
+        if (sn > 1e-6) wAxis.set(qErr.x / sn, qErr.y / sn, qErr.z / sn).multiplyScalar(ang); else wAxis.set(0, 0, 0);
+        angVel.addScaledVector(wAxis, w0 * w0 * h).addScaledVector(angVel, -2 * w0 * h);
+        const turn = angVel.length() * h;
+        if (turn > 1e-7) { qStep.setFromAxisAngle(wAxis.copy(angVel).normalize(), turn); qSmooth.premultiply(qStep).normalize(); }
+      }
+      // A trick cut short (landed mid-flip): its turn so far folds into the spring, which eases it
+      // out, instead of the body snapping upright in one frame.
+      if (!trick && trickWas) { qSmooth.multiply(qTrickWas); trickWas = false; }
+      orient.quaternion.copy(qSmooth);
       if (trick) {
         const d = trick.def, x = Math.min(1, trick.t / d.dur);
         const e = x * x * (3 - 2 * x);
         tmp2.set(d.axis[0], d.axis[1], d.axis[2]);
         qTrick.setFromAxisAngle(tmp2, e * d.turns * Math.PI * 2);
-        qTarget.multiply(qTrick);
-        orient.quaternion.slerp(qTarget, 1 - Math.exp(-dt * 40));
-      } else {
-        orient.quaternion.slerp(qTarget, 1 - Math.exp(-dt * (swinging ? 9 : 12)));
+        orient.quaternion.multiply(qTrick);
+        qTrickWas.copy(qTrick); trickWas = true;
       }
 
       // Spring every pose number toward the target (critically damped).

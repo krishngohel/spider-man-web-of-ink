@@ -41,7 +41,13 @@ export function createCameraRig() {
     fwd: { x: 0, y: 0, z: 1 },
     shake: 0,
     side: 0.85,
+    sideV: 0,
+    lift: 0,
     closeness: 5,
+    followK: 18,
+    colDist: 99,       // how far back the camera may sit before it hits something (eases back out)
+    lastDt: 1 / 60,
+    vel: { x: 0, y: 0, z: 0 },
 
     // look: { dx, dy } in mouse pixels. world: needs raycast and groundHeight.
     update(dt, look, hero, world, settings = {}) {
@@ -73,14 +79,19 @@ export function createCameraRig() {
       const c = speedCurves(speed, settings.fov ?? CAM.baseFov);
       // Looking steeply up to aim a web: pull in, so the hero stays big at the bottom of the frame.
       c.dist *= 1 - 0.4 * smooth((-rig.pitch - 0.35) / 0.7);
+      rig.lastDt = dt;
+      rig.vel.x = v.x; rig.vel.y = v.y; rig.vel.z = v.z;
       const kd = 1 - Math.exp(-dt * 3);
       rig.dist += (c.dist - rig.dist) * kd;
       rig.fov += (c.fov - rig.fov) * kd;
 
       // Focus: the hero, followed tightly (a small lag reads as weight without losing the hero).
       const p = hero.body.p;
-      // A swing trails a little more (weight), a fall or run follows tightly.
-      const kf = 1 - Math.exp(-dt * (hero.state === 'swing' ? 11 : 18));
+      // A swing trails a little more (weight), a fall or run follows tightly. The rate itself
+      // eases between the two: switching it at once (letting go of a web) changes how far the
+      // camera trails in a single frame, a visible lurch at speed.
+      rig.followK += ((hero.state === 'swing' ? 11 : 18) - rig.followK) * (1 - Math.exp(-dt * 2.5));
+      const kf = 1 - Math.exp(-dt * rig.followK);
       rig.focus.x += (p.x - rig.focus.x) * kf;
       rig.focus.y += (p.y + CAM.focusHeight - rig.focus.y) * kf;
       rig.focus.z += (p.z - rig.focus.z) * kf;
@@ -114,23 +125,45 @@ export function createCameraRig() {
         want = leftRoom > rightRoom ? -Math.max(0, leftRoom) : Math.max(0, rightRoom);
       }
     }
-    // Ease between shoulders instead of popping.
-    rig.side += (want - rig.side) * 0.18;
+    // Between shoulders on a critically damped spring: the swap starts and ends gently (an eased
+    // step still starts at full speed, a sideways jolt in one frame).
+    {
+      const w0 = 7, h = Math.min(rig.lastDt, 1 / 30);
+      rig.sideV += (w0 * w0 * (want - rig.side) - 2 * w0 * rig.sideV) * h;
+      rig.side += rig.sideV * h;
+    }
     sh.x = f.x + rx * rig.side; sh.y = f.y + CAM.shoulderUp; sh.z = f.z + rz * rig.side;
     let dist = rig.dist;
-    // Back along -fwd from the shoulder point; stop short of anything in between.
+    // Back along -fwd from the shoulder point; stop short of anything in between. In at once (never
+    // through a wall), back out gently once it clears.
+    // Also looks 0.3 s ahead along the hero's path, so a corner about to come between them pulls
+    // the camera in smoothly before it has to jump.
+    let room = 99, ahead = 99;
     if (world) {
       const hit = world.raycast(sh.x, sh.y, sh.z, -d.x, -d.y, -d.z, dist + CAM.wallClear, RAY);
-      if (hit) dist = Math.max(0.4, hit.t - CAM.wallClear);
+      if (hit) room = Math.max(0.4, hit.t - CAM.wallClear);
+      const ax = sh.x + rig.vel.x * 0.3, ay = sh.y + rig.vel.y * 0.3, az = sh.z + rig.vel.z * 0.3;
+      const hitA = world.raycast(ax, ay, az, -d.x, -d.y, -d.z, dist + CAM.wallClear, RAY);
+      if (hitA) ahead = Math.max(0.4, hitA.t - CAM.wallClear);
     }
+    const wantD = Math.min(room, ahead, dist + 1);
+    const rate = wantD < rig.colDist ? 9 : 4;
+    rig.colDist += (wantD - rig.colDist) * (1 - Math.exp(-rig.lastDt * rate));
+    dist = Math.min(dist, rig.colDist, room);
     // Cramped (a wall right behind): rise over the hero rather than crowd into him.
     let lift = 0;
     if (dist < CAM.minDist && world) {
       const up = world.raycast(sh.x, sh.y, sh.z, 0, 1, 0, 2.2, RAY);
       lift = Math.min(up ? Math.max(0, up.t - CAM.wallClear) : 2, (CAM.minDist - dist) * 1.4);
     }
+    // The lift eases in and out (it only keeps the view clear; nothing clips without it).
+    rig.lift += (lift - rig.lift) * (1 - Math.exp(-rig.lastDt * 6));
+    if (world && rig.lift > lift) {
+      const up = world.raycast(sh.x, sh.y, sh.z, 0, 1, 0, rig.lift + CAM.wallClear, RAY);
+      if (up) rig.lift = Math.min(rig.lift, Math.max(0, up.t - CAM.wallClear));
+    }
     rig.pos.x = sh.x - d.x * dist;
-    rig.pos.y = sh.y - d.y * dist + lift;
+    rig.pos.y = sh.y - d.y * dist + rig.lift;
     rig.pos.z = sh.z - d.z * dist;
     rig.closeness = Math.hypot(rig.pos.x - f.x, rig.pos.y - f.y, rig.pos.z - f.z);
     if (world) {

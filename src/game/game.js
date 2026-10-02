@@ -323,6 +323,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (e.type === 'launch') { const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('HUP!', s.x - 80, s.y - 40, 'small'); }
   }
   let camOverride = null;
+  let trace = null, traceSkip = 0;
+  const traceDir = new THREE.Vector3();
   let camHeading = 0, camRoll = 0;
   const sideDir = { x: 1, z: 0 };
   function interpolate() {
@@ -438,6 +440,15 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     updatePreview(dt);
     prof('aim', Tprev);
     fx.update(dt);
+    if (trace) {
+      // Test hook: what the player sees each frame (smoothness probes).
+      camera.getWorldDirection(traceDir);
+      const q = heroModel.orient.quaternion;
+      trace.push([traceSkip > 0 ? -dtMs : dtMs, camera.position.x, camera.position.y, camera.position.z, traceDir.x, traceDir.y, traceDir.z,
+        q.x, q.y, q.z, q.w, renderP.x, renderP.y, renderP.z, camera.fov, hero.state, rig.closeness]);
+      if (trace.length > 20000) trace.length = 0;
+      traceSkip--;
+    }
     const Tr = performance.now();
     ink.render(scene, camera, time);
     const renderMs = performance.now() - Tr;
@@ -485,6 +496,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     setLook(yaw, pitch) { rig.yaw = yaw; rig.pitch = pitch; rig.sinceLook = 0; },
     // Turns the camera so the crosshair sits on a world point (for scripted play).
     aimAt(x, y, z) {
+      traceSkip = 3; // the probe ignores the camera snap a scripted aim makes
       interpolate();
       for (let i = 0; i < 4; i++) {
         const dx = x - rig.pos.x, dy = y - rig.pos.y, dz = z - rig.pos.z, l = Math.hypot(dx, dy, dz) || 1;
@@ -500,6 +512,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     },
     poser: () => ({ trick: poser.trick, hand: poser.webHand }),
     setCamOverride(o) { camOverride = o; },
+    startTrace() { trace = []; },
+    stopTrace() { const t = trace; trace = null; return t; },
     setSetting(k, v) { applySettings({ ...settings, [k]: v }); },
     get settings() { return settings; },
     play: () => enterPlay(),
