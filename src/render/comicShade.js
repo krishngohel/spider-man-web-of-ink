@@ -35,16 +35,28 @@ vec3 comicShade(vec3 alb, vec3 lit) {
 export const SHADOW_ALPHA = /* glsl */ `
 	gl_FragColor.a = 1.0 - 0.45 * gShadow;`;
 
-// A plain toon material (props, trees, water towers) shaded by the same comic rule.
-export function comicToon(params) {
+// A plain toon material (props, trees, water towers, crowds) shaded by the same comic rule.
+// hooks (optional): vertexHead / vertexBegin (vertex animation after begin_vertex),
+// fragmentHead / fragmentColor (colour changes after color_fragment), key (program cache).
+export function comicToon(params, hooks = null) {
   const mat = new THREE.MeshToonMaterial({ ...params, gradientMap: toonGradient() });
   mat.onBeforeCompile = (shader) => {
     addShadeUniforms(shader);
+    if (hooks?.vertexHead) shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
+${hooks.vertexHead}`);
+    if (hooks?.vertexBegin) shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
+${hooks.vertexBegin}`);
+    if (hooks?.fragmentHead) shader.fragmentShader = shader.fragmentShader.replace('#include <common>', `#include <common>
+${hooks.fragmentHead}`);
+    if (hooks?.fragmentColor) shader.fragmentShader = shader.fragmentShader.replace('#include <color_fragment>', `#include <color_fragment>
+${hooks.fragmentColor}`);
     shader.fragmentShader = shader.fragmentShader
-      .replace('#include <common>', `#include <common>\n${COMIC_SHADE}`)
-      .replace('#include <opaque_fragment>', 'outgoingLight = comicShade(diffuseColor.rgb, outgoingLight);\n#include <opaque_fragment>')
+      .replace('#include <common>', `#include <common>
+${COMIC_SHADE}`)
+      .replace('#include <opaque_fragment>', 'outgoingLight = comicShade(diffuseColor.rgb, outgoingLight);' + String.fromCharCode(10) + '#include <opaque_fragment>')
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'comic-toon-v1';
+  const key = 'comic-toon-v2' + (hooks ? `-${hooks.key ?? (hooks.vertexBegin ?? '').length + (hooks.fragmentColor ?? '').length}` : '');
+  mat.customProgramCacheKey = () => key;
   return mat;
 }

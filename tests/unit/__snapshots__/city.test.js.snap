@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the full city > the city layout snapshot (footprints change only on purpose) 1`] = `
+{
+  "boxes": 11958,
+  "sig": -897940590,
+}
+`;

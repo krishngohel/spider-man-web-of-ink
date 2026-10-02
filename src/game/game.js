@@ -17,6 +17,7 @@ import { buildCityMeshes, setNight } from '../world/cityMesh.js';
 import { createSky } from '../world/sky.js';
 import { env as envAt, createClock, PRESETS, WEATHERS } from '../world/timeWeather.js';
 import { createRain } from '../world/rain.js';
+import { createCityLife } from '../world/cityLife.js';
 import { SHADE_UNIFORMS } from '../render/comicShade.js';
 import { buildStreetProps, carBoxes } from '../world/streetProps.js';
 import { buildStreetMeshes } from '../world/streetMesh.js';
@@ -29,6 +30,9 @@ import { createSfx } from '../audio/sfx.js';
 import { createHud } from '../ui/hud.js';
 import { createMenus } from '../ui/menus.js';
 import { createDevPanel } from '../ui/devPanel.js';
+import { createMap } from '../ui/map.js';
+import { newSave, loadSlot, writeSlot, lastSlot } from '../core/save.js';
+import { COPY } from '../ui/copy.js';
 import { el } from '../ui/dom.js';
 import { createFx } from './fx.js';
 
@@ -70,6 +74,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   buildCityMeshes(city, scene, quality);
   const streetGroup = buildStreetMeshes(street, scene, quality);
   const rain = createRain(scene);
+  const life = createCityLife(scene, city, quality);
+  let scare = null;
   // Time of day and weather: free roam cycles unless the settings (or a mission) hold them.
   const clock = createClock({ hour: PRESETS.day, cycle: true });
   const weatherState = { from: 'clear', to: 'clear', k: 1, next: 240 };
@@ -135,6 +141,48 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   if (dev) devPanel.show();
 
   let mode = 'title';
+  // The save (slot 1 until the story's slot screen arrives): found stations, districts, position.
+  const saveSlot = lastSlot(window.localStorage) ?? 1;
+  const save = loadSlot(window.localStorage, saveSlot) ?? newSave(saveSlot);
+  let saveT = 0;
+  const persist = () => {
+    const p = hero.body.p;
+    if (hero.state === 'ground') save.world.position = { x: p.x, y: p.y, z: p.z };
+    save.world.hour = clock.hour;
+    writeSlot(window.localStorage, save);
+  };
+  // Map, waypoint and subway fast travel.
+  let waypoint = null;
+  const wpV = new THREE.Vector3();
+  const map = createMap(uiRoot, city, {
+    onWaypoint: (w) => { waypoint = w; },
+    onTravel: (st) => { map.hide(); travel(st); },
+  });
+  map.onClose = () => { if (mode === 'map') { mode = 'play'; resetIntent(); } };
+  let travelT = -1, travelTo = null;
+  function travel(st) {
+    travelTo = st; travelT = 0;
+    hud.fade(true);
+  }
+  function travelStep(dt) {
+    if (travelT < 0) return;
+    travelT += dt;
+    if (travelT > 0.6 && travelTo) {
+      const st = travelTo; travelTo = null;
+      hero.place(st.x, 0.9, st.z, 0, 0, 0, 'ground');
+      prevP.x = renderP.x = st.x; prevP.y = renderP.y = 0.9; prevP.z = renderP.z = st.z;
+      rig.focus.x = st.x; rig.focus.y = 1.45; rig.focus.z = st.z;
+      hud.fade(false);
+      hud.caption(`${COPY.subwayTo} ${st.name.toUpperCase()}`);
+    }
+    if (travelT > 1.2) travelT = -1;
+  }
+  function openMap() {
+    mode = 'map';
+    if (document.pointerLockElement) document.exitPointerLock();
+    const p = hero.body.p;
+    map.show({ x: p.x, z: p.z, yaw: Math.atan2(hero.facing.x, hero.facing.z) }, save.world.stations, waypoint);
+  }
   const menus = createMenus(uiRoot, {
     getSettings: () => settings,
     setSettings: applySettings,
@@ -340,6 +388,13 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     const id = d ? d.id : null;
     if (id && id !== lastDistrict && lastDistrict !== null) hud.caption(d.name.toUpperCase());
     if (id) lastDistrict = id;
+    if (id && !save.world.districts.includes(id)) save.world.districts.push(id);
+    for (const st of city.stations) {
+      if (save.world.stations.includes(st.id) || Math.hypot(p.x - st.x, p.z - st.z) > 25 || p.y > 30) continue;
+      save.world.stations.push(st.id);
+      hud.caption(`${COPY.stationFound}: ${st.name.toUpperCase()}`, 3.2);
+      persist();
+    }
   }
   // The river: the last place the hero stood on something, and a splash that brings him back.
   const lastSafe = { x: spawn.x, y: spawn.y, z: spawn.z, t: 0 };
@@ -387,6 +442,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         break;
       }
       case 'land':
+        if (p.y < 2.5) scare = { x: p.x, z: p.z, r: e.hard ? 14 : 6 };
         if (e.hard) {
           fx.ring(p.x, p.y - 0.9, p.z, Math.min(1.6, e.impact / 25));
           if (settings.cameraShake) rig.shake = Math.min(1, e.impact / 30);
@@ -438,6 +494,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (mode === 'play') {
       if (input.pressed('pause')) { pauseGame(); }
       if (input.pressed('help')) hud.toggleHelp();
+      if (input.pressed('map')) openMap();
       buildIntent();
       const Tp = performance.now();
       const adv = fixed.advance(dt);
@@ -452,6 +509,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       events.push(...hero.events);
       hero.events.length = 0;
       riverCheck(dt);
+      travelStep(dt);
+      saveT += dt;
+      if (saveT > 20) { saveT = 0; save.playTime += 20; persist(); }
       districtCheck();
       for (const e of events) { sfx.event(e); hud.onEvent(e); worldEvent(e); }
       interpolate();
@@ -467,6 +527,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         rig.update(dt, NO_LOOK, view, world, settings);
       }
       if (menus.open) menus.padNav();
+      if (mode === 'map' && (input.pressed('map') || input.pressed('pause'))) map.hide();
     }
 
     if (mode !== 'play' && mode !== 'title') interpolate();
@@ -520,6 +581,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       }
     }
     if (!camOverride && Math.abs(camera.fov - rig.fov) > 0.01) { camera.fov = rig.fov; camera.updateProjectionMatrix(); }
+    if (waypoint && mode === 'play') {
+      wpV.set(waypoint.x, Math.max(2, hero.body.p.y * 0.5), waypoint.z).project(camera);
+      const behind = wpV.z > 1;
+      const d = Math.hypot(waypoint.x - hero.body.p.x, waypoint.z - hero.body.p.z);
+      if (d < 20) { waypoint = null; hud.waypoint(false); } else hud.waypoint(true, (wpV.x * 0.5 + 0.5) * innerWidth, (-wpV.y * 0.5 + 0.5) * innerHeight, d, behind);
+    } else hud.waypoint(false);
     sky.follow(camera, time);
     applyEnv(mode === 'play' ? dt : 0);
     rain.update(camera, time);
@@ -533,6 +600,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     updatePreview(dt);
     prof('aim', Tprev);
     fx.update(dt);
+    life.update(mode === 'play' ? dt : dt * 0.5, renderP, scare);
+    scare = null;
     if (trace) {
       // Test hook: what the player sees each frame (smoothness probes).
       camera.getWorldDirection(traceDir);
@@ -609,6 +678,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     stopTrace() { const t = trace; trace = null; return t; },
     setSetting(k, v) { applySettings({ ...settings, [k]: v }); },
     get settings() { return settings; },
+    save: () => save,
+    openMap: () => openMap(),
+    travel: (id) => { const st = city.stations.find((s) => s.id === id); if (st) travel(st); },
     setShade(l, r, g, b) { shadeFreeze = true; SHADE_UNIFORMS.uLightLevel.value = l; SHADE_UNIFORMS.uTint.value.setRGB(r, g, b); },
     clock: () => ({ hour: clock.hour, weather: weatherState.to, light: SHADE_UNIFORMS.uLightLevel.value, tint: SHADE_UNIFORMS.uTint.value.toArray() }),
     setTime(h) { settings = { ...settings, timeOfDay: 'cycle' }; clock.set(h); },

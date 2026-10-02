@@ -24,12 +24,13 @@ export function createHud(root, getSettings) {
   const words = el('div', { class: 'words' });
   const fader = el('div', { class: 'fader' });
   const caption = el('div', { class: 'caption hidden' });
+  const wpMark = el('div', { class: 'waypoint hidden' }, [el('i'), el('span')]);
   let captionT = 0;
   const hud = el('div', { class: 'hud hidden' }, [lines, words, reticle, dot, noAnchor, speedo, fps, stateLabel, tip, lockHint, help]);
   const wordPool = Array.from({ length: 6 }, () => { const w = el('div', { class: 'word' }); words.append(w); return { el: w, t: 0 }; });
   let wordNext = 0;
   root.append(hud, toast, fader);
-  hud.append(caption);
+  hud.append(caption, wpMark);
   const lctx = lines.getContext('2d');
 
   let tipIndex = 0;
@@ -42,7 +43,7 @@ export function createHud(root, getSettings) {
     return {
       swing: bindingLabel(b, 'swing'), jump: bindingLabel(b, 'jump'), zip: bindingLabel(b, 'zip'),
       dive: bindingLabel(b, 'dive'), help: bindingLabel(b, 'help'), pause: bindingLabel(b, 'pause'),
-      hang: bindingLabel(b, 'hang'), trick: bindingLabel(b, 'trick'), forward: bindingLabel(b, 'forward'), back: bindingLabel(b, 'back'),
+      hang: bindingLabel(b, 'hang'), trick: bindingLabel(b, 'trick'), map: bindingLabel(b, 'map'), forward: bindingLabel(b, 'forward'), back: bindingLabel(b, 'back'),
       move: ['forward', 'left', 'back', 'right'].map((a) => bindingLabel(b, a)).join(' '),
     };
   };
@@ -122,6 +123,17 @@ export function createHud(root, getSettings) {
       w.el.style.setProperty('--tilt', `${(Math.random() * 16 - 8).toFixed(1)}deg`);
       void w.el.offsetWidth; // restart the animation
       w.el.classList.add('show');
+    },
+    // The waypoint marker: on the point when it is on screen, pinned to the edge when it is not.
+    waypoint(on, x = 0, y = 0, metres = 0, behind = false) {
+      wpMark.classList.toggle('hidden', !on);
+      if (!on) return;
+      const m = 40;
+      let sx = x, sy = y;
+      if (behind) { sx = innerWidth - x; sy = innerHeight - m; }
+      sx = Math.max(m, Math.min(innerWidth - m, sx)); sy = Math.max(m, Math.min(innerHeight - m, sy));
+      wpMark.style.left = `${sx}px`; wpMark.style.top = `${sy}px`;
+      wpMark.lastChild.textContent = `${Math.round(metres)} M`;
     },
     resetTips() { tipIndex = 0; try { localStorage.removeItem(TIPS_KEY); } catch { /* storage blocked */ } showTip(); },
     update(dt, { fps: f, speed, anchor, state, dev, w, h }) {

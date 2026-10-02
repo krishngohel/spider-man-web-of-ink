@@ -10,6 +10,7 @@ export const ACTIONS = [
   { id: 'hang', label: 'Hang on the web (climb with forward and back), press again to let go', group: 'Move' },
   { id: 'dive', label: 'Dive (hold in the air)', group: 'Move' },
   { id: 'trick', label: 'Air trick (flips and spins)', group: 'Move' },
+  { id: 'map', label: 'City map', group: 'Other' },
   { id: 'help', label: 'Controls help', group: 'Other' },
   { id: 'pause', label: 'Pause and settings', group: 'Other' },
 ];
@@ -25,6 +26,7 @@ export const DEFAULT_BINDINGS = {
   hang: ['KeyE'],
   dive: ['KeyC'],
   trick: ['KeyR'],
+  map: ['KeyM'],
   help: ['KeyH'],
   pause: ['Escape', 'KeyP'],
 };
@@ -37,7 +39,8 @@ export const PAD = {
   trick: 2,     // X / Square
   zipHold: 6,   // LT / L2 (with RT: zip)
   swing: 7,     // RT / R2
-  help: 8,      // Back / Share
+  map: 8,       // Back / Share
+  help: -1,     // the pause menu has it
   pause: 9,     // Start / Options
 };
 

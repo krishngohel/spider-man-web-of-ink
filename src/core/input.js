@@ -16,6 +16,7 @@ export function padActions(pad, out = new Set()) {
   if (btn(PAD.hang)) out.add('hang');
   if (btn(PAD.trick)) out.add('trick');
   if (btn(PAD.help)) out.add('help');
+  if (btn(PAD.map)) out.add('map');
   if (btn(PAD.pause)) out.add('pause');
   // LT + RT is a zip; RT alone is swing.
   if (btn(PAD.swing)) out.add(btn(PAD.zipHold) ? 'zip' : 'swing');

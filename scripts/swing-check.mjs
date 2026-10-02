@@ -63,9 +63,10 @@ const att = await until((h) => h.swing.active, 1500);
 check('aimed web sticks within 300 ms', !!aimed && !!att && att.t < 300, att ? `${att.t} ms` : 'never attached');
 await releaseAll();
 
-// B. A miss is a miss: out over the water past the city's edge nothing is in web range, so a
+// B. A miss is a miss: out over the river past the island (east of the Harbor, north of the
+// bridge) nothing is in web range, so a
 // press fires nothing (and the hero falls).
-await teleport(700, 40, 0, 0, 0, 10);
+await teleport(1650, 40, 0, 0, 0, 10);
 await page.evaluate(() => window.__game.setLook(0, -0.6));
 await page.keyboard.down('Shift');
 const miss = await until((h) => h.swing.active, 600);
