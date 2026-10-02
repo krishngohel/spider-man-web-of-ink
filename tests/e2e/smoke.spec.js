@@ -18,14 +18,18 @@ test('title screen renders with the disclaimer and no errors', async ({ page }) 
   expect(errors).toEqual([]);
 });
 
-test('free swing enters play, and a held swing attaches a web', async ({ page }) => {
+test('free swing enters play, and an aimed, held swing attaches a web', async ({ page }) => {
   const errors = collectErrors(page);
   await page.goto('/');
   await page.waitForFunction(ready, null, { timeout: 90000 });
   await page.locator('.title .mbtn.primary').click();
   await page.waitForFunction(() => window.__game.mode === 'play');
   await expect(page.locator('.hud')).toBeVisible();
-  await page.evaluate(() => window.__game.teleport(0, 50, -330, 0, 0, 22, 'air', 0));
+  await page.evaluate(() => {
+    window.__game.teleport(0, 50, -330, 0, 0, 22, 'air', 0);
+    const t = window.__game.suggest(0, 1);
+    window.__game.aimAt(t.x, t.y, t.z);
+  });
   await page.keyboard.down('Shift');
   await page.waitForFunction(() => window.__game.hero().rope.active, null, { timeout: 3000 });
   await page.keyboard.up('Shift');

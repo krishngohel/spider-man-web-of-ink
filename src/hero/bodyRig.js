@@ -14,6 +14,7 @@ const q = new THREE.Quaternion(), wq = new THREE.Quaternion(), pq = new THREE.Qu
 const v1 = new THREE.Vector3(), v2 = new THREE.Vector3(), v3 = new THREE.Vector3();
 const target = new THREE.Vector3(), pole = new THREE.Vector3();
 const chestQ = new THREE.Quaternion(), accQ = new THREE.Quaternion();
+const tq = new THREE.Quaternion(), tv = new THREE.Vector3();
 
 const FINGERS = ['index', 'middle', 'ring', 'pinky', 'thumb'];
 // How far each joint of a finger bends at full curl (radians): base, middle, tip.
@@ -181,8 +182,8 @@ export function createBodyRig(model) {
     // Blends the current (procedural) pose back toward the snapshot by (1 - w).
     blendWithSnapshot(w) {
       if (w >= 0.999) return;
-      bones.forEach((b, i) => b.quaternion.slerpQuaternions(snapA[i], b.quaternion.clone(), w));
-      pelvis.position.lerpVectors(snapPelvis, pelvis.position.clone(), w);
+      for (let i = 0; i < bones.length; i++) { const b = bones[i]; tq.copy(b.quaternion); b.quaternion.slerpQuaternions(snapA[i], tq, w); }
+      tv.copy(pelvis.position); pelvis.position.lerpVectors(snapPelvis, tv, w);
       model.updateMatrixWorld(true);
     },
   };

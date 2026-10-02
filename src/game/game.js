@@ -267,6 +267,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   const NO_LOOK = { dx: 0, dy: 0 };
   let camOverride = null;
+  let camHeading = 0, camRoll = 0;
   const sideDir = { x: 1, z: 0 };
   function interpolate() {
     const p = hero.body.p;
@@ -341,6 +342,16 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     } else {
       camera.position.set(rig.pos.x, rig.pos.y, rig.pos.z);
       camera.lookAt(rig.pos.x + rig.fwd.x, rig.pos.y + rig.fwd.y, rig.pos.z + rig.fwd.z);
+      // A little roll with the hero's turns while flying (the camera leans into the swing).
+      const v = hero.body.v, heading = Math.atan2(v.x, v.z);
+      let turn = heading - camHeading;
+      while (turn > Math.PI) turn -= 2 * Math.PI;
+      while (turn < -Math.PI) turn += 2 * Math.PI;
+      camHeading = heading;
+      const flying = hero.state === 'swing' || hero.state === 'air' || hero.state === 'glide';
+      const want = flying && Math.hypot(v.x, v.z) > 6 && dt > 0 && settings.cameraShake ? Math.max(-0.12, Math.min(0.12, (turn / dt) * 0.06)) : 0;
+      camRoll += (want - camRoll) * Math.min(1, dt * 3);
+      camera.rotateZ(camRoll);
     }
     if (!camOverride && Math.abs(camera.fov - rig.fov) > 0.01) { camera.fov = rig.fov; camera.updateProjectionMatrix(); }
     sky.follow(camera);

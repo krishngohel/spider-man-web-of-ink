@@ -34,9 +34,13 @@ console.log(`${engine} boot ${bootMs} ms${err ? ' (LOADING ERROR)' : ''}`);
 await p.screenshot({ path: `${out}/title.png` });
 if (!err) {
   await p.locator('.title .mbtn.primary').click();
-  await p.evaluate(() => window.__game.teleport(0, 50, -330, 0, 0, 22, 'air', 0));
+  await p.evaluate(() => {
+    window.__game.teleport(0, 50, -330, 0, 0, 22, 'air', 0);
+    const t = window.__game.suggest(0, 1);
+    window.__game.aimAt(t.x, t.y, t.z);
+  });
   await p.keyboard.down('Shift');
-  await sleep(1200);
+  await sleep(500);
   const h = await p.evaluate(() => window.__game.hero());
   await p.screenshot({ path: `${out}/swing.png` });
   await p.keyboard.up('Shift');

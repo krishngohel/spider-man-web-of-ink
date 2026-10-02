@@ -79,27 +79,37 @@ constraint and collisions stay physical, and game-feel forces are added on top a
 ledger as a sixth source, 'assist' (steering the swing plane, pumping toward cruise speed,
 release boosts, air control, wall-run momentum). Velocity still only changes through the ledger.
 
-### 4.3 Swing line
-- The swing pivot is placed where a good arc needs it: ahead of and above the hero on his
-  heading, at a length that grows with speed (16 to 34 m), starting about 50 degrees behind it.
-- The strand attaches to the nearest real building surface at the pivot's height (rays from the
-  ideal pivot to the sides and forward, up to 45 m). The pivot's height is capped by that
-  building. No building in range (park lawns, open water): no swing; trees work in the park.
-- The swing is planar: sideways velocity relative to the heading is damped, and steering turns
-  the heading (and the pivot with it) at up to about 2.2 rad/s, so arcs carve around corners.
-- The line shortens so the bottom of an arc stays at least 2 m over the ground.
-- Zips and future web yanks still use the real rope (src/physics/rope.js) with wrapping.
+### 4.3 Aimed webs (revised again 2026-10-02 after the second playtest)
+The owner's second playtest of the Insomniac-style swing: "the swings feel unnatural and forced in
+the wrong direction, it's too easy", with The Amazing Spider-Man games as the reference. Decision
+(owner's words): keep one swing key, but the web goes where the player aims with the crosshair,
+so they can miss and choose anywhere to stick it.
+- The web goes exactly where the camera's crosshair ray hits a building, tree or prop (never the
+  street) within 75 m of the hero. A 1.2 degree cone forgives a pixel on an edge; otherwise a miss
+  is a miss. The crosshair turns white when a web would stick, red when it would not.
+- The swing is a true pendulum on the real rope (rope.js: SHAKE line, wrapping round corners)
+  about that point, so the arc goes where the web pulls.
+- No auto-chaining: every web is aimed and pressed. A new press mid-swing lets go and fires at
+  the new aim. From the ground or a wall, a press with a target in range jumps or kicks off.
+- The camera sits over the right shoulder so the crosshair never looks through the hero.
 
 ### 4.4 Swing flow
-- Pump: through the bottom of each arc the hero accelerates toward the cruise speed (about
-  34 m/s), so momentum builds over a few swings and holds.
-- Holding swing chains automatically: the hero lets go at the sweet spot (about 45 degrees past
-  the bottom, rising) with a boost, and fires the next web near the top of the flight.
-- Letting go by hand inside the sweet window (25 to 60 degrees past the bottom) gives a bigger
-  "perfect release" boost. Jump during a swing is the swing-jump: a big forward and upward boost.
-- Hitting a wall during a swing becomes a wall run that keeps the speed (projected onto the wall,
-  with a bias upward). Holding swing runs up; at the top the hero vaults off with his speed.
-- Air control is strong: the velocity turns toward the stick or camera heading at any speed.
+- Light assists on top of the physics: a gentle pump through the bottom of each arc toward a
+  cruise speed (30 m/s), and the line shortening (at most 14 m/s) so arcs clear the street.
+- Letting go on the rise gives a small boost, a bigger one inside the sweet window (15 to 55
+  degrees past the bottom). Jump mid-swing is the swing-jump.
+- Hitting a wall at speed becomes a wall run that keeps most of the speed.
+- Air control turns the velocity toward the stick (about 1.1 rad/s).
+
+### 4.4b Animation
+- Procedural body (src/hero/bodyRig.js): IK arms and legs from pose targets, spine bend, head look,
+  finger curls (thwip sign, fists, grab), wrist and toe bends, a body drop for crouches.
+- Pose library (src/hero/poses.js): reach, drop, bottom tuck, rise kick and two alternate sets
+  (split, scissor, wide), soar, ready, spread, dive, wings, thwip, zip, tuck, superhero landing.
+- The swing blends its set by the arc's phase with the web hand pinned to the strand; releases
+  throw front flips, backflips, side flips, spins and double flips; flight leans head first when
+  fast and tips over a steep drop; the body banks into turns; every pose number is sprung.
+- Ground and wall use the CC0 clips, crossfaded with the procedural body.
 
 ### 4.5 Moves
 - Swing: hold the swing input. Release to let go; momentum carries.

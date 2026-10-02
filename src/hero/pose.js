@@ -71,6 +71,7 @@ export function createPoser(heroModel) {
   let lastTrick = '';
   let trickN = 0;
   let variant = 0;          // which swing pose set this swing uses (A, B, C)
+  let lastHeading = 0, bank = 0, flutter = 0;
   let swings = 0;
   const webWorld = new THREE.Vector3();
   const webHand = { side: 'r', world: webWorld };
@@ -199,11 +200,14 @@ export function createPoser(heroModel) {
           // Lean into the flight: fast and level, the body lies along the path, head first, like
           // a diver; slow, it stays upright.
           const lean = smoothstep(12, 32, speed) * smoothstep(-0.9, -0.2, vel.y / Math.max(1, speed)) * 0.85;
+          // Dropping steeply: tip forward over the drop, belly toward the ground, like a skydiver.
+          const fallTilt = smoothstep(-4, -20, b.v.y) * (1 - lean);
           u.set(0, 1, 0).lerp(tmp2.copy(vel).normalize(), lean);
-          basis(u, lean > 0.3 ? DOWN : tmp, qBase);
-          // Pose: rising slow and loose; soaring when fast; spread when dropping steeply.
+          u.lerp(tmp2.copy(tmp), fallTilt * 0.7).normalize();
+          basis(u, lean + fallTilt > 0.3 ? DOWN : tmp, qBase);
+          // Pose: rising slow and loose; soaring when fast; spread when dropping.
           lerpPose(POSES.air, POSES.soar, smoothstep(0.1, 0.5, lean), blendA);
-          lerpPose(blendA, POSES.spread, smoothstep(-6, -24, b.v.y) * (1 - lean), target);
+          lerpPose(blendA, POSES.spread, smoothstep(-3, -14, b.v.y) * (1 - lean), target);
           // Falling toward the next web: the web arm comes forward, ready.
           if (b.v.y < -2 && !trick) { lerpPose(target, choose('ready'), smoothstep(-2, -10, b.v.y) * 0.6, blendB); target.set(blendB); }
           if (trick) {
@@ -223,8 +227,25 @@ export function createPoser(heroModel) {
         }
       }
 
+      // Bank into turns: roll about the body's forward axis with the heading's turn rate.
+      const heading = Math.atan2(b.v.x, b.v.z);
+      let turn = heading - lastHeading;
+      while (turn > Math.PI) turn -= 2 * Math.PI;
+      while (turn < -Math.PI) turn += 2 * Math.PI;
+      lastHeading = heading;
+      const rate = hs > 4 && dt > 0 ? turn / dt : 0;
+      bank += (Math.max(-0.7, Math.min(0.7, -rate * 0.45)) - bank) * Math.min(1, dt * 5);
+      // Never-still legs in the air: a slow flutter so no pose ever freezes.
+      if (st === 'air' || st === 'swing' || st === 'glide') {
+        flutter += dt;
+        const fz = Math.sin(flutter * 6.3) * 0.045, fy = Math.sin(flutter * 4.1) * 0.03;
+        target[LAYOUT.footL + 2] += fz; target[LAYOUT.footR + 2] -= fz;
+        target[LAYOUT.footL + 1] += fy; target[LAYOUT.footR + 1] -= fy;
+      }
+
       // Trick rotation on top of the base orientation, about a body axis.
       qTarget.copy(qBase);
+      if (st !== 'ground' && st !== 'wall' && Math.abs(bank) > 1e-3) { tmp2.set(0, 0, 1); qTrick.setFromAxisAngle(tmp2, bank); qTarget.multiply(qTrick); }
       if (trick) {
         const d = trick.def, x = Math.min(1, trick.t / d.dur);
         const e = x * x * (3 - 2 * x);
