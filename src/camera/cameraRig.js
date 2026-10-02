@@ -15,7 +15,17 @@ export const CAM = {
   look: 0.0024,
   shoulder: 0.85, shoulderUp: 0.25,
   minDist: 1.8,
+  // Combat framing (spec C7): pulled back with the spread of the fight, a little down and wider,
+  // framing pulled toward the nearest three, auto-turning to a threat after 0.5 s hands-off.
+  fightDist: 6, fightSpread: 0.35, fightMax: 9.5, fightPitch: 0.38, fightFov: 4, fightPull: 0.25,
+  fightTurnAfter: 0.5, fightTurnRate: 1.6, fightTurnMin: 0.6, lookDeadPx: 1.5,
 };
+
+// Where the combat camera wants to sit given the fight (pure, tested).
+export function fightFraming(fight) {
+  if (!fight || !fight.pts.length) return null;
+  return { dist: Math.min(CAM.fightMax, Math.max(CAM.fightDist, CAM.fightDist + CAM.fightSpread * fight.spread)) };
+}
 
 const RAY = { ground: true };
 const smooth = (t) => { const x = Math.min(1, Math.max(0, t)); return x * x * (3 - 2 * x); };
@@ -36,6 +46,8 @@ export function createCameraRig() {
     yaw: 0, pitch: 0.18,   // yaw 0 looks along +z; positive pitch looks down
     dist: CAM.baseDist, fov: CAM.baseFov,
     sinceLook: 10,
+    sinceAim: 10,      // since the player last really moved the camera (jitter under 1.5 px ignored)
+    fightK: 0,         // 0 roaming, 1 framing a fight
     focus: { x: 0, y: 0, z: 0 },
     pos: { x: 0, y: 0, z: -5 },
     fwd: { x: 0, y: 0, z: 1 },
@@ -57,6 +69,10 @@ export function createCameraRig() {
       rig.yaw = wrapAngle(rig.yaw - look.dx * CAM.look * sens * (settings.invertX ? -1 : 1));
       rig.pitch = Math.min(CAM.maxPitch, Math.max(CAM.minPitch, rig.pitch + look.dy * CAM.look * sens * inv));
       rig.sinceLook = moved ? 0 : rig.sinceLook + dt;
+      rig.sinceAim = Math.abs(look.dx) + Math.abs(look.dy) > CAM.lookDeadPx ? 0 : rig.sinceAim + dt;
+      const fight = hero.fight ?? null;
+      const framing = fightFraming(fight);
+      rig.fightK += ((framing ? 1 : 0) - rig.fightK) * (1 - Math.exp(-dt * 2.5));
 
       const v = hero.body.v;
       const speed = Math.hypot(v.x, v.y, v.z);
@@ -76,7 +92,25 @@ export function createCameraRig() {
         rig.pitch += (wantPitch - rig.pitch) * k * 0.6;
       }
 
+      if (framing && rig.sinceAim > CAM.fightTurnAfter && hero.state === 'ground') {
+        // Hands off the camera mid-fight: tip down over the fight and turn toward a threat
+        // that is well off to one side.
+        const k = 1 - Math.exp(-dt * CAM.fightTurnRate);
+        rig.pitch += (CAM.fightPitch - rig.pitch) * k * rig.fightK;
+        if (fight.threat) {
+          const want = Math.atan2(fight.threat.x - hero.body.p.x, fight.threat.z - hero.body.p.z);
+          const off = wrapAngle(want - rig.yaw);
+          if (Math.abs(off) > CAM.fightTurnMin) rig.yaw = wrapAngle(rig.yaw + off * k * rig.fightK);
+        }
+      }
+
       const c = speedCurves(speed, settings.fov ?? CAM.baseFov);
+      if (rig.fightK > 0.001) {
+        const fd = framing ? framing.dist : rig.fightDist ?? CAM.fightDist;
+        if (framing) rig.fightDist = framing.dist;
+        c.dist += (fd - c.dist) * rig.fightK;
+        c.fov += CAM.fightFov * rig.fightK;
+      }
       // Looking steeply up to aim a web: pull in, so the hero stays big at the bottom of the frame.
       c.dist *= 1 - 0.4 * smooth((-rig.pitch - 0.35) / 0.7);
       rig.lastDt = dt;
@@ -92,9 +126,18 @@ export function createCameraRig() {
       // camera trails in a single frame, a visible lurch at speed.
       rig.followK += ((hero.state === 'swing' ? 11 : 18) - rig.followK) * (1 - Math.exp(-dt * 2.5));
       const kf = 1 - Math.exp(-dt * rig.followK);
-      rig.focus.x += (p.x - rig.focus.x) * kf;
+      // In a fight the framing leans a quarter of the way toward the nearest enemies.
+      let fx = p.x, fz = p.z;
+      if (fight && fight.pts.length) {
+        let mx = 0, mz = 0;
+        for (const q of fight.pts) { mx += q.x; mz += q.z; }
+        mx /= fight.pts.length; mz /= fight.pts.length;
+        rig.fightMid = { x: mx - p.x, z: mz - p.z };
+      }
+      if (rig.fightMid && rig.fightK > 0.001) { fx += rig.fightMid.x * CAM.fightPull * rig.fightK; fz += rig.fightMid.z * CAM.fightPull * rig.fightK; }
+      rig.focus.x += (fx - rig.focus.x) * kf;
       rig.focus.y += (p.y + CAM.focusHeight - rig.focus.y) * kf;
-      rig.focus.z += (p.z - rig.focus.z) * kf;
+      rig.focus.z += (fz - rig.focus.z) * kf;
       // A teleport (respawn, test hook) snaps instead of sweeping across the city.
       if (Math.hypot(p.x - rig.focus.x, p.y - rig.focus.y, p.z - rig.focus.z) > 30) {
         rig.focus.x = p.x; rig.focus.y = p.y + CAM.focusHeight; rig.focus.z = p.z;
@@ -115,7 +158,8 @@ export function createCameraRig() {
     const hl = Math.hypot(d.x, d.z) || 1;
     const rx = -d.z / hl, rz = d.x / hl;
     // Shoulder: the right one unless a wall is in the way there and the left has more room.
-    let want = CAM.shoulder;
+    // Closer to centre in a fight, so the fight is framed rather than the hero's shoulder.
+    let want = CAM.shoulder * (1 - 0.6 * rig.fightK);
     if (world) {
       const right = world.raycast(f.x, f.y, f.z, rx, 0, rz, CAM.shoulder + CAM.wallClear, RAY);
       const rightRoom = right ? right.t - CAM.wallClear : CAM.shoulder;

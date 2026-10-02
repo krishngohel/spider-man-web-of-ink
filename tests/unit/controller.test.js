@@ -588,3 +588,29 @@ describe('jump height and tricks', () => {
     expect(h.events.some((e) => e.type === 'trick')).toBe(true);
   });
 });
+
+describe('forgiving inputs (spec C8)', () => {
+  it('a jump pressed just before landing fires on landing instead of opening the wings', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(-175, 21.15, 0, 0, -3, 0, 'air');
+    h.airTime = 0.5;
+    const it = emptyIntent();
+    it.jumpPressed = true;
+    run(h, it, 1 / 120);
+    expect(h.state).not.toBe('glide');
+    let jumped = false;
+    run(h, emptyIntent(), 0.3, () => { if (h.body.v.y > 3) jumped = true; });
+    expect(jumped).toBe(true);
+  });
+  it('a jump high in the air still opens the web wings', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(-175, 40, 0, 0, -3, 0, 'air');
+    h.airTime = 0.5;
+    const it = emptyIntent();
+    it.jumpPressed = true; it.jump = true;
+    run(h, it, 1 / 120);
+    expect(h.state).toBe('glide');
+  });
+});

@@ -21,7 +21,9 @@ export const HALF_SEG = 0.5;
 const SUBMOVE = 0.3;
 // Coyote time: a jump is still allowed for 60 ms after the feet leave an edge. The one accepted
 // bend of the push rule (the foot was on the edge a step or two ago); push() allows it.
-const COYOTE = 0.06;
+const COYOTE = 0.08;        // a jump still works this long after running off a ledge (spec C8)
+const JUMP_BUFFER = 0.12;   // a jump pressed this long before landing still fires on landing
+const SWING_RETRY = 0.25;   // a web press with nothing to hit keeps looking this long while held
 const WALL_LOST = 0.05;
 // Hands can grab an edge this far away (a vault over a roof edge pushes off that edge).
 const REACH = 1.6;
@@ -99,7 +101,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       this.pendingWeb = null; this.zip = null;
       this.state = state;
       this.airTime = 0; this.ungrounded = 0; this.wallLost = 0;
-      this.launchUntil = -1; this.lastJumpPress = -10; this.shootNow = false; this.mantleUntil = -1; this.jumpHoldUntil = -1;
+      this.launchUntil = -1; this.lastJumpPress = -10; this.jumpBuffered = -10; this.swingRetryUntil = -1; this.nextRetry = 0; this.shootNow = false; this.mantleUntil = -1; this.jumpHoldUntil = -1;
       this.contactAge = state === 'ground' || state === 'wall' ? 0 : 1;
     },
 
@@ -298,7 +300,9 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (dl > lim) { dx *= lim / dl; dz *= lim / dl; }
     push(dx, 0, dz, 'run');
 
-    if (intent.jumpPressed) {
+    const buffered = hero.time - hero.jumpBuffered <= JUMP_BUFFER;
+    if (intent.jumpPressed || buffered) {
+      hero.jumpBuffered = -10;
       if (hero.time <= hero.launchUntil) pointLaunch(intent);
       else {
         push(0, tune.jumpSpeed - Math.max(0, v.y), 0, 'jump');
@@ -340,9 +344,14 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (intent.trickPressed && hero.time - hero.lastTrick > 0.5) { hero.lastTrick = hero.time; emit('trick'); }
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
     // A fresh press re-aims, even with a web still in flight; a held button never refires.
-    if (intent.swingPressed) { hero.pendingWeb = null; shootWeb(intent); }
+    if (intent.swingPressed) { hero.pendingWeb = null; hero.swingRetryUntil = shootWeb(intent) ? -1 : hero.time + SWING_RETRY; }
     else if (intent.hangPressed) { hero.pendingWeb = null; shootWeb(intent, true); }
     else if (hero.shootNow && !hero.pendingWeb) shootWeb(intent);
+    else if (intent.swing && !hero.pendingWeb && hero.time < hero.swingRetryUntil && hero.time >= hero.nextRetry) {
+      // Nothing to hit on the press: keep trying for a moment while the button is held.
+      hero.nextRetry = hero.time + 1 / 30;
+      if (shootWeb(intent, false, true)) hero.swingRetryUntil = -1;
+    }
     hero.shootNow = false;
     if (hero.pendingWeb) {
       hero.pendingWeb.t -= dt;
@@ -362,8 +371,11 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       }
     }
     if (intent.jumpPressed && hero.airTime > 0.1 && !hero.pendingWeb) {
-      hero.state = 'glide';
-      emit('wings');
+      // Landing within the buffer time: the press is a jump on landing, not the web wings.
+      const gap = body.p.y - 0.9 - world.groundHeight(body.p.x, body.p.y, body.p.z);
+      const fall = Math.max(0, -body.v.y), land = (Math.sqrt(fall * fall + 2 * g() * Math.max(0, gap)) - fall) / g();
+      if (body.v.y < 0 && land <= JUMP_BUFFER) hero.jumpBuffered = hero.time;
+      else { hero.state = 'glide'; emit('wings'); }
     }
     const before = hero.speed;
     move(dt);

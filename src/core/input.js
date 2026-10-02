@@ -7,6 +7,10 @@ import { PAD } from './bindings.js';
 const DEADZONE = 0.18;
 const TRIGGER = 0.3;
 
+// The look stick's response (spec C8): 0.3x + 0.7x^3, gentle near the centre for aiming,
+// full speed at the edge.
+export const lookCurve = (x) => 0.3 * x + 0.7 * x * x * x;
+
 export function padActions(pad, out = new Set()) {
   out.clear();
   if (!pad) return out;
@@ -149,8 +153,8 @@ export function createInput({ target = window, bindings }) {
       move.y = ky - stick.my;
       const len = Math.hypot(move.x, move.y);
       if (len > 1) { move.x /= len; move.y /= len; }
-      look.dx += stick.lx * 900 * dt;
-      look.dy += stick.ly * 700 * dt;
+      look.dx += lookCurve(stick.lx) * 900 * dt;
+      look.dy += lookCurve(stick.ly) * 700 * dt;
     },
     endFrame() {
       pressedCodes.clear(); releasedCodes.clear(); padPressed.clear(); padReleased.clear();

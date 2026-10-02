@@ -84,3 +84,18 @@ describe('camera rig', () => {
     expect(rig.side).toBeLessThan(0);
   });
 });
+
+import { fightFraming } from '../../src/camera/cameraRig.js';
+import { lookCurve } from '../../src/core/input.js';
+describe('combat framing and the look stick', () => {
+  it('pulls back with the spread of the fight, between 6 and 9.5 m', () => {
+    expect(fightFraming(null)).toBe(null);
+    expect(fightFraming({ pts: [{ x: 0, z: 2 }], spread: 2 }).dist).toBeCloseTo(6.7);
+    expect(fightFraming({ pts: [{ x: 0, z: 2 }], spread: 30 }).dist).toBe(9.5);
+  });
+  it('the stick is gentle near the centre and full at the edge', () => {
+    expect(lookCurve(1)).toBeCloseTo(1);
+    expect(lookCurve(-1)).toBeCloseTo(-1);
+    expect(lookCurve(0.2)).toBeLessThan(0.1);
+  });
+});

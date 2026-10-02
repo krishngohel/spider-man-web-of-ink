@@ -531,7 +531,22 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // display rate and the 240 Hz physics don't line up (0, 1 or 2 steps per frame at 240 Hz).
   const prevP = { x: 0, y: 0, z: 0 };
   const renderP = { x: 0, y: 0, z: 0 };
-  const view = { body: { p: renderP, get v() { return hero.body.v; } }, get state() { return hero.state; } };
+  // The fight for the camera (spec C7): the nearest three engaged enemies within 14 m, how far
+  // they spread, and the soonest attacker.
+  const fightView = { pts: [], spread: 0, threat: null };
+  const view = {
+    body: { p: renderP, get v() { return hero.body.v; } }, get state() { return hero.state; },
+    get fight() {
+      const p = hero.body.p;
+      const near = combat.enemies.engaged.map((e) => ({ e, d: Math.hypot(e.body.p.x - p.x, e.body.p.z - p.z) })).filter((q) => q.d < 14).sort((a, b) => a.d - b.d).slice(0, 3);
+      if (!near.length) return null;
+      fightView.pts = near.map((q) => q.e.body.p);
+      fightView.spread = near[near.length - 1].d;
+      const w = near.filter((q) => q.e.state === 'windup').sort((a, b) => (a.e.strikeAt - a.e.t) - (b.e.strikeAt - b.e.t))[0];
+      fightView.threat = w ? w.e.body.p : null;
+      return fightView;
+    },
+  };
   let alpha = 1;
   const frameTimes = new Float32Array(4000);
   const workTimes = new Float32Array(4000);
