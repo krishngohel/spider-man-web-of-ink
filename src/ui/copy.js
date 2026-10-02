@@ -2,7 +2,7 @@
 
 export const COPY = {
   title: { a: 'SPIDER-MAN', b: 'WEB OF INK' },
-  subtitle: 'Swing test build. Real rope physics: every web sticks to a real building, and every bit of speed comes from gravity, your legs or the line.',
+  subtitle: 'Swing test build. Hold swing and the webs chain on their own. Steer, time your releases and fly.',
   disclaimer: 'Unofficial fan game. Not affiliated with or endorsed by Marvel or Sony. Spider-Man and related characters are trademarks of Marvel. Made for fun, never sold.',
   buttons: { play: 'FREE SWING', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
   pause: 'PAUSED',
@@ -12,20 +12,20 @@ export const COPY = {
   ok: 'Got it',
   // First-play tips, in order. Each one leaves when you do the thing it asks.
   tips: [
-    { id: 'swing', text: 'Run off the edge and hold <kbd>{swing}</kbd> in the air to swing. Let go to fly.', done: 'release' },
-    { id: 'reel', text: 'While swinging, hold <kbd>{jump}</kbd> near the bottom of the arc to reel in. Pulling in fast is how you speed up.', done: 'reel' },
-    { id: 'flick', text: 'Tap <kbd>{jump}</kbd> right before you let go for a flick: a hard pull that throws you along the web.', done: 'flick' },
+    { id: 'swing', text: 'Run off the edge and hold <kbd>{swing}</kbd>. Keep holding and the webs chain on their own. Steer with the mouse or <kbd>{move}</kbd>.', done: 'release' },
+    { id: 'perfect', text: 'Let go of <kbd>{swing}</kbd> just after the bottom of a swing, on the way up, for a perfect release boost.', done: 'perfect' },
+    { id: 'jump', text: 'Tap <kbd>{jump}</kbd> mid-swing to leap off the web, high and fast.', done: 'swingJump' },
     { id: 'zip', text: 'Look at a ledge and press <kbd>{zip}</kbd> to zip to it. Press <kbd>{jump}</kbd> the moment you land to launch.', done: 'launch' },
-    { id: 'wall', text: 'Fly into a wall to stick to it. Hold <kbd>{swing}</kbd> to run up it, <kbd>{jump}</kbd> to kick off.', done: 'wallJump' },
+    { id: 'wall', text: 'Swing into a wall to run along it. Hold <kbd>{swing}</kbd> to run up, <kbd>{jump}</kbd> to kick off.', done: 'wallJump' },
     { id: 'wings', text: 'In the air, press and hold <kbd>{jump}</kbd> for web wings. Hold <kbd>{dive}</kbd> to dive. Press <kbd>{help}</kbd> for all controls.', done: 'wings' },
   ],
   help: {
     title: 'CONTROLS',
     rows: [
-      ['{move}', 'Move (steer in the air by leaning)'],
+      ['{move}', 'Move and steer (swings follow where you point)'],
       ['Mouse', 'Look'],
-      ['{swing}', 'Hold in the air: swing. On the ground: parkour run. On a wall: wall run'],
-      ['{jump}', 'Jump. Swinging: hold to reel in, tap to flick. In the air: web wings'],
+      ['{swing}', 'Hold in the air: swing (webs keep chaining while held). Let go just past the bottom for a boost. Ground: parkour run. Wall: run up'],
+      ['{jump}', 'Jump. Swinging: swing-jump. In the air: web wings'],
       ['{zip}', 'Web zip to where you look. Then {jump} to launch'],
       ['{dive}', 'Dive (hold in the air)'],
       ['{pause}', 'Pause and settings'],
@@ -61,8 +61,8 @@ export const COPY = {
     padRows: [
       ['Left stick', 'Move'],
       ['Right stick', 'Look'],
-      ['RT / R2 (hold)', 'Swing, parkour run, wall run'],
-      ['A / Cross', 'Jump, reel in, flick, web wings'],
+      ['RT / R2 (hold)', 'Swing (chains while held), parkour run, wall run'],
+      ['A / Cross', 'Jump, swing-jump, web wings'],
       ['LT + RT / L2 + R2', 'Web zip'],
       ['B / Circle (hold)', 'Dive'],
       ['Start / Options', 'Pause'],

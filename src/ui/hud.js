@@ -2,7 +2,7 @@ import { el } from './dom.js';
 import { COPY } from './copy.js';
 import { bindingLabel } from '../core/bindings.js';
 
-const TIPS_KEY = 'web-of-ink-tips-v1';
+const TIPS_KEY = 'web-of-ink-tips-v2'; // v2: tips rewritten for the chained swing
 
 // The in-play overlay: reticle, where the next web would stick, speed, frame rate, first-play tips
 // (each leaves when you do what it asks: Gotham lesson, cards that linger get in the way), speed

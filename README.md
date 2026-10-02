@@ -1,8 +1,9 @@
 # Spider-Man: Web of Ink (unofficial fan game)
 
-A comic-book Spider-Man game that runs in the browser, built on real rope physics. Every web
-sticks to a real building, and every bit of speed comes from gravity, the hero's own legs, or the
-pull of the line. No mid-air jumps, no scripted arcs.
+A comic-book Spider-Man game that runs in the browser. Swinging is Insomniac-style: hold swing and
+the webs chain on their own, arcs follow where you steer, speed builds to a cruise, and a well
+timed release or a swing-jump throws you further. Gravity, drag, the line and collisions are real
+physics; the game-feel forces on top are logged separately (see spec 4.2).
 
 > Unofficial fan game. Not affiliated with or endorsed by Marvel or Sony. Spider-Man and related
 > characters are trademarks of Marvel. Made for fun, never sold.
@@ -23,31 +24,31 @@ Click the screen to capture the mouse. A gamepad works too. Every key can be reb
 |---|---|---|
 | Move (steer in the air by leaning) | W A S D | Left stick |
 | Look | Mouse | Right stick |
-| Swing (hold in the air), parkour run and wall run (hold) | Shift | RT / R2 |
-| Jump. Swinging: hold to reel in, tap to flick. In the air: web wings | Space | A / Cross |
+| Swing (hold: webs chain while held), parkour run and wall run | Shift | RT / R2 |
+| Jump. Swinging: swing-jump. In the air: web wings | Space | A / Cross |
 | Web zip to where you look, then Space to launch | Q | LT + RT |
 | Dive (hold in the air) | C | B / Circle |
 | Controls help | H | Back |
 | Pause | Esc or P | Start |
 | Physics tuning panel | ` (backquote), or open with `?dev=1` | |
 
-Tips: reel in through the bottom of an arc to speed up (it really adds energy: the winch does
-work on the line). A web stuck to one side swings you toward that side, so weave left and right
-down an avenue. Settings > Gravity switches between Comic (2g, the default) and Real (1g).
+Tips: let go of swing just after the bottom of an arc, on the way up, for a perfect release
+boost. Swing into a wall and you run along it. Settings > Gravity switches between Comic (2g, the
+default) and Real (1g).
 
-## How the physics works
+## How the swinging works
 
 - `src/physics/` has no Three.js in it. It steps at a fixed 240 Hz.
-- `ledger.js`: velocity only changes through `applyDv(body, source, ...)` with one of five physical
-  sources (gravity, drag, lift, rope, surface). Anything else throws, and tests check that the
-  sources add up to the total change.
-- `rope.js`: the web is an inextensible line solved with SHAKE (a long swing neither gains nor
-  bleeds energy), with a winch limited to 12 kN, slack hauled in, wrapping around building edges,
-  and moving anchors that share the pull by mass.
-- `anchors.js`: the web is shot along a fan of real directions and sticks to the first building it
-  hits. The best few candidates are flown for 1.8 s with the same physics, and the one whose arc
-  stays clear and keeps your heading wins. Weights are tuned by `scripts/swing-tune.mjs`.
+- `ledger.js`: velocity only changes through `applyDv(body, source, ...)`: gravity, drag, lift,
+  rope, surface, or assist (game feel). Tests check the sources add up to the total change.
+- `swing.js`: the swing. The pivot sits ahead of and above you on your heading, the strand sticks
+  to the nearest building at that height, the arc stays in the plane you steer, a pump through the
+  bottom builds speed toward the cruise, and the line shortens rather than hit the street.
+- `anchors.js` `findSwingAnchor`: where the next web goes (with altitude hold).
+- `rope.js`: the real rope (SHAKE line, winch, wrapping) used for zips.
 - `src/hero/controller.js`: the movement state machine.
+- Feel constants live in `constants.js` (tuned by `scripts/swing-tune.mjs` against the swing
+  simulator), and every one of them is a live slider in the dev panel (backquote).
 
 ## Tests and checks
 

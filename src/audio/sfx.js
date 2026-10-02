@@ -80,7 +80,12 @@ export function createSfx(getVolume) {
           tone({ freq: 2100, freq2: 700, dur: 0.07, gain: 0.08, type: 'triangle' });
           break;
         case 'attach': burst({ freq: 900, freq2: 300, q: 4, dur: 0.09, gain: 0.25 }); break;
-        case 'flick': burst({ freq: 1500, freq2: 4000, q: 1.2, dur: 0.14, gain: 0.3 }); break;
+        case 'swingJump': burst({ freq: 1500, freq2: 4000, q: 1.2, dur: 0.16, gain: 0.32 }); break;
+        case 'perfect':
+          burst({ freq: 900, freq2: 3200, q: 1.0, dur: 0.18, gain: 0.3 });
+          tone({ freq: 660, freq2: 990, dur: 0.12, gain: 0.08, type: 'triangle' });
+          break;
+        case 'wallRun': burst({ freq: 600, freq2: 1400, q: 0.9, dur: 0.2, gain: 0.22 }); break;
         case 'zip':
           burst({ freq: 3800, freq2: 1400, q: 1.6, dur: 0.1, gain: 0.3 });
           burst({ freq: 600, freq2: 2600, q: 0.9, dur: 0.35, gain: 0.25 });

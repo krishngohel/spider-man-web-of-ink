@@ -37,8 +37,6 @@ await page.mouse.click(640, 360); // the first click only grabs the pointer
 await sleep(300);
 
 const H = () => page.evaluate(() => window.__game.hero());
-const G = 19.62;
-const energy = (h) => 0.5 * h.speed ** 2 + G * h.p.y;
 const results = [];
 const check = (name, ok, detail) => { results.push({ name, ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}  ${detail}`); };
 const teleport = (x, y, z, vx, vy, vz, st = 'air', yaw = 0) => page.evaluate(([a, b, c, d, e, f, s, w]) => { window.__game.teleport(a, b, c, d, e, f, s, w); window.__game.setLook(w, 0.15); }, [x, y, z, vx, vy, vz, st, yaw]);
@@ -56,7 +54,7 @@ const att = await until((h) => h.rope.active, 1500);
 check('web attaches within 250 ms of Shift', !!att && att.t < 250, att ? `${att.t} ms` : 'never attached');
 await releaseAll();
 
-// B. Steering: holding D during a swing moves the hero to its own right.
+// B. Steering: holding D during a swing turns the hero to its own right (A to the left).
 async function lateral(key) {
   await teleport(0, 50, -330, 0, 0, 22);
   const h0 = await H();
@@ -70,70 +68,61 @@ async function lateral(key) {
   return (h1.p.x - h0.p.x) * rx + (h1.p.z - h0.p.z) * rz;
 }
 const none = await lateral(null), right = await lateral('KeyD'), left = await lateral('KeyA');
-check('D steers right, A steers left (hero frame)', right > none + 1 && left < none - 1, `right ${right.toFixed(1)} m, none ${none.toFixed(1)} m, left ${left.toFixed(1)} m`);
+check('D steers right, A steers left (hero frame)', right > none + 2 && left < none - 2, `right ${right.toFixed(1)} m, none ${none.toFixed(1)} m, left ${left.toFixed(1)} m`);
 
-// C. Reeling in pumps energy into the swing (the winch does work on the line).
-async function swingEnergy(reel) {
-  await teleport(0, 50, -330, 0, 0, 22);
-  await page.keyboard.down('Shift');
-  const t0 = Date.now();
-  let space = false;
-  while (Date.now() - t0 < 1300) {
-    const h = await H();
-    const want = reel && h.state === 'swing';
-    if (want !== space) { space = want; if (space) await page.keyboard.down('Space'); else await page.keyboard.up('Space'); }
-    await sleep(8);
-  }
-  const h = await H();
-  await releaseAll();
-  return energy(h);
+// C. Holding swing chains webs and settles at cruising speed (aim held down the avenue).
+await teleport(0, 45, -400, 0, 0, 16);
+await page.keyboard.down('Shift'); await page.keyboard.down('KeyW');
+let attaches = 0, wasSwing = false;
+const speeds = [];
+const tc = Date.now();
+while (Date.now() - tc < 6000) {
+  const h = await page.evaluate(() => { window.__game.setLook(0, 0.12); return window.__game.hero(); });
+  if (h.swing.active && !wasSwing) attaches++;
+  wasSwing = h.swing.active;
+  if (Date.now() - tc > 3000) speeds.push(h.speed);
+  await sleep(10);
 }
-const eNo = await swingEnergy(false), eReel = await swingEnergy(true);
-check('reeling in adds energy', eReel > eNo + 30, `with reel ${eReel.toFixed(0)} J/kg, without ${eNo.toFixed(0)} J/kg`);
+await releaseAll();
+const cruise = speeds.reduce((a, b) => a + b, 0) / Math.max(1, speeds.length) * 3.6;
+check('holding swing chains webs', attaches >= 3, `${attaches} webs in 6 s`);
+check('cruising speed above 100 km/h', cruise > 100, `${cruise.toFixed(0)} km/h`);
 
-// D. Autopilot down the avenue: swing, release past the bottom (or before the swing carries us
-// into a wall), repeat. No ground touches allowed.
-await teleport(0, 45, -380, 0, 0, 24);
-await page.keyboard.down('KeyW');
+// D. Swing-jump: Space mid-swing leaps off with a big boost up.
+await teleport(0, 50, -330, 0, 0, 25);
+await page.keyboard.down('Shift');
+await until((h) => h.swing.active, 1500);
+await sleep(300);
+const sj0 = await H();
+await page.keyboard.press('Space');
+await sleep(60);
+const sj1 = await H();
+await releaseAll();
+check('swing-jump leaps off the web', sj0.swing.active && !sj1.swing.active && sj1.v.y > sj0.v.y + 4, `vy ${sj0.v.y.toFixed(1)} -> ${sj1.v.y.toFixed(1)}`);
+
+// E2. Autopilot: hold swing and forward, nudge back to the avenue's centre with A / D, aim with the
+// mouse. Covers the length of Midtown without touching the street.
+await teleport(0, 45, -400, 0, 0, 18);
+await page.keyboard.down('Shift'); await page.keyboard.down('KeyW');
 const start = await H();
 const t0 = Date.now();
-let touched = false, maxSpeed = 0, holding = false, releasedAt = 0, sawDown = false, heldAt = 0, webs = 0, walls = 0, pumping = false, minY = 99, steering = null;
-while (Date.now() - t0 < 30000) {
-  // Aim down the avenue with the mouse, as a player would (keeps W and A/D meaning the same thing).
+let touched = false, walls = 0, wasWall = false, steering = null, maxSpeed = 0;
+while (Date.now() - t0 < 25000) {
   const h = await page.evaluate(() => { window.__game.setLook(0, 0.12); return window.__game.hero(); });
   maxSpeed = Math.max(maxSpeed, h.speed);
-  minY = Math.min(minY, h.p.y);
   if (h.state === 'ground' && h.p.y < 1.5) { touched = true; break; }
   if (h.p.z - start.p.z > 480 || h.p.z > 110) break;
-  if (h.state === 'wall') {
-    // Kicked into a wall: push off and carry on (a player would too).
-    walls++;
-    if (holding) { await page.keyboard.up('Shift'); holding = false; }
-    if (pumping) { await page.keyboard.up('Space'); pumping = false; }
-    await page.keyboard.press('Space');
-    releasedAt = Date.now();
-    await sleep(120);
-    continue;
-  }
-  const out = Math.sign(h.p.x) * h.v.x; // speed away from the avenue's centre line
-  // Steer back toward the centre line with A / D, like a player would (facing +z, A is +x).
+  if (h.state === 'wall' && !wasWall) { walls++; await page.keyboard.press('Space'); }
+  wasWall = h.state === 'wall';
   const steer = -h.p.x * 0.06 - h.v.x * 0.05;
   const wantKey = steer > 0.25 ? 'KeyA' : steer < -0.25 ? 'KeyD' : null;
   if (wantKey !== steering) { if (steering) await page.keyboard.up(steering); if (wantKey) await page.keyboard.down(wantKey); steering = wantKey; }
-  // Pump: reel in through the bottom of each arc.
-  const pump = holding && h.state === 'swing' && Math.abs(h.v.y) < 9;
-  if (pump !== pumping) { pumping = pump; if (pump) await page.keyboard.down('Space'); else await page.keyboard.up('Space'); }
-  if (!holding && Date.now() - releasedAt > 200 && (h.v.y < -1 || h.p.y < 25)) { await page.keyboard.down('Shift'); holding = true; sawDown = false; heldAt = Date.now(); webs++; }
-  if (holding && h.rope.active && h.v.y < -1) sawDown = true;
-  const pastBottom = sawDown && h.v.y > 2;
-  const nearWall = Math.abs(h.p.x) > 7 && out > 4;
-  if (holding && h.rope.active && (pastBottom || nearWall || Date.now() - heldAt > 2600)) { await page.keyboard.up('Shift'); holding = false; releasedAt = Date.now(); }
-  await sleep(8);
+  await sleep(10);
 }
 const end = await H();
 await releaseAll();
 const dist = end.p.z - start.p.z, secs = (Date.now() - t0) / 1000;
-check('autopilot swings the length of Midtown (480 m) without touching the street', !touched && dist >= 480, `${dist.toFixed(0)} m in ${secs.toFixed(1)} s, avg ${(dist / secs * 3.6).toFixed(0)} km/h, top ${(maxSpeed * 3.6).toFixed(0)} km/h, ${webs} webs, ${walls} wall kicks, lowest ${minY.toFixed(1)} m${touched ? ', touched the ground' : ''}`);
+check('autopilot swings the length of Midtown (480 m) without touching the street', !touched && dist >= 480, `${dist.toFixed(0)} m in ${secs.toFixed(1)} s, avg ${(dist / secs * 3.6).toFixed(0)} km/h, top ${(maxSpeed * 3.6).toFixed(0)} km/h, ${walls} wall contacts${touched ? ', touched the ground' : ''}`);
 
 // E. Wall stick and wall run.
 const tower = await page.evaluate(() => {
@@ -142,9 +131,9 @@ const tower = await page.evaluate(() => {
   return b && { x0: b.min[0], z: (b.min[2] + b.max[2]) / 2 };
 });
 if (tower) {
-  await teleport(tower.x0 - 6, 30, tower.z, 15, 0, 0, 'air', Math.PI / 2);
+  await teleport(tower.x0 - 8, 30, tower.z, 22, 0, 8, 'air', Math.PI / 2);
   const stuck = await until((h) => h.state === 'wall', 1500);
-  check('flying into a wall sticks to it', !!stuck, stuck ? `stuck at x ${stuck.h.p.x.toFixed(2)}` : 'never stuck');
+  check('flying into a wall at speed becomes a wall run that keeps speed', !!stuck && stuck.h.speed > 12, stuck ? `speed on the wall ${stuck.h.speed.toFixed(1)} m/s` : 'never reached the wall');
   if (stuck) {
     const y0 = stuck.h.p.y;
     await page.keyboard.down('Shift');

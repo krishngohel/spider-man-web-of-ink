@@ -70,7 +70,6 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       el('h2', {}, C.title),
       el('h3', {}, C.sections.move),
       choice(C.gravity[0], C.gravity[1], ['comic', 'real'], 'gravity', C.gravityValues),
-      choice(C.assist[0], C.assist[1], ['off', 'normal', 'high'], 'swingAssist', C.assistValues),
       choice(C.toggle[0], C.toggle[1], [false, true], 'swingToggle', C.toggleValues),
       el('h3', {}, C.sections.camera),
       slider(C.sensitivity[0], 0.2, 3, 0.05, () => getSettings().sensitivity, (v) => update({ sensitivity: v })),
