@@ -272,6 +272,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const events = [];
 
   const NO_LOOK = { dx: 0, dy: 0 };
+  // Per-section frame cost (max over a window), read by scripts/fps-check.mjs.
+  const profMax = {};
+  function prof(name, t0) { const d = performance.now() - t0; profMax[name] = Math.max(profMax[name] ?? 0, d); }
   // World-side reactions to hero events: web splats, shock rings, camera shake, sound words.
   const wp = new THREE.Vector3();
   function screenOf(x, y, z) {
@@ -329,6 +332,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     time += dt;
     frame++;
     fps += (1000 / Math.max(1, dtMs) - fps) * 0.05;
+    const T0 = performance.now();
     input.update(dt);
 
     events.length = 0;
@@ -336,6 +340,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (input.pressed('pause')) { pauseGame(); }
       if (input.pressed('help')) hud.toggleHelp();
       buildIntent();
+      const Tp = performance.now();
       const adv = fixed.advance(dt);
       for (let i = 0; i < adv.steps; i++) {
         const p = hero.body.p;
@@ -344,6 +349,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         if (i === 0) clearEdges();
       }
       alpha = adv.alpha;
+      prof('physics', Tp);
       events.push(...hero.events);
       hero.events.length = 0;
       for (const e of events) { sfx.event(e); hud.onEvent(e); worldEvent(e); }
@@ -363,7 +369,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }
 
     if (mode !== 'play' && mode !== 'title') interpolate();
+    const Tpose = performance.now();
     poser.update(hero, dt, events, renderP);
+    prof('pose', Tpose);
     poser.handWorld(hand);
     webLine.update(hand, hero.swing, hero.rope, hero.pendingWeb, tune.webTravel);
     sfx.setSpeed(mode === 'play' ? hero.speed : 0, dt);
@@ -413,17 +421,26 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     const hp = hero.body.p;
     sun.target.position.set(Math.round(hp.x / 8) * 8, 0, Math.round(hp.z / 8) * 8);
     sun.position.copy(sun.target.position).addScaledVector(sunDir, 400);
+    const Tprev = performance.now();
     updatePreview(dt);
+    prof('aim', Tprev);
     fx.update(dt);
+    const Tr = performance.now();
     ink.render(scene, camera, time);
+    const renderMs = performance.now() - Tr;
+    prof('render', Tr);
 
+    const Th = performance.now();
     hud.update(dt, { fps, speed: mode === 'play' ? hero.speed : 0, anchor: mode === 'play' ? preview : null, state: hero.state, dev: dev || devPanel.open, w: innerWidth, h: innerHeight });
+    prof('hud', Th);
     input.endFrame();
 
     const scriptMs = performance.now() - t0;
     dynRes.update(dtMs);
     if (capDetector.frame(dtMs, scriptMs)) { hud.lowPower(); dynRes.capTo(30); }
-    workTimes[frameIdx % workTimes.length] = scriptMs;
+    // The game's own CPU work: the frame minus the render submission, which can block on a busy GPU
+    // (that wait is GPU time, already measured by gpuMs).
+    workTimes[frameIdx % workTimes.length] = scriptMs - renderMs;
     gpuTimes[frameIdx % gpuTimes.length] = ink.gpuMs ?? -1;
     frameTimes[frameIdx++ % frameTimes.length] = dtMs;
     if (frame === 3) { performance.mark('boot:firstFrame'); state.ready = true; }
@@ -476,6 +493,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     get frameTimes() { return Array.from(frameTimes.slice(0, Math.min(frameIdx, frameTimes.length))); },
     get workTimes() { return Array.from(workTimes.slice(0, Math.min(frameIdx, workTimes.length))); },
     get gpuTimes() { return Array.from(gpuTimes.slice(0, Math.min(frameIdx, gpuTimes.length))).filter((v) => v >= 0); },
+    profile: () => ({ ...profMax }),
+    resetProfile() { for (const k in profMax) delete profMax[k]; },
     resetTimes() { frameTimes.fill(0); workTimes.fill(0); gpuTimes.fill(-1); frameIdx = 0; },
     events: () => events.map((e) => e.type),
     city, spawn, tune,

@@ -88,7 +88,7 @@ export function buildStreetMeshes(props, scene, quality) {
   group.name = 'street';
   const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() });
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-  const add = (geo, list, place, colorOf) => {
+  const add = (geo, list, place, colorOf, shadows = false) => {
     if (!list.length) return;
     const mesh = new THREE.InstancedMesh(geo, mat, list.length);
     list.forEach((it, i) => {
@@ -96,14 +96,15 @@ export function buildStreetMeshes(props, scene, quality) {
       mesh.setMatrixAt(i, m4.compose(p, q, s));
       if (colorOf) mesh.setColorAt(i, new THREE.Color(colorOf(it)));
     });
-    mesh.castShadow = quality.shadows;
+    // Only cars and trees cast shadows: thin poles cost a lot in the shadow pass for little.
+    mesh.castShadow = quality.shadows && shadows;
     mesh.receiveShadow = quality.shadows;
     group.add(mesh);
   };
   add(lampGeometry(), props.lamps, (l) => { p.set(l.x, 0, l.z); q.setFromAxisAngle(up, l.facing > 0 ? Math.PI / 2 : -Math.PI / 2); s.set(1, 1, 1); });
   add(trafficGeometry(), props.lights, (l) => { p.set(l.x, 0, l.z); q.setFromAxisAngle(up, Math.PI / 2); s.set(1, 1, 1); });
-  add(carGeometry(), props.cars, (c) => { p.set(c.x, 0, c.z); q.setFromAxisAngle(up, c.yaw); s.set(1, 1, 1); }, (c) => c.color);
-  add(treeGeometry(), props.trees, (t) => { p.set(t.x, 0, t.z); q.setFromAxisAngle(up, t.x * 0.37); s.setScalar(t.s); });
+  add(carGeometry(), props.cars, (c) => { p.set(c.x, 0, c.z); q.setFromAxisAngle(up, c.yaw); s.set(1, 1, 1); }, (c) => c.color, true);
+  add(treeGeometry(), props.trees, (t) => { p.set(t.x, 0, t.z); q.setFromAxisAngle(up, t.x * 0.37); s.setScalar(t.s); }, null, true);
   add(hydrantGeometry(), props.hydrants, (h) => { p.set(h.x, 0, h.z); q.identity(); s.set(1, 1, 1); });
   scene.add(group);
   return group;

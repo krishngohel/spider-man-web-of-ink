@@ -20,7 +20,7 @@ const all = { frame: [], work: [], gpu: [] };
 async function leg(name, setup, ms) {
   await page.evaluate(setup);
   await sleep(300);
-  await page.evaluate(() => window.__game.resetTimes());
+  await page.evaluate(() => { window.__game.resetTimes(); window.__game.resetProfile(); });
   await page.keyboard.down('KeyW');
   const t0 = Date.now();
   let holding = false, sawDown = false, rel = 0;
@@ -34,6 +34,8 @@ async function leg(name, setup, ms) {
   await page.keyboard.up('Shift'); await page.keyboard.up('KeyW');
   const t = await page.evaluate(() => ({ frame: window.__game.frameTimes, work: window.__game.workTimes, gpu: window.__game.gpuTimes }));
   for (const k of Object.keys(all)) all[k].push(...t[k]);
+  const pr = await page.evaluate(() => window.__game.profile());
+  console.log('   worst ms by section', JSON.stringify(Object.fromEntries(Object.entries(pr).map(([k, v]) => [k, +v.toFixed(2)]))));
   console.log(`${name.padEnd(10)} frames ${t.frame.length}  interval p50 ${pct(t.frame, 0.5).toFixed(2)} p95 ${pct(t.frame, 0.95).toFixed(2)} ms  cpu p50 ${pct(t.work, 0.5).toFixed(2)} p95 ${pct(t.work, 0.95).toFixed(2)} ms  gpu p50 ${pct(t.gpu, 0.5).toFixed(2)} p95 ${pct(t.gpu, 0.95).toFixed(2)} ms`);
 }
 await leg('avenue', () => window.__game.teleport(0, 45, -380, 0, 0, 24, 'air', 0), 6000);
