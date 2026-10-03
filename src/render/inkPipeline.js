@@ -37,7 +37,11 @@ vec3 octDec(vec2 e) {
   return normalize(n);
 }
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
-float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+float hash(vec2 p) {
+  vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+  p3 += dot(p3, p3.yzx + 33.33);
+  return fract((p3.x + p3.y) * p3.z);
+}
 float vnoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   f = f * f * (3.0 - 2.0 * f);
@@ -129,7 +133,8 @@ void main() {
   float L = pow(max(luma(col), 0.0), 1.0 / 2.2);
 
   vec2 cell = mat2(0.7071, -0.7071, 0.7071, 0.7071) * frag / uHalftone;
-  bool sky = dc > uFar * 0.9;
+  // The sky dome writes no depth, so its pixels keep the cleared far value.
+  bool sky = texture2D(tDepth, vUv).x >= 0.99999;
   // Shadow hatching and dots are printed by the surfaces themselves, in world space (see
   // render/comicShade.js comicPattern), so they stay put as the camera moves. Only the sky is
   // dotted here.
@@ -154,6 +159,8 @@ void main() {
     vec3 dir = ray / max(dist, 1e-3);
     float fog = clamp((dist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
     fog *= mix(0.7, 1.0, exp(-max(wp.y, 0.0) / 160.0));
+    // Past the fog's far distance everything is fog (tall towers too), so the far clip never shows.
+    fog = max(fog, smoothstep(uFogFar * 0.95, uFogFar * 1.1, dist));
     vec3 skyCol = mix(uSkyHorizon, uSkyMid, smoothstep(0.0, 0.16, dir.y));
     skyCol = mix(skyCol, uSkyTop, smoothstep(0.22, 0.6, dir.y));
     col = mix(col, mix(uFogColor, skyCol, 0.55), fog);
@@ -307,11 +314,10 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
   const FILTER_INDEX = { ink: 0, noir: 1, pop: 2, sepia: 3 };
   function setFilter(name) { uniforms.uFilter.value = FILTER_INDEX[name] ?? 0; }
 
-  // Benchmark switches (src/dev/perfBench.js, ?bench=1): each one drops a piece of the frame so
-  // its cost can be measured on the player's own machine. Never set in normal play.
-  // repeat: draw the composite k times (Safari has no reliable GPU timer: time it by the slope of
-  // frame time against k, scripts/perf-repeat.mjs).
-  const debug = { cachedShadows: false, skipNormals: false, repeat: 1 };
+  // Benchmark switches: cachedShadows skips the shadow map update; repeat draws the composite k
+  // times (Safari has no reliable GPU timer: time it by the slope of frame time against k,
+  // scripts/perf-repeat.mjs). Never set in normal play.
+  const debug = { cachedShadows: false, repeat: 1 };
 
   // The fog's colour and range (a THREE.Fog the game drives) and the sky's colours, shared by
   // reference so they follow the time of day.
@@ -369,14 +375,17 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     await compileAsync(scene, camera);
     const culled = [];
     scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLine) && o.frustumCulled) { o.frustumCulled = false; culled.push(o); } });
-    camera.layers.set(0);
-    camera.layers.enable(LAYER_FX);
-    renderer.shadowMap.needsUpdate = true;
-    renderer.setRenderTarget(colorRT);
-    renderer.render(scene, camera);
-    renderer.setRenderTarget(null);
-    renderer.render(quadScene, quadCam);
-    for (const o of culled) o.frustumCulled = true;
+    try {
+      camera.layers.set(0);
+      camera.layers.enable(LAYER_FX);
+      renderer.shadowMap.needsUpdate = true;
+      renderer.setRenderTarget(colorRT);
+      renderer.render(scene, camera);
+      renderer.setRenderTarget(null);
+      renderer.render(quadScene, quadCam);
+    } finally {
+      for (const o of culled) o.frustumCulled = true;
+    }
   }
 
   return { uniforms, setSize, render, setFog, warm, setComic, setPalette, setImpact, setFilter, compileAsync, debug, get gpuMs() { return gpuMs; } };

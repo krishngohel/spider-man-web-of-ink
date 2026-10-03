@@ -79,6 +79,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const ink = createInkPipeline(renderer, quality, { gpuTime: params.has('gputime') });
   // The hero assets start downloading now; the city's shaders warm up while they arrive.
   const assetsP = loadHeroAssets('./assets/', (f) => onProgress(0.15 + f * 0.7));
+  assetsP.catch(() => {}); // handled where it is awaited below
   if (params.has('aux')) ink.uniforms.uDebugAux.value = 1; // shows the aux target (normals, ids)
   if (params.has('inkrepeat')) ink.debug.repeat = Math.max(1, Math.min(16, Number(params.get('inkrepeat')) || 1));
   ink.setComic(quality.comic);

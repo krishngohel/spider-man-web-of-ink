@@ -57,26 +57,25 @@ vec3 comicShade(vec3 alb, vec3 lit, vec3 shadowTone, vec3 midTone, vec3 lightTon
 // metres a pixel covers and crossfades between the two nearest, so a cell stays about 7 pixels
 // at any distance (a TAM pyramid done procedurally); it fades out far away. Characters (skinned)
 // keep clean flat tones. Marks the pixel as patterned for the ink pass.
-float comicLines(float f, float w) {
-  float aa = fwidth(f) * 0.9;
+// aa: the antialiasing width in the pattern's own units (taken before any branch: derivatives
+// inside a per-pixel branch are undefined on some GPUs).
+float comicLines(float f, float w, float aa) {
   return 1.0 - smoothstep(w - aa, w + aa, abs(fract(f) - 0.5));
 }
-float comicDots(vec2 cell, float r) {
+float comicDots(vec2 cell, float r, float aa) {
   vec2 c = mat2(0.7071, -0.7071, 0.7071, 0.7071) * cell;
   float d = length(fract(c) - 0.5);
-  float aa = fwidth(d) * 0.9 + 1e-4;
   return 1.0 - smoothstep(r - aa, r + aa, d);
 }
 vec3 comicPattern(vec3 c) {
-#ifdef USE_SKINNING
-  return c;
-#else
-  gAuxFlags = 0.5;
-  if (gShadow < 0.02 && gMid < 0.02) return c;
+  // Everything that needs screen derivatives, first.
   vec3 wp = vAuxWPos;
   vec3 n = abs(normalize(cross(dFdx(wp), dFdy(wp))));
   vec2 uv = n.x > n.y && n.x > n.z ? wp.zy : n.y > n.z ? wp.xz : wp.xy;
   float pw = max(length(fwidth(uv)), 1e-4);
+  if (vAuxFlag > 0.5) return c; // characters keep clean flat tones
+  gAuxFlags = 0.5;
+  if (gShadow < 0.02 && gMid < 0.02) return c;
   float lv = log2(pw * 7.0), l0 = floor(lv), k = lv - l0;
   float s0 = exp2(l0), s1 = s0 * 2.0;
   float fade = (1.0 - smoothstep(0.16, 0.4, pw)) * uInkPattern;
@@ -87,18 +86,18 @@ vec3 comicPattern(vec3 c) {
     // texture rather than a wall of lines.
     float hl = log2(pw * 11.0), h0 = floor(hl), hk = hl - h0;
     float hs0 = exp2(h0), hs1 = hs0 * 2.0;
-    float h = mix(comicLines((uv.x + uv.y) / hs0, 0.12), comicLines((uv.x + uv.y) / hs1, 0.12), hk);
-    float h2 = mix(comicLines((uv.x - uv.y) / hs0, 0.1), comicLines((uv.x - uv.y) / hs1, 0.1), hk);
+    float a0 = pw * 1.3 / hs0, a1 = pw * 1.3 / hs1;
+    float h = mix(comicLines((uv.x + uv.y) / hs0, 0.12, a0), comicLines((uv.x + uv.y) / hs1, 0.12, a1), hk);
+    float h2 = mix(comicLines((uv.x - uv.y) / hs0, 0.1, a0), comicLines((uv.x - uv.y) / hs1, 0.1, a1), hk);
     float hatch = max(h, h2 * gDeep) * smoothstep(0.55, 0.85, gShadow) * fade;
     c = mix(c, mix(c * 0.5, INK, 0.35), hatch * 0.5);
   }
   if (gMid > 0.02) {
     float r = 0.26 * sqrt(gMid);
-    float dots = mix(comicDots(uv / s0, r), comicDots(uv / s1, r), k) * fade;
+    float dots = mix(comicDots(uv / s0, r, pw * 0.9 / s0), comicDots(uv / s1, r, pw * 0.9 / s1), k) * fade;
     c = mix(c, c * 0.74, dots * 0.75);
   }
   return c;
-#endif
 }
 // The city's own shadow colour where this pixel stands (spec G5), with a value floor: a shadow is a
 // darker, coloured shade of the surface, never black.
@@ -135,7 +134,7 @@ ${COMIC_SHADE}`)
       .replace('#include <opaque_fragment>', 'outgoingLight = comicPattern(comicShade(diffuseColor.rgb, outgoingLight));' + String.fromCharCode(10) + '#include <opaque_fragment>')
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  const key = 'comic-toon-v5' + (hooks ? `-${hooks.key ?? (hooks.vertexBegin ?? '').length + (hooks.fragmentColor ?? '').length}` : '');
+  const key = 'comic-toon-v6' + (hooks ? `-${hooks.key ?? (hooks.vertexBegin ?? '').length + (hooks.fragmentColor ?? '').length}` : '');
   mat.customProgramCacheKey = () => key;
   return mat;
 }

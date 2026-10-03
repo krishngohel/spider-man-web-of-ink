@@ -57,7 +57,8 @@ function posterize(mat, palette, stripes) {
   mat.customProgramCacheKey = () => `pal-${pal.length}-${stripeIdx}-${period}`;
 }
 
-// Inverted-hull ink line. Lives on LAYER_FX so it never reaches the normal pass.
+// Inverted-hull ink line (LAYER_FX). Not used yet; when block 4 adds it to heroes it should mark
+// its aux texel as a character, or the ink pass reads its flat normal as a crease.
 export function addHullOutline(mesh, width = 0.011, color = PALETTE.ink) {
   const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
   mat.userData.outline = { value: width };

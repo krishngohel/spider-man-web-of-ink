@@ -27,7 +27,7 @@ describe('shadow colour volume', () => {
     for (let i = 0; i < v.data.length; i += 4) for (let c = 0; c < 3; c++) expect(v.data[i + c] / 255).toBeGreaterThanOrEqual(SHADOW_FLOOR - 1 / 255);
   });
   it('harbour shadows lean teal, Neon Square shadows lean magenta', () => {
-    const at = (fx, fz) => { const ix = Math.floor(fx * VOL.nx), iz = Math.floor(fz * VOL.nz), o = ((0 * VOL.nz + iz) * VOL.nx + ix) * 4; return [v.data[o], v.data[o + 1], v.data[o + 2]]; };
+    const at = (fx, fz) => { const ix = Math.floor(fx * VOL.nx), iz = Math.floor(fz * VOL.nz), o = (ix + VOL.nx * (0 + VOL.ny * iz)) * 4; return [v.data[o], v.data[o + 1], v.data[o + 2]]; };
     const harbor = at(0.78, 0.6), neon = at(0.22, 0.6);
     expect(harbor[1]).toBeGreaterThan(harbor[0]);
     expect(neon[0]).toBeGreaterThan(neon[1]);

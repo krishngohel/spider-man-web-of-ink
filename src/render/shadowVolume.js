@@ -61,7 +61,8 @@ export function buildShadowVolume(districts) {
     const h = iy / (ny - 1);
     for (let iz = 0; iz < nz; iz++) {
       for (let ix = 0; ix < nx; ix++) {
-        const k = (iz * nx + ix) * 3, o = ((iy * nz + iz) * nx + ix) * 4;
+        // GL reads a 3D texture as x + nx * (y + ny * z), y being height.
+        const k = (iz * nx + ix) * 3, o = ((iz * ny + iy) * nx + ix) * 4;
         for (let c = 0; c < 3; c++) {
           const v = Math.max(SHADOW_FLOOR, blur[k + c] + (HIGH[c] - blur[k + c]) * h * 0.8);
           data[o + c] = Math.round(Math.min(1, v) * 255);

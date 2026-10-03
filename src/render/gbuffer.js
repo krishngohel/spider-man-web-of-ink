@@ -9,6 +9,8 @@ import * as THREE from 'three';
 // ShaderMaterials that draw into the colour target add AUX_DECL and AUX_WRITE_* themselves.
 // Writes on a target with one attachment (the canvas, shadow maps) are simply dropped.
 // Transparent materials write zero: blending then leaves the opaque surface's texel underneath.
+// (A transparent object that still writes depth, a fading trail, keeps the surface's normal and id
+// under its own depth: edges and fog there follow its depth with the background's aux. Harmless.)
 
 export const AUX_DECL = /* glsl */ `
 layout(location = 1) out highp vec4 gAux;
@@ -31,6 +33,7 @@ export function installGbufferChunks() {
   C.common += /* glsl */ `
 varying vec3 vAuxWPos;
 varying float vAuxId;
+varying float vAuxFlag;   // 1 on characters (skinned; three defines USE_SKINNING in the vertex stage only)
 #ifdef gl_FragColor
 #define AUX_COMMON
 ${AUX_DECL}
@@ -47,7 +50,16 @@ float gAuxFlags = 0.0;
   vAuxWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;
   vec3 auxT = modelMatrix[3].xyz;
 #endif
-  vAuxId = fract(sin(dot(floor(auxT * 4.0), vec3(12.9898, 78.233, 37.719))) * 43758.5453);
+  {
+    vec3 p3 = fract(floor(auxT * 4.0) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    vAuxId = fract((p3.x + p3.y) * p3.z);
+  }
+#ifdef USE_SKINNING
+  vAuxFlag = 1.0;
+#else
+  vAuxFlag = 0.0;
+#endif
 `;
   C.normal_fragment_begin += `
 #ifndef AUX_NORMAL
@@ -60,10 +72,7 @@ float gAuxFlags = 0.0;
 #ifdef AUX_COMMON
 {
   float auxId = gAuxId >= 0.0 ? gAuxId : vAuxId;
-  float auxFlags = gAuxFlags;
-  #ifdef USE_SKINNING
-  auxFlags = 1.0;
-  #endif
+  float auxFlags = vAuxFlag > 0.5 ? 1.0 : gAuxFlags;
   #ifdef OPAQUE
     #ifdef AUX_NORMAL
     gAux = vec4(auxOct(normalize(normal)), auxId, auxFlags);
