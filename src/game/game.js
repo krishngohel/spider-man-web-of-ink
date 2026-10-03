@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createRenderer, pixelRatioCap } from '../render/renderer.js';
+import { buildShadowVolume } from '../render/shadowVolume.js';
 import { createInkPipeline } from '../render/inkPipeline.js';
 import { getQuality } from '../render/quality.js';
 import { createDynamicRes, sanitizeResScale } from '../render/dynamicRes.js';
@@ -18,7 +19,7 @@ import { createSky } from '../world/sky.js';
 import { env as envAt, createClock, PRESETS, WEATHERS } from '../world/timeWeather.js';
 import { createRain } from '../world/rain.js';
 import { createCityLife } from '../world/cityLife.js';
-import { SHADE_UNIFORMS } from '../render/comicShade.js';
+import { SHADE_UNIFORMS, setShadowVolume } from '../render/comicShade.js';
 import { buildStreetProps, carBoxes } from '../world/streetProps.js';
 import { buildStreetMeshes } from '../world/streetMesh.js';
 import { createHero, emptyIntent } from '../hero/controller.js';
@@ -108,12 +109,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   for (const b of carBoxes(street)) world.addBox(b);
   world.build();
   buildCityMeshes(city, scene, quality);
+  setShadowVolume(buildShadowVolume(city.districts ?? []));
   const streetGroup = buildStreetMeshes(street, scene, quality);
   const rain = createRain(scene);
   const life = createCityLife(scene, city, quality);
   let scare = null;
   // Time of day and weather: free roam cycles unless the settings (or a mission) hold them.
-  const clock = createClock({ hour: PRESETS.day, cycle: true });
+  // Free roam opens at golden hour (spec G5), then the day cycles as before.
+  const clock = createClock({ hour: 17.4, cycle: true });
   const weatherState = { from: 'clear', to: 'clear', k: 1, next: 240 };
   const C4 = new THREE.Color();
   let shadeFreeze = false;

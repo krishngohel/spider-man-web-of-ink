@@ -270,7 +270,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v6';
+  mat.customProgramCacheKey = () => 'city-building-v7';
   return mat;
 }
 
@@ -600,7 +600,7 @@ ${COMIC_SHADE}`)
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-ground-v6';
+  mat.customProgramCacheKey = () => 'city-ground-v7';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';

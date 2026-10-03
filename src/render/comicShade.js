@@ -12,12 +12,31 @@ import { toonGradient } from './toon.js';
 // reads in three tones instead of falling wholly into shadow) and the colour of the light (warm at
 // golden hour, blue at night). Set once a frame by the game; each material adds these uniforms.
 // uPattern: 1 prints hatching and dots on surfaces, 0 turns them off (the low quality preset).
-export const SHADE_UNIFORMS = { uLightLevel: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) }, uPattern: { value: 1 } };
+// uShadowVol / uShadowBox: the city's shadow colour volume (render/shadowVolume.js); until the
+// city is built it is one texel of the base violet.
+const baseVol = new THREE.Data3DTexture(new Uint8Array([143, 128, 173, 255]), 1, 1, 1);
+baseVol.needsUpdate = true;
+export const SHADE_UNIFORMS = {
+  uLightLevel: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) }, uPattern: { value: 1 },
+  uShadowVol: { value: baseVol }, uShadowBox: { value: new THREE.Vector4(-1000, -1000, 2000, 2000) }, uShadowTop: { value: 260 },
+};
+export function setShadowVolume(vol) {
+  const tex = new THREE.Data3DTexture(vol.data, 16, 8, 16);
+  tex.format = THREE.RGBAFormat; tex.type = THREE.UnsignedByteType;
+  tex.minFilter = tex.magFilter = THREE.LinearFilter;
+  tex.wrapS = tex.wrapT = tex.wrapR = THREE.ClampToEdgeWrapping;
+  tex.needsUpdate = true;
+  SHADE_UNIFORMS.uShadowVol.value = tex;
+  SHADE_UNIFORMS.uShadowBox.value.set(vol.box[0], vol.box[1], vol.box[2], vol.box[3]);
+  SHADE_UNIFORMS.uShadowTop.value = vol.top;
+}
 export const addShadeUniforms = (shader) => Object.assign(shader.uniforms, SHADE_UNIFORMS);
 
 export const COMIC_SHADE = /* glsl */ `
-uniform float uLightLevel, uPattern;
+uniform float uLightLevel, uPattern, uShadowTop;
 uniform vec3 uTint;
+uniform highp sampler3D uShadowVol;
+uniform vec4 uShadowBox;
 float gShadow = 0.0;   // 1 in core shadow
 float gMid = 0.0;      // 1 in the band where the light falls off (between shadow and full light)
 float gDeep = 0.0;     // 1 in the darkest shadow (facing away and in cast shadow)
@@ -64,10 +83,14 @@ vec3 comicPattern(vec3 c) {
   if (fade <= 0.0) return c;
   const vec3 INK = vec3(0.006, 0.005, 0.012);
   if (gShadow > 0.02) {
-    float h = mix(comicLines((uv.x + uv.y) / s0, 0.16), comicLines((uv.x + uv.y) / s1, 0.16), k);
-    float h2 = mix(comicLines((uv.x - uv.y) / s0, 0.14), comicLines((uv.x - uv.y) / s1, 0.14), k);
+    // Hatching is spaced wider than the dots (about 11 px), so a big shadow reads as a tone with
+    // texture rather than a wall of lines.
+    float hl = log2(pw * 11.0), h0 = floor(hl), hk = hl - h0;
+    float hs0 = exp2(h0), hs1 = hs0 * 2.0;
+    float h = mix(comicLines((uv.x + uv.y) / hs0, 0.12), comicLines((uv.x + uv.y) / hs1, 0.12), hk);
+    float h2 = mix(comicLines((uv.x - uv.y) / hs0, 0.1), comicLines((uv.x - uv.y) / hs1, 0.1), hk);
     float hatch = max(h, h2 * gDeep) * smoothstep(0.55, 0.85, gShadow) * fade;
-    c = mix(c, mix(c * 0.45, INK, 0.4), hatch * 0.6);
+    c = mix(c, mix(c * 0.5, INK, 0.35), hatch * 0.5);
   }
   if (gMid > 0.02) {
     float r = 0.26 * sqrt(gMid);
@@ -77,8 +100,13 @@ vec3 comicPattern(vec3 c) {
   return c;
 #endif
 }
+// The city's own shadow colour where this pixel stands (spec G5), with a value floor: a shadow is a
+// darker, coloured shade of the surface, never black.
 vec3 comicShade(vec3 alb, vec3 lit) {
-  return comicShade(alb, lit, vec3(0.56, 0.5, 0.68), vec3(0.86, 0.86, 0.9), vec3(1.07, 1.03, 0.96));
+  vec3 q = vec3((vAuxWPos.x - uShadowBox.x) / uShadowBox.z, clamp(vAuxWPos.y / uShadowTop, 0.0, 1.0), (vAuxWPos.z - uShadowBox.y) / uShadowBox.w);
+  vec3 tone = texture(uShadowVol, q).rgb;
+  vec3 c = comicShade(alb, lit, tone, vec3(0.86, 0.86, 0.9), vec3(1.07, 1.03, 0.96));
+  return max(c, alb * 0.35 * uTint);
 }
 `;
 
@@ -107,7 +135,7 @@ ${COMIC_SHADE}`)
       .replace('#include <opaque_fragment>', 'outgoingLight = comicPattern(comicShade(diffuseColor.rgb, outgoingLight));' + String.fromCharCode(10) + '#include <opaque_fragment>')
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  const key = 'comic-toon-v3' + (hooks ? `-${hooks.key ?? (hooks.vertexBegin ?? '').length + (hooks.fragmentColor ?? '').length}` : '');
+  const key = 'comic-toon-v4' + (hooks ? `-${hooks.key ?? (hooks.vertexBegin ?? '').length + (hooks.fragmentColor ?? '').length}` : '');
   mat.customProgramCacheKey = () => key;
   return mat;
 }

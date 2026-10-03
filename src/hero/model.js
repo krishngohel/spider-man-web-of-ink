@@ -244,7 +244,10 @@ vec3 paintSuit(vec3 p) {
   vec3 c = comicShade(diffuseColor.rgb, outgoingLight, vec3(0.74, 0.64, 0.8), vec3(0.92, 0.9, 0.95), vec3(1.08, 1.03, 0.97));
   gShadow *= 0.55; // light dots on the suit's shadow side, never a dark hatch
   float rim = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
-  c += vec3(1.0, 0.95, 0.85) * rim * 0.28;
+  #if NUM_DIR_LIGHTS > 0
+  rim *= smoothstep(0.0, 0.3, dot(normal, directionalLights[0].direction));
+  #endif
+  c += vec3(1.0, 0.95, 0.85) * rim * 0.34;
   outgoingLight = c;
 }
 #include <opaque_fragment>`)

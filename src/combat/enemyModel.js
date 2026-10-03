@@ -127,7 +127,10 @@ export function outfitMaterial(look) {
       .replace('#include <opaque_fragment>', `{
   vec3 c = comicShade(diffuseColor.rgb, outgoingLight);
   float rim = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
-  outgoingLight = c + vec3(1.0, 0.9, 0.8) * rim * 0.12 + uHurt * vec3(0.9, 0.2, 0.15);
+  #if NUM_DIR_LIGHTS > 0
+  rim *= smoothstep(0.0, 0.3, dot(normal, directionalLights[0].direction));
+  #endif
+  outgoingLight = c + vec3(1.0, 0.9, 0.8) * rim * 0.16 + uHurt * vec3(0.9, 0.2, 0.15);
 }
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
