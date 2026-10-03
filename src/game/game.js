@@ -77,6 +77,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const renderer = createRenderer(canvas, quality);
   const basePixelRatio = () => pixelRatioCap(quality, navigator.userAgent, window.devicePixelRatio);
   const ink = createInkPipeline(renderer, quality, { gpuTime: params.has('gputime') });
+  // The hero assets start downloading now; the city's shaders warm up while they arrive.
+  const assetsP = loadHeroAssets('./assets/', (f) => onProgress(0.15 + f * 0.7));
   if (params.has('aux')) ink.uniforms.uDebugAux.value = 1; // shows the aux target (normals, ids)
   if (params.has('inkrepeat')) ink.debug.repeat = Math.max(1, Math.min(16, Number(params.get('inkrepeat')) || 1));
   ink.setComic(quality.comic);
@@ -159,7 +161,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   onProgress(0.15);
 
-  const assets = await loadHeroAssets('./assets/', (f) => onProgress(0.15 + f * 0.7));
+  performance.mark('boot:warmStart');
+  await ink.warm(scene, camera);
+  performance.mark('boot:warmEnd');
+  const assets = await assetsP;
   let heroModel = buildHeroModel(assets);
   scene.add(heroModel.root);
   let poser = createPoser(heroModel);
@@ -1047,7 +1052,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
 
   // Shaders compile under the loading bar, not on the first swing.
+  performance.mark('boot:compileStart');
   await ink.compileAsync(scene, camera);
+  performance.mark('boot:compileEnd');
   onProgress(1);
 
   window.__game = {

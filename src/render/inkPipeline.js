@@ -361,5 +361,23 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     try { await renderer.compileAsync(scene, camera); } finally { renderer.setRenderTarget(null); }
   }
 
-  return { uniforms, setSize, render, setFog, setComic, setPalette, setImpact, setFilter, compileAsync, debug, get gpuMs() { return gpuMs; } };
+  // Boot warm-up: compile everything in parallel, then draw it all once, shadows included, into the
+  // two-attachment target (frustum culling off). ANGLE builds each program's two-output,
+  // shadow-receiving variant on its first such draw, synchronously (about 0.7 s for the city on
+  // this laptop); doing it here, while the hero assets are still downloading, hides most of it.
+  async function warm(scene, camera) {
+    await compileAsync(scene, camera);
+    const culled = [];
+    scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLine) && o.frustumCulled) { o.frustumCulled = false; culled.push(o); } });
+    camera.layers.set(0);
+    camera.layers.enable(LAYER_FX);
+    renderer.shadowMap.needsUpdate = true;
+    renderer.setRenderTarget(colorRT);
+    renderer.render(scene, camera);
+    renderer.setRenderTarget(null);
+    renderer.render(quadScene, quadCam);
+    for (const o of culled) o.frustumCulled = true;
+  }
+
+  return { uniforms, setSize, render, setFog, warm, setComic, setPalette, setImpact, setFilter, compileAsync, debug, get gpuMs() { return gpuMs; } };
 }
