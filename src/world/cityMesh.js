@@ -261,7 +261,7 @@ vec3 facade(vec3 base, float style, float seed) {
       .replace('#include <opaque_fragment>', `{
   // Comic shading: three flat tones from the lighting, with cool hue-shifted shadows and a warm
   // sunlit tone, cross-hatching in shadow up close, then ink and glass shine on top.
-  vec3 c = comicShade(diffuseColor.rgb, outgoingLight);
+  vec3 c = comicPattern(comicShade(diffuseColor.rgb, outgoingLight));
   c = mix(c, vec3(0.9, 0.95, 1.0), gGlass * (1.0 - 0.55 * gShadow));
   c = mix(c, uWinLit, gEmit);
   c = mix(c, uInk, clamp(gInk, 0.0, 1.0));
@@ -270,7 +270,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v5';
+  mat.customProgramCacheKey = () => 'city-building-v6';
   return mat;
 }
 
@@ -595,12 +595,12 @@ ${COMIC_SHADE}`)
 }`)
       .replace('#include <opaque_fragment>', `{
   // Comic shading, shared with the buildings.
-  outgoingLight = mix(comicShade(diffuseColor.rgb, outgoingLight), uInkG, gInkG);
+  outgoingLight = mix(comicPattern(comicShade(diffuseColor.rgb, outgoingLight)), uInkG, gInkG);
 }
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-ground-v5';
+  mat.customProgramCacheKey = () => 'city-ground-v6';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';

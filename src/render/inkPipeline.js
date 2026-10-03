@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { LAYER_FX } from './layers.js';
 import { installGbufferChunks } from './gbuffer.js';
+import { SHADE_UNIFORMS } from './comicShade.js';
 
 const vertexShader = /* glsl */ `
 varying vec2 vUv;
@@ -129,33 +130,9 @@ void main() {
 
   vec2 cell = mat2(0.7071, -0.7071, 0.7071, 0.7071) * frag / uHalftone;
   bool sky = dc > uFar * 0.9;
-  float nearK = 1.0 - smoothstep(25.0, 80.0, dc);
-  // Shadows: cross-hatching up close, Ben-Day dots further out (never both at full strength).
-  // Driven by the material's own shadow shape (a dark colour in sunlight is not a shadow: the
-  // suit's blue stays clean), plus anything nearly black.
-  float nearH = 1.0 - smoothstep(9.0, 24.0, dc);
-  float hatchZone = max(smoothstep(0.08, 0.04, L) * nearK, smoothstep(0.45, 0.9, shadowK) * nearH) * uHatch;
-  float rDark = 0.2 * smoothstep(0.08, 0.04, L) * (1.0 - smoothstep(60.0, 150.0, dc));
-  float rShade = 0.26 * smoothstep(0.3, 0.8, shadowK) * (1.0 - smoothstep(110.0, 300.0, dc));
-  float r = max(rDark, rShade) * uHalftoneAmount * (1.0 - hatchZone * 0.8);
-  float dotMask = 1.0 - smoothstep(r - 0.06, r + 0.06, length(fract(cell) - 0.5));
-  // Dots are a deep shade of the surface's own colour, the way a colourist prints shadow.
-  col = mix(col, mix(col * 0.32, uInk, 0.45), dotMask * step(0.001, r) * 0.92);
-  if (hatchZone > 0.0) {
-    vec2 hp = frag + (uWobble > 0.0 ? vec2(vnoise(frag / 40.0 + floor(uTime * 8.0)) * 1.5, 0.0) : vec2(0.0));
-    float s = uHalftone * 0.9;
-    float h1 = 1.0 - smoothstep(0.12, 0.28, abs(fract((hp.x + hp.y) / s) - 0.5));
-    float h2 = 1.0 - smoothstep(0.12, 0.28, abs(fract((hp.x - hp.y) / s) - 0.5));
-    float hatch = max(h1, h2 * smoothstep(0.1, 0.05, L)) * hatchZone;
-    col = mix(col, mix(col * 0.3, uInk, 0.6), hatch * 0.8);
-  }
-  // Mid tones: a light dot tint of the surface's own hue.
-  float mid = smoothstep(0.18, 0.26, L) * (1.0 - smoothstep(0.42, 0.55, L)) * (1.0 - smoothstep(50.0, 120.0, dc)) * uMidDots;
-  if (mid > 0.0 && !sky) {
-    float rm = 0.22 * mid;
-    float mm = 1.0 - smoothstep(rm - 0.06, rm + 0.06, length(fract(cell) - 0.5));
-    col = mix(col, col * 0.62, mm);
-  }
+  // Shadow hatching and dots are printed by the surfaces themselves, in world space (see
+  // render/comicShade.js comicPattern), so they stay put as the camera moves. Only the sky is
+  // dotted here.
   // Sky: big dots grading toward the horizon.
   if (sky && uSkyDots > 0.0) {
     float rs = 0.3 * clamp(1.2 - vUv.y * 1.4, 0.0, 1.0) * uSkyDots;
@@ -315,6 +292,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
   }
 
   function setComic(c) {
+    SHADE_UNIFORMS.uPattern.value = c.hatch;
     uniforms.uWobble.value = c.wobble; uniforms.uHatch.value = c.hatch; uniforms.uMidDots.value = c.midDots;
     uniforms.uSkyDots.value = c.skyDots; uniforms.uColorEdges.value = c.colorEdges; uniforms.uMisreg.value = c.misreg;
     uniforms.uPaletteAmt.value = c.palette; uniforms.uPaperTex.value = c.paper;
