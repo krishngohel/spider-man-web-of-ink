@@ -20,6 +20,10 @@ uniform vec2 uImpactCenter;
 uniform vec3 uPalette[6];
 uniform vec3 uInk, uPaper, uAccent;
 uniform float uDebugAux;
+// Fog (spec G3): applied after the ink, coloured by the sky toward each pixel.
+uniform vec3 uFogColor, uSkyHorizon, uSkyMid, uSkyTop, uCamPos;
+uniform float uFogNear, uFogFar;
+uniform mat4 uInvProj, uCamMatrix;
 varying vec2 vUv;
 
 float viewDepth(vec2 uv) { return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, uNear, uFar); }
@@ -162,6 +166,22 @@ void main() {
   col = mix(col, uInk, edge);
   if (uFlash > 0.0) col = mix(col, (L > 0.08 && edge < 0.5) ? uPaper : uInk, uFlash);
 
+  // Fog over everything drawn so far, lines and patterns included: linear in distance like the old
+  // scene fog, a little thinner up high, in the colour of the sky behind (so the far city melts
+  // into the horizon band instead of a flat haze).
+  if (!sky && uFogFar > uFogNear) {
+    vec4 vp = uInvProj * vec4(vUv * 2.0 - 1.0, texture2D(tDepth, vUv).x * 2.0 - 1.0, 1.0);
+    vec3 wp = (uCamMatrix * vec4(vp.xyz / vp.w, 1.0)).xyz;
+    vec3 ray = wp - uCamPos;
+    float dist = length(ray);
+    vec3 dir = ray / max(dist, 1e-3);
+    float fog = clamp((dist - uFogNear) / (uFogFar - uFogNear), 0.0, 1.0);
+    fog *= mix(0.7, 1.0, exp(-max(wp.y, 0.0) / 160.0));
+    vec3 skyCol = mix(uSkyHorizon, uSkyMid, smoothstep(0.0, 0.16, dir.y));
+    skyCol = mix(skyCol, uSkyTop, smoothstep(0.22, 0.6, dir.y));
+    col = mix(col, mix(uFogColor, skyCol, 0.55), fog);
+  }
+
   // Impact frame: black and white ink with radial speed lines out from the hit. Soft mode keeps
   // the lines over a pale paper vignette and never inverts (no flashing).
   if (uImpact > 0.0) {
@@ -253,6 +273,9 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     uWobble: { value: 0 }, uHatch: { value: 0 }, uMidDots: { value: 0 }, uSkyDots: { value: 0 },
     uColorEdges: { value: 0 }, uMisreg: { value: 0 }, uPaletteAmt: { value: 0 }, uPaperTex: { value: 0 },
     uDebugAux: { value: 0 },
+    uFogColor: { value: new THREE.Color(PALETTE.haze) }, uFogNear: { value: 320 }, uFogFar: { value: 1800 },
+    uSkyHorizon: { value: new THREE.Color(PALETTE.skyHorizon) }, uSkyMid: { value: new THREE.Color(PALETTE.skyMid) }, uSkyTop: { value: new THREE.Color(PALETTE.skyTop) },
+    uCamPos: { value: new THREE.Vector3() }, uInvProj: { value: new THREE.Matrix4() }, uCamMatrix: { value: new THREE.Matrix4() },
     uImpact: { value: 0 }, uImpactSoft: { value: 0 }, uImpactCenter: { value: new THREE.Vector2(0.5, 0.5) },
     uPalette: { value: Array.from({ length: 6 }, () => new THREE.Color(0.5, 0.5, 0.5)) },
   };
@@ -312,7 +335,19 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
   // frame time against k, scripts/perf-repeat.mjs).
   const debug = { cachedShadows: false, skipNormals: false, repeat: 1 };
 
+  // The fog's colour and range (a THREE.Fog the game drives) and the sky's colours, shared by
+  // reference so they follow the time of day.
+  let fogRef = null;
+  function setFog(fog, skyUniforms) {
+    fogRef = fog;
+    uniforms.uFogColor.value = fog.color;
+    uniforms.uSkyHorizon.value = skyUniforms.uHorizon.value;
+    uniforms.uSkyMid.value = skyUniforms.uMid.value;
+    uniforms.uSkyTop.value = skyUniforms.uTop.value;
+  }
+
   function render(scene, camera, time) {
+    if (fogRef) { uniforms.uFogNear.value = fogRef.near; uniforms.uFogFar.value = fogRef.far; }
     uniforms.uNear.value = camera.near;
     uniforms.uFar.value = camera.far;
     uniforms.uTime.value = time;
@@ -326,6 +361,10 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     renderer.setRenderTarget(colorRT);
     renderer.render(scene, camera);
 
+    camera.updateMatrixWorld();
+    uniforms.uInvProj.value.copy(camera.projectionMatrixInverse);
+    uniforms.uCamMatrix.value.copy(camera.matrixWorld);
+    uniforms.uCamPos.value.setFromMatrixPosition(camera.matrixWorld);
     renderer.setRenderTarget(null);
     for (let k = 0; k < debug.repeat; k++) renderer.render(quadScene, quadCam);
 
@@ -344,5 +383,5 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     try { await renderer.compileAsync(scene, camera); } finally { renderer.setRenderTarget(null); }
   }
 
-  return { uniforms, setSize, render, setComic, setPalette, setImpact, setFilter, compileAsync, debug, get gpuMs() { return gpuMs; } };
+  return { uniforms, setSize, render, setFog, setComic, setPalette, setImpact, setFilter, compileAsync, debug, get gpuMs() { return gpuMs; } };
 }

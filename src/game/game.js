@@ -80,10 +80,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   if (params.has('inkrepeat')) ink.debug.repeat = Math.max(1, Math.min(16, Number(params.get('inkrepeat')) || 1));
   ink.setComic(quality.comic);
   const scene = new THREE.Scene();
-  scene.fog = new THREE.Fog(PALETTE.haze, 320, quality.viewDistance);
+  // Fog lives in the ink pass (spec G3), after the lines, so ink fades into the distance with the
+  // buildings; this holds its colour and range for the time of day.
+  const fogState = new THREE.Fog(PALETTE.haze, 320, quality.viewDistance);
+  scene.fog = null;
   const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 2200);
   camera.layers.enable(LAYER_FX);
   const sky = createSky(scene);
+  ink.setFog(fogState, sky.uniforms);
   const hemi = new THREE.HemisphereLight(PALETTE.skyMid, 0xb8a58c, 1.25);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(PALETTE.sun, 1.9);
@@ -136,7 +140,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     u.uSunDir.value.copy(sunDir);
     mixC(a.sun, b.sun, t, sun.color); sun.intensity = a.sunI + (b.sunI - a.sunI) * t;
     mixC(a.hemiSky, b.hemiSky, t, hemi.color); mixC(a.hemiGround, b.hemiGround, t, hemi.groundColor); hemi.intensity = a.hemiI + (b.hemiI - a.hemiI) * t;
-    mixC(a.fog, b.fog, t, scene.fog.color); scene.fog.near = a.fogNear + (b.fogNear - a.fogNear) * t;
+    mixC(a.fog, b.fog, t, fogState.color); fogState.near = a.fogNear + (b.fogNear - a.fogNear) * t;
     setNight(a.night);
     streetGroup.userData.setNight?.(a.night);
     rain.setAmount(a.rain + (b.rain - a.rain) * t);
@@ -347,7 +351,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         sun.castShadow = shadows;
         scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
       }
-      scene.fog.far = quality.viewDistance;
+      fogState.far = quality.viewDistance;
     }
     dynRes.setEnabled(settings.dynamicRes);
     applyAccess();
