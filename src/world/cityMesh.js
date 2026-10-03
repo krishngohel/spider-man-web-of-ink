@@ -3,6 +3,7 @@ import { PALETTE } from '../render/palette.js';
 import { toonGradient } from '../render/toon.js';
 import { ISLAND, QUEENS, RESERVOIR, BRIDGE } from './city.js';
 import { COMIC_SHADE, SHADOW_ALPHA, comicToon, addShadeUniforms } from '../render/comicShade.js';
+import { HASH } from '../render/glslHash.js';
 
 // Draws the blockout city. Buildings are merged into one mesh per 240 m chunk (so frustum culling
 // still drops what's behind the camera) with one shared toon material; facade windows, storefronts
@@ -52,7 +53,8 @@ float gInk = 0.0;           // ink drawn over the lit colour
 float gGlass = 0.0;         // a glass reflection streak, drawn over the lit colour
 float gEmit = 0.0;          // a lit window at night, unaffected by light
 float gNear = 1.0;          // fine detail fades with distance (1 near, 0 far)
-float h21(vec2 p) { return fract(sin(dot(p, vec2(41.3, 289.1))) * 43758.5453); }
+${HASH}
+float h21(vec2 p) { return hash12(p); }
 // Ink on the boundary of the box [lo, hi] (world units), px pixels wide, antialiased.
 float frame(vec2 p, vec2 lo, vec2 hi, float pw, float px) {
   vec2 c = (lo + hi) * 0.5, h = (hi - lo) * 0.5;
@@ -478,6 +480,7 @@ uniform vec2 uCorners;
 uniform float uNightG;
 uniform sampler2D uLand;
 float gInkG = 0.0;
+${HASH}
 float inkAt(float d, float pw, float px) { return 1.0 - smoothstep(pw * px * 0.5, pw * (px * 0.5 + 1.0), abs(d)); }
 varying vec3 vWPos;
 float band(float x, float a, float b) { return step(a, x) * step(x, b); }
@@ -513,7 +516,7 @@ ${COMIC_SHADE}`)
     col = mix(col, col * 1.25 + vec3(0.08), (1.0 - smoothstep(0.0, 6.0, shoreD)) * 0.6);
   } else if (pier) {
     // Wooden piers: planks across, inked joints.
-    col = uPier * (0.92 + 0.12 * step(0.5, fract(sin(floor(w.y / 0.9) * 12.9) * 43758.5)));
+    col = uPier * (0.92 + 0.12 * step(0.5, hash12(vec2(floor(w.y / 0.9), 7.0))));
     gInkG = max(gInkG, inkAt(fract(w.y / 0.9 + 0.5) - 0.5, pw / 0.9, 1.0) * 0.5 * near);
   } else if (coast > -4.0 && coast <= 0.0) {
     // The seawall: a stone edge with a strong ink line where it meets the water.
@@ -532,11 +535,11 @@ ${COMIC_SHADE}`)
     col = uPlaza;
     vec2 sl = w / 3.0;
     float joint = max(inkAt(fract(sl.x + 0.5) - 0.5, pw / 3.0, 1.0), inkAt(fract(sl.y + 0.5) - 0.5, pw / 3.0, 1.0));
-    col = mix(col, col * 0.9, step(0.5, fract(sin(dot(floor(sl), vec2(7.1, 3.7))) * 437.5)) * 0.6);
+    col = mix(col, col * 0.9, step(0.5, hash12(floor(sl))) * 0.6);
     gInkG = max(gInkG, joint * 0.4 * near);
   } else if (t > 4.5 && t < 5.5) {
     // The rail yard: gravel, timber ties and two steel rails per track, tracks along z.
-    float gr = fract(sin(dot(floor(w * 1.7), vec2(12.9, 78.2))) * 43758.5);
+    float gr = hash12(floor(w * 1.7));
     col = mix(uSidewalk * 0.72, uAsphalt * 1.1, 0.4 + 0.3 * gr);
     float tx = mod(w.x + 1425.0 - 12.0 + 6.75, 13.5) - 6.75;
     if (abs(tx) < 1.4) {
@@ -562,7 +565,7 @@ ${COMIC_SHADE}`)
         if (ds > 6.0 && ds < 9.0 && fract(w.x / 1.4) < 0.5) col = uCross;
         if (da > 12.0 && da < 15.0 && fract(w.y / 1.4) < 0.5) col = uCross;
       }
-      float wear = fract(sin(dot(floor(w / 5.0), vec2(12.9, 78.2))) * 43758.5);
+      float wear = hash12(floor(w / 5.0));
       col *= 0.94 + 0.08 * step(0.7, wear);
       if (avenue && !street) {
         vec2 mh = vec2(da - 7.0, mod(w.y, 37.0) - 18.5);
@@ -574,7 +577,7 @@ ${COMIC_SHADE}`)
       if (street) gInkG = max(gInkG, inkAt(ds - 9.0, pw, 1.6));
     } else if (suburb) {
       // Queens: lawns, a strip of sidewalk along the road.
-      col = (walkA || walkS) ? uSidewalk : mix(uGrass, uGrassDark, step(0.6, fract(sin(dot(floor(w / 7.0), vec2(12.9, 78.2))) * 43758.5)));
+      col = (walkA || walkS) ? uSidewalk : mix(uGrass, uGrassDark, step(0.6, hash12(floor(w / 7.0))));
     } else if (walkA || walkS) {
       col = uSidewalk;
       vec2 sl = w / 1.6;

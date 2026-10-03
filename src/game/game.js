@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createRenderer } from '../render/renderer.js';
+import { createRenderer, pixelRatioCap } from '../render/renderer.js';
 import { createInkPipeline } from '../render/inkPipeline.js';
 import { getQuality } from '../render/quality.js';
 import { createDynamicRes, sanitizeResScale } from '../render/dynamicRes.js';
@@ -74,8 +74,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   // Renderer and look ------------------------------------------------------------------------
   const renderer = createRenderer(canvas, quality);
-  const basePixelRatio = () => Math.min(window.devicePixelRatio, quality.pixelRatioCap);
+  const basePixelRatio = () => pixelRatioCap(quality, navigator.userAgent, window.devicePixelRatio);
   const ink = createInkPipeline(renderer, quality, { gpuTime: params.has('gputime') });
+  if (params.has('inkrepeat')) ink.debug.repeat = Math.max(1, Math.min(16, Number(params.get('inkrepeat')) || 1));
   ink.setComic(quality.comic);
   const scene = new THREE.Scene();
   scene.fog = new THREE.Fog(PALETTE.haze, 320, quality.viewDistance);

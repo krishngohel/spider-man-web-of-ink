@@ -297,7 +297,9 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
 
   // Benchmark switches (src/dev/perfBench.js, ?bench=1): each one drops a piece of the frame so
   // its cost can be measured on the player's own machine. Never set in normal play.
-  const debug = { cachedShadows: false, skipNormals: false };
+  // repeat: draw the composite k times (Safari has no reliable GPU timer: time it by the slope of
+  // frame time against k, scripts/perf-repeat.mjs).
+  const debug = { cachedShadows: false, skipNormals: false, repeat: 1 };
 
   function render(scene, camera, time) {
     uniforms.uNear.value = camera.near;
@@ -331,7 +333,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     scene.fog = fog;
 
     renderer.setRenderTarget(null);
-    renderer.render(quadScene, quadCam);
+    for (let k = 0; k < debug.repeat; k++) renderer.render(quadScene, quadCam);
 
     camera.layers.set(0);
     camera.layers.enable(LAYER_FX);
