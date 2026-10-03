@@ -19,16 +19,16 @@ import { findAimPoint, findZipPoint } from '../physics/anchors.js';
 
 export const HALF_SEG = 0.5;
 const SUBMOVE = 0.3;
-// Coyote time: a jump is still allowed for 60 ms after the feet leave an edge. The one accepted
-// bend of the push rule (the foot was on the edge a step or two ago); push() allows it.
-const COYOTE = 0.08;        // a jump still works this long after running off a ledge (spec C8)
+// Coyote time (spec C8): a jump is still allowed for 80 ms after the feet leave an edge. The one
+// accepted bend of the push rule (the foot was on the edge a moment ago); push() allows it.
+const COYOTE = 0.08;
 const JUMP_BUFFER = 0.12;   // a jump pressed this long before landing still fires on landing
 const SWING_RETRY = 0.25;   // a web press with nothing to hit keeps looking this long while held
 const WALL_LOST = 0.05;
 // Hands can grab an edge this far away (a vault over a roof edge pushes off that edge).
 const REACH = 1.6;
 // A surface push needs a contact this recent (one or two physics steps of slack, plus coyote time).
-const CONTACT_FRESH = 0.07;
+const CONTACT_FRESH = COYOTE + 0.01;
 const ZIP_TIMEOUT = 3;
 const WALL_ACCEL = 30;
 const RUN_UP_ACCEL = 60;

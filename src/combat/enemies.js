@@ -73,7 +73,10 @@ let nextId = 1;
 
 export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
   const list = [];
-  const tokens = createTokens();
+  // One director per target (each player in co-op, the generator in a defend mission).
+  const tokenSets = new Map();
+  const tokensOf = (T) => { let ts = tokenSets.get(T.body); if (!ts) { ts = createTokens(); tokenSets.set(T.body, ts); } return ts; };
+  const tokens = { holdAll(s) { for (const ts of tokenSets.values()) ts.holdAll(s); } };
   const tmp = new THREE.Vector3();
   const C = {};
 
@@ -180,10 +183,12 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     const groundUnder = (q) => world.groundHeight(q.x, q.y, q.z);
     // The director: who may swing and who may shoot (bosses and puppets run themselves).
     {
-      const hp0 = targets[0].body.p;
-      tokens.update(dt, list.filter((e) => e.alive && !e.boss && !e.puppet && !e.isPlayer && e.alerted), hp0, {
-        difficulty, groundBelow: groundUnder(hp0), dist: (e) => Math.hypot(e.body.p.x - hp0.x, e.body.p.z - hp0.z),
-      });
+      const groups = new Map(targets.map((T) => [T, []]));
+      for (const e of list) if (e.alive && !e.boss && !e.puppet && !e.isPlayer && e.alerted) groups.get(nearest(e.body.p))?.push(e);
+      for (const [T, group] of groups) {
+        const tp = T.body.p;
+        tokensOf(T).update(dt, group, tp, { difficulty, groundBelow: groundUnder(tp), dist: (e) => Math.hypot(e.body.p.x - tp.x, e.body.p.z - tp.z) });
+      }
     }
     // Puppets (enemies the host runs, other players) only follow what they are told.
     for (const e of list) if (e.puppet) puppetStep(e, dt);
@@ -242,7 +247,8 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           if (Math.random() < dt * 0.3) e.strafe = -e.strafe;
           const inRange = A.ranged && !e.disarmed ? dist < A.reach && lineOfSight(e, hero) : dist < A.reach * 1.05 && Math.abs(hp.y - p.y) < 2.2;
           const gun = A.ranged && !e.disarmed;
-          if (inRange && e.cooldown <= 0 && (gun ? tokens.mayRanged(e) : tokens.mayMelee(e))) {
+          const ts = tokensOf(T);
+          if (inRange && e.cooldown <= 0 && (gun ? ts.mayRanged(e) : ts.mayMelee(e))) {
             // Off-screen shooters take longer, so the spider-sense gives more warning (PUB).
             e.strikeAt = (gun ? A.windup : windupFor(A)) + (gun && ctx.onScreen?.(e) === false ? TUNE.offscreenDelay : 0);
             e.red = false;
@@ -436,7 +442,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     // Open for a beat (a perfect dodge's web to the face).
     stun(e, s) { if (e.boss || e.puppet || e.isPlayer || !isActive(e)) return; e.stunT = s; setState(e, 'stunned'); onEvent({ type: 'enemyStunned', e }); },
     // Beaten to the punch: the swing never comes.
-    interrupt(e) { if (e.boss || e.state !== 'windup') return; setState(e, 'stagger'); onEvent({ type: 'enemyMiss', e }); },
+    interrupt(e) { if (e.boss || e.state !== 'windup') return; setState(e, 'stagger'); e.cooldown = 0.8 + Math.random() * 0.6; onEvent({ type: 'enemyMiss', e }); },
     // The guard nearest the hero open to a takedown, and which kind.
     takedownTarget(heroCtl) {
       let best = null, bd = Infinity;

@@ -1,5 +1,6 @@
 import { DEFAULTS, tune } from '../physics/constants.js';
 import { COMBAT, COMBAT_BASE } from '../combat/heroCombat.js';
+import { TUNE } from '../combat/tuning.js';
 import { GADGETS } from '../combat/gadgets.js';
 import { skillEffects, suitById, grantXp, XP, levelFor, POWERS } from './progression.js';
 import { setSuit } from '../hero/model.js';
@@ -25,7 +26,7 @@ export function createProgressRuntime({ save: firstSave, heroModel, combat, hero
     c.hp = Math.min(c.hp, c.maxHp);
     c.dmgMul = 1 + (fx.combat.dmgMul ?? 0);
     c.strikeMul = 1 + (fx.combat.strikeMul ?? 0);
-    c.comboKeep = mods.has('momentum') ? 4.4 : 2.2;
+    c.comboKeep = TUNE.comboReset * (mods.has('momentum') ? 1.4 : 1);
     c.keepComboOnHit = mods.has('concentration');
     c.armor = mods.has('armored') ? 0.2 : 0;
     c.resilient = mods.has('resilient');

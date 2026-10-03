@@ -19,8 +19,9 @@ describe('enemy tokens', () => {
     expect(rangedSlots('ultimate')).toBe(3);
   });
   it('makes the air safe above 1.5 m', () => {
-    expect(airSafe(2.6, 0.9)).toBe(true);
-    expect(airSafe(1.9, 0.9)).toBe(false);
+    expect(airSafe(3.5, 0)).toBe(true);   // feet 2.6 m up
+    expect(airSafe(2.2, 0)).toBe(false);  // feet 1.3 m up
+    expect(airSafe(3.0, 0.9)).toBe(false); // on a 0.9 m ledge, feet 1.2 m up
   });
   it('cancels a later enemy hit unless heavy, boss or a repeated move', () => {
     expect(beatsToPunch({ heroImpactIn: 0.05, enemyImpactIn: 0.2, sameMoveRun: 1 })).toBe(true);
@@ -43,8 +44,18 @@ describe('enemy tokens', () => {
   });
   it('no melee token while the hero is in the air', () => {
     const t = createTokens(), a = E(1, 1, 0);
-    t.update(0.3, [a], { x: 0, y: 3, z: 0 }, { difficulty: 'amazing', groundBelow: 0.9, dist });
+    t.update(0.3, [a], { x: 0, y: 4, z: 0 }, { difficulty: 'amazing', groundBelow: 0.9, dist });
     expect(t.mayMelee(a)).toBe(false);
+  });
+  it('dodging again inside the hold does not stretch it', () => {
+    const t = createTokens(), a = E(1, 1, 0);
+    const ctx = { difficulty: 'amazing', groundBelow: 0.9, dist };
+    t.update(0.3, [a], H, ctx);
+    t.holdAll(1.0);
+    t.update(0.6, [a], H, ctx);
+    t.holdAll(1.0);
+    t.update(0.5, [a], H, ctx);
+    expect(t.mayMelee(a)).toBe(true);
   });
   it('ranged slots fill up and free when the shooter stops', () => {
     const t = createTokens(), g1 = E(1, 9, 0, { A: { ranged: true } }), g2 = E(2, 10, 0, { A: { ranged: true } });

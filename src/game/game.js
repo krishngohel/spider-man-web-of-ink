@@ -567,6 +567,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   let lastThwipWord = -10, lastWhipWord = -10;
   let gdt = 0;
   // Combat feedback: words, sounds, shakes, impact frames, the HUD.
+  let impactTimer = 0, impactLong = false;
   function combatEvent(e) {
     const at = e.at ?? (e.e ? e.e.body.p : null);
     switch (e.type) {
@@ -579,8 +580,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         rig.fov += TUNE.fovPunch * (e.heavy ? 1.6 : 1);
         if (e.heavy && (e.stop ?? 0) >= 0.08 && settings.impactFrames !== 'off') {
           const s = screenOf(e.e.body.p.x, e.e.body.p.y, e.e.body.p.z);
-          ink.setImpact(1, true, s.x / innerWidth, 1 - s.y / innerHeight);
-          setTimeout(() => ink.setImpact(0), 50);
+          if (!impactLong) { ink.setImpact(1, true, s.x / innerWidth, 1 - s.y / innerHeight); clearTimeout(impactTimer); impactTimer = setTimeout(() => ink.setImpact(0), 50); }
         }
         break;
       }
@@ -588,7 +588,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       case 'finisher': {
         const s = screenOf(at.x, at.y, at.z);
         if (settings.impactFrames !== 'off') ink.setImpact(1, settings.impactFrames === 'soft', s.x / innerWidth, 1 - s.y / innerHeight);
-        setTimeout(() => ink.setImpact(0), 220);
+        clearTimeout(impactTimer); impactLong = true;
+        impactTimer = setTimeout(() => { ink.setImpact(0); impactLong = false; }, 220);
         break;
       }
       case 'slam': fx.ring(e.at.x, e.at.y - 0.9, e.at.z, 2.2); if (settings.cameraShake) rig.shake = 0.8; break;
@@ -762,6 +763,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         hero.step(intent, STEP);
         if (i === 0) clearEdges();
       }
+      // No physics step this frame (the hero frozen in a hitstop, or a very high refresh rate):
+      // combat has already read its presses, so they must not fire again next frame.
+      if (adv.steps === 0) { intent.attackPressed = false; intent.webPressed = false; intent.yankPressed = false; intent.gadgetPressed = false; intent.divePressed = false; }
       alpha = adv.alpha;
       prof('physics', Tp);
       events.push(...hero.events);

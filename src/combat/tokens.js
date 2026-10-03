@@ -18,7 +18,8 @@ export function pickMeleeHolder(cands, heroP, current, dist) {
 
 export const rangedSlots = (difficulty) => TUNE.rangedSlots[difficulty] ?? 1;
 
-export const airSafe = (heroY, groundBelow) => heroY - groundBelow > TUNE.airSafe;
+// Measured from the feet (the body's centre rides 0.9 m over them).
+export const airSafe = (heroY, groundBelow) => heroY - 0.9 - groundBelow > TUNE.airSafe;
 
 // Beat to the punch: the hero's hit lands first, so the enemy's windup is cancelled. Not for heavy
 // attacks or bosses, and not when the player repeats one move (no mashing a single button).
@@ -49,7 +50,8 @@ export function createTokens() {
       ranged.add(e);
       return true;
     },
-    holdAll(s) { hold = Math.max(hold, s); },
+    // A dodge's breather; dodging again inside it does not stretch it (no dodging forever).
+    holdAll(s) { if (hold <= 0) hold = s; },
     get held() { return hold > 0; },
     get holder() { return holder; },
   };

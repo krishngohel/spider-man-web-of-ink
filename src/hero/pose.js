@@ -159,6 +159,7 @@ export function createPoser(heroModel) {
         // Fighting moves: their clips, driven to land on the contact frame (combatAnim.js).
         else if (e.type === 'moveStart') { once = null; trick = null; kickT = 0; slamT = 0; combatAnim.start(e); }
         else if (e.type === 'strikeArrive') combatAnim.arrive();
+        else if (e.type === 'moveAbort') combatAnim.stop();
         // The dodge is a flip or a vault (a corkscrew when it is perfect), over the shoulder away.
         else if (e.type === 'dodge') { combatAnim.stop(); once = null; trick = e.perfect ? { def: TRICKS.corkscrew, name: 'corkscrew', t: 0 } : { def: e.side === 'l' ? TRICKS.dodgeL : TRICKS.dodgeR, name: 'dodge', t: 0 }; }
         else if (e.type === 'heroHurt') { combatAnim.stop(); if (hero.state === 'ground') { once = 'Hit_Chest'; onceT = 0.3; animator.play('Hit_Chest', { once: true, fade: 0.04, timeScale: 1.5 }); } else trick = { def: TRICKS.backflip, name: 'backflip', t: 0.3 }; }

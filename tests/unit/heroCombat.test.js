@@ -119,3 +119,23 @@ describe('dodging a telegraphed blow', () => {
     expect(s.hc.c.iframes).toBeLessThanOrEqual(0.5);
   });
 });
+
+describe('review fixes', () => {
+  it('a dive press mid-swing stays a dive, never a dodge', () => {
+    const s = setup();
+    s.hero.state = 'swing';
+    s.frame({ divePressed: true });
+    expect(s.hc.c.state).not.toBe('dodge');
+  });
+  it('mashing the string past four stops beating enemies to the punch', () => {
+    const s = setup();
+    let cancelled = 0;
+    for (let i = 0; i < 8; i++) {
+      Object.assign(s.e, { state: 'windup', strikeAt: 0.6, t: 0.2 });
+      s.hc.c.state = 'free'; s.hc.c.move = null;
+      s.frame({ attackPressed: true });
+      if (s.e.state === 'stagger') cancelled++;
+    }
+    expect(cancelled).toBe(4);
+  });
+});

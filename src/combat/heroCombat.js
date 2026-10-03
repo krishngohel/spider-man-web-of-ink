@@ -35,7 +35,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     state: 'free', t: 0, combo: 0, comboT: 9, target: null,
     iframes: 0, outOfCombat: 9, attackHeldT: 0, webHeldT: 0, punchN: 0,
     timeScale: 1, slowT: 0, slowKind: 'plain', finisherHoldT: 0, defeated: false, lastWord: 0,
-    move: null, step: 0, airStep: 0, lastKey: '', sameRun: 0, airKeepT: 0, clock: 0,
+    move: null, step: 0, airStep: 0, lastKey: '', sameRun: 0, mash: 0, lastMoveAt: -9, lastMoveEnd: -9, airKeepT: 0, clock: 0,
     heroStop: 0, heroStopAll: 0, faceYaw: null,
     dmgMul: 1, // skills raise this (Plan 4)
     special: null, strikeMul: 1, comboKeep: TUNE.comboReset, armor: 0, resilient: false, resilientUsed: false, focusMul: 1, brutalMul: 1,
@@ -97,16 +97,19 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (M.air) c.airStep++;
     else if (key === 'launcher' || key === 'strike') c.step = 0;
     else if (key !== 'throw') c.step++;
-    c.sameRun = key === c.lastKey ? c.sameRun + 1 : 1;
+    // Mashing: the ground string pressed on and on with nothing else (no dodge, web, launcher or
+    // air move) counts as repeating one move; a full string of 4 is fine, more is mashing.
+    const plain = !M.air && !M.travel && key !== 'launcher' && key !== 'throw';
+    c.mash = plain && c.clock - c.lastMoveAt < 1.2 ? c.mash + 1 : plain ? 1 : 0;
+    c.lastMoveAt = c.clock;
+    c.sameRun = c.mash > 4 ? 3 : 1;
     c.lastKey = key;
     c.punchN++;
-    // Beat to the punch (PUB): a slower enemy blow near us is cancelled, unless heavy, a boss,
-    // or the player keeps repeating one move.
-    for (const e of enemies.engaged) {
-      if (e.state !== 'windup' || e.boss) continue;
-      const u = toward(e);
-      if (u.d < 4 && beatsToPunch({ heroImpactIn: M.impact, enemyImpactIn: e.strikeAt - e.t, sameMoveRun: c.sameRun, heavy: !!e.A.heavy })) enemies.interrupt?.(e);
-    }
+    // Beat to the punch (PUB): a slower blow from the enemy we are hitting is cancelled, unless
+    // it is heavy, a boss, or the player is mashing.
+    if (tgt && !tgt.boss && tgt.state === 'windup' && toward(tgt).d < 4 && beatsToPunch({ heroImpactIn: M.impact, enemyImpactIn: tgt.strikeAt - tgt.t, sameMoveRun: c.sameRun, heavy: !!tgt.A.heavy })) enemies.interrupt?.(tgt);
+    if (key === 'strike') onEvent({ type: 'webStrike', e: tgt });
+    if (key === 'launcher') onEvent({ type: 'uppercut' });
     if (M.travel && grounded()) { const v = V(); applyDv(hero.body, 'surface', 0, Math.max(0, 3 - v.y), 0); hero.state = 'air'; hero.airTime = 0; }
     onEvent({ type: 'moveStart', key, clip, air: !grounded() || !!M.air, time: M.time, impact: M.impact, travel: !!M.travel, n: c.punchN });
   }
@@ -128,7 +131,9 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (m.key === 'launcher') lift = COMBAT.uppercutLift;
     const r = landHit(tgt, { dmg, push: M.push, lift, kind: M.kick ? 'kick' : 'melee', heavy: !!M.knock || m.key === 'launcher', stop: M.stop });
     if (r.blocked) return;
-    if (M.air && m.key !== 'spike') { enemies.hang?.(tgt, TUNE.airKeep); c.airKeepT = TUNE.airKeep; }
+    // Air Juggler (a skill raising airLift) keeps them up longer.
+    const keep = TUNE.airKeep * (COMBAT.airLift / COMBAT_BASE.airLift);
+    if (M.air && m.key !== 'spike' && !tgt.boss) { enemies.hang?.(tgt, keep); c.airKeepT = keep; }
     if (m.key === 'spike') c.airKeepT = 0;
     onEvent({ type: 'contact', e: tgt, key: m.key });
   }
@@ -176,14 +181,14 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       }
       if (nextMove()) return;
     }
-    if (m.t >= M.time) { c.state = 'free'; c.move = null; }
+    if (m.t >= M.time) { c.state = 'free'; c.move = null; c.lastMoveEnd = c.clock; }
   }
 
   function strikeStep(m, dt) {
     // Web strike: a web to the target and a hard pull along it, ending in a flying kick and a
     // rebound up and back off his body (Web of Shadows).
     const tgt = m.tgt;
-    if (!tgt || !(isActive(tgt) || tgt.state === 'air')) { c.state = 'free'; c.move = null; onEvent({ type: 'strikeEnd' }); return; }
+    if (!tgt || !(isActive(tgt) || tgt.state === 'air')) { c.state = 'free'; c.move = null; onEvent({ type: 'strikeEnd' }); onEvent({ type: 'moveAbort' }); return; }
     const q = tgt.body.p, p = P(), dx = q.x - p.x, dy = q.y + 0.3 - p.y, dz = q.z - p.z, d = Math.hypot(dx, dy, dz) || 1;
     if (!m.arrived) {
       const v = V(), s = TUNE.strikeSpeed, k = Math.min(1, dt * 14);
@@ -232,7 +237,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       // The next attack ends a perfect dodge's slow motion early.
       if (c.slowKind === 'perfect' && c.slowT > TUNE.perfectRamp) c.slowT = TUNE.perfectRamp;
     }
-    if (intent.divePressed && fight) buffer.press('dodge', c.clock);
+    const close = engaged.some((e) => toward(e).d < 15);
+    if (intent.divePressed && close && (hero.state === 'ground' || hero.state === 'air')) buffer.press('dodge', c.clock);
     if (intent.attack) c.attackHeldT += live; else c.attackHeldT = 0;
     if (intent.web) c.webHeldT += live; else c.webHeldT = 0;
     if (!fight) c.faceYaw = null;
@@ -298,6 +304,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       c.state = 'slam'; c.t = 0; onEvent({ type: 'slamStart' }); return;
     }
     if (buffer.take('attack', c.clock)) {
+      // Back after a pause: the string starts over.
+      if (c.clock - c.lastMoveEnd > 0.6) { c.step = 0; if (grounded()) c.airStep = 0; }
       if (tgt) {
         const mv = chooseMove({ d: near.d, dy: near.dy, step: c.step, airStep: c.airStep, grounded: grounded(), webbed: false, holdT: 0 });
         if (mv && !(mv.key === 'strike' && hero.state === 'wall')) {
