@@ -70,8 +70,10 @@ float inside(vec2 p, vec2 lo, vec2 hi) { return step(lo.x, p.x) * step(p.x, hi.x
 vec3 glassColor(vec2 id, float seed, float u, float v) {
   float r = h21(id + seed * 13.1);
   vec3 g = mix(uWinDark, uWinDark * 1.6 + vec3(0.05, 0.09, 0.14), step(0.7, r));
-  // Night: some windows light up.
-  gEmit = max(gEmit, step(1.0 - uNight * 0.55, r) * uNight);
+  // Night: lights come on in clusters (three bays of one floor: an office, a flat), a few windows
+  // in a lit cluster still dark.
+  float rc = h21(floor(id / vec2(3.0, 1.0)) + seed * 7.3);
+  gEmit = max(gEmit, step(1.0 - uNight * 0.6, rc) * step(0.18, r) * uNight);
   return mix(g, uWinLit * (0.75 + 0.25 * r), gEmit);
 }
 
@@ -215,11 +217,44 @@ vec3 facade(vec3 base, float style, float seed) {
   vec2 fp = f * vec2(bayW, floorH);
   vec2 lo = wlo * vec2(bayW, floorH), hi = whi * vec2(bayW, floorH);
   float inWin = inside(fp, lo, hi);
+  // Fire escapes (brick, brownstone, industrial walls wider than 12 m): a painted iron stack over
+  // two bays, a landing and railing on every floor and a stair running between them, near only.
+  bool escapeStyle = style < 0.5 || (style > 16.5 && style < 17.5) || style > 22.5;
+  float nBays = floor((u1 - u0 - 2.0 * pil) / bayW);
+  float bx0 = floor(fract(seed * 5.1) * max(1.0, nBays - 2.0));
+  float ex = (u - u0 - pil) / bayW - bx0;
+  // A big shape: it fades further out than the fine detail (about 70 m, not 25 m).
+  float escK = 1.0 - smoothstep(0.08, 0.35, pw);
+  if (escapeStyle && u1 - u0 > 12.0 && escK > 0.05 && ex > 0.0 && ex < 2.0 && id.y >= 0.0) {
+    const vec3 IRON = vec3(0.1, 0.09, 0.11);
+    float fy = fp.y;
+    float landing = 1.0 - step(0.38, fy);
+    float rail = max(hline(fy, 1.1, pw, 1.8), hline(fy, 0.75, pw, 1.0) * 0.7);
+    float bars = (1.0 - smoothstep(pw * 0.6, pw * 1.6, abs(fract(ex * 5.0) - 0.5) * bayW / 5.0)) * step(fy, 1.1) * step(0.38, fy);
+    float dir = mod(id.y, 2.0) < 0.5 ? 1.0 : -1.0;
+    float sx = dir > 0.0 ? ex / 2.0 : 1.0 - ex / 2.0;
+    // The stair: a band between two inked stringers, climbing to the next landing.
+    float sd = fy - sx * floorH;
+    float stair = max(hline(sd, 0.0, pw, 2.2), hline(sd, 0.45, pw, 1.4)) * step(0.38, fy);
+    col = mix(col, IRON, landing * 0.92 * escK);
+    col = mix(col, IRON * 1.4, step(0.0, sd) * step(sd, 0.45) * step(0.38, fy) * 0.85 * escK);
+    gInk = max(gInk, max(max(rail, bars), stair) * escK);
+    gInk = max(gInk, hline(fy, 0.38, pw, 1.6) * escK);
+  }
   if (inWin > 0.5) {
     col = glassColor(id, seed, u, v);
     // A diagonal highlight in the top corner of each pane.
     float s = (fp.x - lo.x) + (hi.y - fp.y);
     gGlass = max(gGlass, step(0.25, s) * step(s, 0.55) * 0.45 * lineK);
+    // The pane sits in a reveal: its top and left edges in shadow (spec G7).
+    float reveal = max(step(hi.y - 0.18 * (hi.y - lo.y), fp.y), step(fp.x, lo.x + 0.1 * (hi.x - lo.x)));
+    col = mix(col, col * 0.55, reveal * (1.0 - gEmit) * lineK * 0.85);
+    // Window types for brick and sandstone, by building: single, split, or four panes.
+    if (style < 1.5) {
+      float wt = floor(fract(seed * 3.7) * 3.0);
+      if (wt > 0.5) gInk = max(gInk, hline(fp.x, (lo.x + hi.x) * 0.5, pw, 1.0) * lineK);
+      if (wt > 1.5) gInk = max(gInk, hline(fp.y, (lo.y + hi.y) * 0.5, pw, 1.0) * lineK);
+    }
   } else {
     // Deco piers: vertical ribs between the window columns.
     if (style > 6.5) col = mix(base, base * 1.12, step(0.86, f.x) + step(f.x, 0.14));
@@ -270,7 +305,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v7';
+  mat.customProgramCacheKey = () => 'city-building-v8';
   return mat;
 }
 
