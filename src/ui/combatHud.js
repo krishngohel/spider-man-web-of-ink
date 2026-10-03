@@ -3,6 +3,7 @@ import { el } from './dom.js';
 import { COPY } from './copy.js';
 import { GADGETS } from '../combat/gadgets.js';
 import { isActive } from '../combat/enemies.js';
+import { TUNE } from '../combat/tuning.js';
 
 // The fight on the HUD: health and focus in a comic panel, the combo count, the spider-sense
 // (squiggles over Spidey's head, white while an attack winds up and red for the last 120 ms, the
@@ -15,7 +16,7 @@ export function createCombatHud(root, opts) {
   const pips = [0, 1, 2].map(() => el('b', { class: 'cb-pip' }, [el('i')]));
   const focus = el('div', { class: 'cb-focus' }, pips);
   // Web cartridges: six small pips (spec 1.6).
-  const webPips = Array.from({ length: 6 }, () => el('i'));
+  const webPips = Array.from({ length: TUNE.webCap }, () => el('i'));
   const webs = el('div', { class: 'cb-webs' }, webPips);
   const panel = el('div', { class: 'cb-panel' }, [hpBar, focus, webs]);
   const combo = el('div', { class: 'cb-combo hidden' }, [el('b'), el('span', {}, COPY.combat.combo)]);

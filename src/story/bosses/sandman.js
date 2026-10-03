@@ -164,11 +164,11 @@ export function createSandman(ctx) {
     think -= dt;
     if (giant > 1) {
       giantT -= dt;
-      if (giantT <= 0) { giantT = 2.4 + Math.random(); if (Math.random() < 0.6) giantSlam(); else a.windup({ t: 0.9, ranged: true, unblockable: true, reach: 20, recover: 0.6, pose: 'slamStart', onStrike: sandWave }); }
+      if (giantT <= 0) { giantT = 2.4 + Math.random(); if (Math.random() < 0.6) giantSlam(); else a.windup({ t: 0.9, ranged: true, unblockable: true, reach: 20, recover: 0.6, pose: 'slamStart', onStrike: sandWave, warn: { r: 4 * giant } }); }
     } else if (think <= 0) {
       think = soakT > 0 ? 2 : 1.3 + Math.random() * 0.7;
       if (t.d < 4) a.windup({ t: 0.6, reach: 3.4, arc: 1.4, dmg: 12, push: 10, pose: 'punch' });
-      else if (t.d < 8) a.windup({ t: 0.85, ranged: true, unblockable: true, reach: 9, recover: 0.6, pose: 'slamStart', onStrike: sandWave });
+      else if (t.d < 8) a.windup({ t: 0.85, ranged: true, unblockable: true, reach: 9, recover: 0.6, pose: 'slamStart', onStrike: sandWave, warn: { r: 4 * giant } });
       else a.windup({ t: 0.7, ranged: true, reach: 40, recover: 0.5, pose: 'punch', onStrike: () => { const p = a.body.p, h = hero.body.p, v = hero.body.v; ctx.combat.projectiles.fire('rocket', { x: p.x, y: p.y + 0.8, z: p.z }, { x: h.x + v.x * 0.4, y: h.y, z: h.z + v.z * 0.4 }, { dmg: 10 }); word('FWOOSH!', p, 'small'); } });
     }
     a.step(dt);

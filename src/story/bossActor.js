@@ -85,7 +85,7 @@ export function createBossActor(ctx, opts) {
   a.state = (s) => { e.state = s; e.t = 0; };
   // A telegraphed attack: wind up for t seconds (spider-sense fires now), then strike.
   // reach / arc (radians either side of facing) decide a melee hit; onStrike replaces that.
-  a.windup = ({ t = 0.6, reach = 2.6, arc = 1.2, dmg = 12, unblockable = false, ranged = false, recover = 0.7, pose = 'punch', push = 6, onStrike = null, track = true }) => {
+  a.windup = ({ t = 0.6, reach = 2.6, arc = 1.2, dmg = 12, unblockable = false, ranged = false, recover = 0.7, pose = 'punch', push = 6, onStrike = null, track = true, warn = null }) => {
     attack = { t, reach, arc, dmg, unblockable, ranged, recover, pose, push, onStrike, track, struck: false };
     e.strikeAt = t;
     e.A = { ...A, reach, ranged, unblockable };
@@ -94,7 +94,11 @@ export function createBossActor(ctx, opts) {
     // The anticipation pose (spec 1.10): every boss attack winds up visibly; an area attack (a slam,
     // a quake, a sweep) also marks its reach on the ground until it lands.
     a.pose('windup', { kind: pose, t });
-    if (pose === 'slamStart' || (arc >= 2.5 && reach <= 12)) combat.emit({ type: 'groundWarn', at: { x: body.p.x, y: body.p.y - 0.9, z: body.p.z }, r: reach, t });
+    // warn: { r, ahead } where the blow really lands (ahead metres in front of him).
+    if (warn || pose === 'slamStart' || (arc >= 2.5 && reach <= 12)) {
+      const r = warn?.r ?? reach, ah = warn?.ahead ?? 0;
+      combat.emit({ type: 'groundWarn', at: { x: body.p.x + Math.sin(a.facing) * ah, y: body.p.y - 0.9, z: body.p.z + Math.cos(a.facing) * ah }, r, t });
+    }
   };
   a.attacking = () => e.state === 'windup' || e.state === 'strike' || e.state === 'recover';
   a.meleeHit = (reach, arc, dmg, push = 6, unblockable = false) => {

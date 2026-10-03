@@ -357,8 +357,9 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           e.thrownT -= dt;
           if (Math.hypot(v.x, v.z) > 6) {
             for (const o of list) {
-              if (o === e || !isActive(o) || o.boss || o.isPlayer) continue;
+              if (o === e || !isActive(o) || o.boss || o.isPlayer || e.bowled?.has(o)) continue;
               if (Math.hypot(o.body.p.x - p.x, o.body.p.z - p.z) < 1.3 && Math.abs(o.body.p.y - p.y) < 1.6) {
+                (e.bowled ??= new Set()).add(o);
                 const l = Math.hypot(v.x, v.z) || 1;
                 hit(o, { dmg: 18, dir: { x: v.x / l, z: v.z / l }, push: 10, lift: 2.5, kind: 'slam', from: { ...p } });
                 onEvent({ type: 'heroHit', e: o, heavy: true, kind: 'throw' });

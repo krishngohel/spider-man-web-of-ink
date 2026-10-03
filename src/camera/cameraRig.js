@@ -23,7 +23,7 @@ export const CAM = {
   // sinks more than 1 m under the hero, so a swing never ends low and staring into a wall; the
   // shoulder offset follows the state; FOV opens between 15 and 55 m/s; a web attach kicks the
   // camera in a little and levels it unless the player is steering.
-  flyPitchMin: -0.6, flyFloor: 1.0, lookNoise: 1.0,
+  flyPitchMin: -0.6, flyFloor: 1.0, lookNoise: 30, // lookNoise: px per second
   shoulderBy: { ground: 0.6, air: 0.3, swing: 0.15, hang: 0.2, zip: 0.2, wall: 0.1, glide: 0.3 },
   fovFrom: 15, fovTo: 55, attachKick: 0.35, attachLevel: 0.12, whisker: 0.25,
 };
@@ -82,7 +82,7 @@ export function createCameraRig() {
       const sens = settings.sensitivity ?? 1;
       const inv = settings.invertY ? -1 : 1;
       // A hair of mouse jitter is not steering (it used to reset the auto-follow every frame).
-      const moved = Math.abs(look.dx) + Math.abs(look.dy) > CAM.lookNoise;
+      const moved = (Math.abs(look.dx) + Math.abs(look.dy)) / Math.max(dt, 1e-3) > CAM.lookNoise;
       rig.yaw = wrapAngle(rig.yaw - look.dx * CAM.look * sens * (settings.invertX ? -1 : 1));
       rig.pitch = Math.min(CAM.maxPitch, Math.max(CAM.minPitch, rig.pitch + look.dy * CAM.look * sens * inv));
       rig.sinceLook = moved ? 0 : rig.sinceLook + dt;
@@ -96,7 +96,7 @@ export function createCameraRig() {
       const hs = Math.hypot(v.x, v.z);
       const flying = hero.state !== 'ground' && hero.state !== 'wall';
       rig.state = hero.state;
-      if (flying && rig.pitch < CAM.flyPitchMin) rig.pitch += (CAM.flyPitchMin - rig.pitch) * Math.min(1, dt * 8);
+      if (flying && rig.sinceLook > 0.3 && rig.pitch < CAM.flyPitchMin) rig.pitch += (CAM.flyPitchMin - rig.pitch) * Math.min(1, dt * 8);
       if (rig.level > 0) {
         rig.level -= dt;
         if (!moved) rig.pitch += (CAM.attachLevel - rig.pitch) * Math.min(1, dt * 4);
@@ -104,10 +104,9 @@ export function createCameraRig() {
       rig.kick = Math.max(0, rig.kick - dt * CAM.attachKick / 0.4);
       if (rig.pushT > 0) { rig.pushT -= dt; const u = 1 - Math.max(0, rig.pushT) / rig.pushAll; rig.push = Math.sin(Math.PI * u); } else rig.push = 0;
       if (hero.state === 'wall' && hero.wall && rig.sinceLook > 0.3) {
-        // On a wall: swing round to face the wall from the open side, looking slightly up it.
-        const want = Math.atan2(-hero.wall.nx, -hero.wall.nz);
+        // On a wall: look slightly up it. The yaw stays the player's (wall jumps leave along the
+        // camera's sideways aim).
         const k = 1 - Math.exp(-dt * 3);
-        rig.yaw = wrapAngle(rig.yaw + wrapAngle(want - rig.yaw) * k);
         rig.pitch += (-0.15 - rig.pitch) * k;
       } else if (rig.sinceLook > CAM.followDelay && hs > 10 && flying) {
         const want = Math.atan2(v.x, v.z);
@@ -243,7 +242,11 @@ export function createCameraRig() {
     rig.closeness = Math.hypot(rig.pos.x - f.x, rig.pos.y - f.y, rig.pos.z - f.z);
     // In the air, never far under the hero (looking up from below at a wall is what made swings
     // feel cramped).
-    if (rig.state !== 'ground' && rig.state !== 'wall') rig.pos.y = Math.max(rig.pos.y, f.y - CAM.flyFloor);
+    if (rig.state !== 'ground' && rig.state !== 'wall' && rig.pos.y < f.y - CAM.flyFloor) {
+      let lift = f.y - CAM.flyFloor - rig.pos.y;
+      if (world) { const up = world.raycast(rig.pos.x, rig.pos.y, rig.pos.z, 0, 1, 0, lift + CAM.wallClear, RAY); if (up) lift = Math.max(0, up.t - CAM.wallClear); }
+      rig.pos.y += lift;
+    }
     if (world) {
       const under = world.groundHeight(rig.pos.x, rig.pos.y, rig.pos.z);
       rig.pos.y = Math.max(rig.pos.y, under + CAM.groundClear);

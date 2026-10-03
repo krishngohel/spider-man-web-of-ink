@@ -138,7 +138,7 @@ export function createOck(ctx) {
       if (phase === 3 && planted <= 0 && Math.random() < 0.35) { planted = 4; word('BRACED', a.body.p, 'small'); }
       if (t.d > 9 && Math.random() < 0.5) throwThing();
       else if (t.d < 10 && Math.random() < 0.3) a.windup({ t: 0.6, ranged: true, reach: 10, recover: 0.05, pose: 'none', onStrike: startGrab });
-      else if (Math.random() < 0.5) a.windup({ t: 0.8, unblockable: true, ranged: true, reach: 7, recover: 0.9, pose: 'slamStart', onStrike: slam });
+      else if (Math.random() < 0.5) a.windup({ t: 0.8, unblockable: true, ranged: true, reach: 7, recover: 0.9, pose: 'slamStart', onStrike: slam, warn: { r: 4, ahead: 3 } });
       else a.windup({ t: 0.6, reach: 5, arc: 2.6, dmg: 11, push: 12, pose: 'uppercut', recover: 0.7 });
     }
     a.step(dt);

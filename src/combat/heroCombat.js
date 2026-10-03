@@ -128,7 +128,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   function webbedNear() {
     let best = null, bd = TUNE.throwReach;
     for (const e of enemies.list) {
-      if (!e.alive || e.state !== 'webbed' || e.boss) continue;
+      if (!e.alive || e.state !== 'webbed' || e.boss || e.puppet || e.isPlayer) continue;
       const d = toward(e).d;
       if (d < bd) { bd = d; best = e; }
     }
@@ -193,13 +193,13 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       m.hitDone = true;
       const u = alive ? toward(tgt) : null;
       if (u && u.d < COMBAT.meleeRange + 0.3 && Math.abs(u.dy) < 2.6) contact(m);
-      else onEvent({ type: 'whiff' });
+      else { onEvent({ type: 'whiff' }); if (M.finisher) c.focus = Math.min(3, c.focus + 1); }
     }
     // Hold attack through a ground move next to a light enemy: the launcher.
-    if (!M.air && m.key !== 'launcher' && m.hitDone && c.attackHeldT >= TUNE.launchHold && grounded() && alive && !tgt.boss && !tgt.A?.heavy && toward(tgt).d < 2.8) {
+    if (!M.finisher && !M.air && m.key !== 'launcher' && m.hitDone && c.attackHeldT >= TUNE.launchHold && grounded() && alive && !tgt.boss && !tgt.A?.heavy && toward(tgt).d < 2.8) {
       c.attackHeldT = -99; startMove('launcher'); return;
     }
-    if (canChain(M, m.t) && buffer.take('attack', c.clock)) {
+    if (!M.finisher && canChain(M, m.t) && buffer.take('attack', c.clock)) {
       if (m.key === 'launcher' && m.hitDone && m.t - M.impact <= TUNE.followWindow + 0.15 && alive) {
         // Follow him up: legs push off the ground after the launched enemy.
         const v = V();
@@ -358,9 +358,10 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     // A character's own special replaces the web shot (Shocker's blast, Goblin's bombs...).
     if (intent.webPressed && c.special) { c.special(camFwd); onEvent({ type: 'special' }); return; }
     // Web shot (one cartridge each; empty, it just clicks).
-    if (intent.webPressed && c.webAmmo < 1) { onEvent({ type: 'webEmpty' }); intent.webPressed = false; }
+    const webAtBoss = intent.webPressed && pickTarget(P(), camFwd, enemies.list, COMBAT.webRange)?.boss;
+    if (intent.webPressed && c.webAmmo < 1 && !webAtBoss) { onEvent({ type: 'webEmpty' }); intent.webPressed = false; }
     if (intent.webPressed) {
-      c.webAmmo--;
+      if (!webAtBoss) c.webAmmo--;
       const t2 = pickTarget(P(), camFwd, enemies.list, COMBAT.webRange);
       const from = { x: P().x, y: P().y + 0.5, z: P().z };
       if (t2) {
@@ -388,6 +389,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
         const v = wb.body.v;
         applyDv(wb.body, 'rope', (dx / l) * TUNE.throwSpeed - v.x, TUNE.throwLift - v.y, (dz / l) * TUNE.throwSpeed - v.z);
         wb.thrownT = 1.2;
+        wb.bowled = new Set();
         wb.onGround = false;
         word('THROWN!', wb);
         onEvent({ type: 'webThrow', e: wb });
@@ -414,9 +416,19 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (intent.finisher) c.finisherHoldT += dt; else {
       if (c.finisherHoldT > 0 && c.finisherHoldT < 0.45 && c.focus >= 1 && tgt && near.d < 3.2) {
         c.focus -= 1;
-        startMove('finisher');
-        c.iframes = Math.max(c.iframes, MOVES.finisher.time);
-        onEvent({ type: 'finisherStart', e: tgt, time: MOVES.finisher.time });
+        if (!grounded()) {
+          enemies.hit(tgt, { dmg: 999, dir: { x: near.x, z: near.z }, push: 10, lift: 5, from: P() });
+          const s = stopFor('finisher');
+          c.heroStop = Math.max(c.heroStop, s); c.heroStopAll = c.heroStop; enemies.freeze?.(tgt, s);
+          if (finisherSlowmo) slowmo(0.4);
+          word('FINISHER!', tgt, 'big');
+          onEvent({ type: 'finisher', e: tgt });
+        } else {
+          startMove('finisher');
+          c.iframes = Math.max(c.iframes, MOVES.finisher.time);
+          enemies.freeze?.(tgt, MOVES.finisher.impact);
+          onEvent({ type: 'finisherStart', e: tgt, time: MOVES.finisher.time });
+        }
       }
       c.finisherHoldT = 0;
     }
@@ -515,7 +527,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
 
   return {
     c, preStep, takeHit, timeScale, slowmo: (s) => slowmo(s),
-    revive() { c.hp = c.maxHp; c.defeated = false; c.state = 'free'; c.combo = 0; c.iframes = 1.5; c.move = null; },
+    revive() { c.hp = c.maxHp; c.defeated = false; c.state = 'free'; c.combo = 0; c.iframes = 1.5; c.move = null; c.webAmmo = TUNE.webCap; },
     // Down at once whatever the iframes (a poison clock running out), with the usual defeat event.
     knockOut() { if (c.defeated) return; c.hp = 0; c.defeated = true; slowmo(1.2); onEvent({ type: 'heroDefeated' }); },
     get inCombat() { return enemies.engaged.length > 0; },

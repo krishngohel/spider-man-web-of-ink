@@ -186,3 +186,16 @@ describe('finisher', () => {
     expect(s.hc.c.move?.key).toBe('finisher');
   });
 });
+
+describe('finisher review fixes', () => {
+  it('a finisher that misses gives its focus back, and nothing chains out of it', () => {
+    const s = setup();
+    s.hc.c.focus = 1;
+    s.frame({ finisher: true });
+    s.frame({ finisher: false });
+    s.e.body.p.z = 12; // he is gone by the blow
+    for (let i = 0; i < 140; i++) s.frame({ attackPressed: i === 80 });
+    expect(s.hc.c.focus).toBeCloseTo(1, 5);
+    expect(s.hc.c.move === null || s.hc.c.move.key === 'finisher').toBe(true);
+  });
+});

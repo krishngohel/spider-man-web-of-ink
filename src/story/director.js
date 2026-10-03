@@ -170,8 +170,8 @@ export function createDirector(g) {
       // A retry starts at the phase the last attempt reached (spec 1.10): the boss begins with the
       // health that phase began at, and its own rules step it into that phase.
       if (phaseMark && phaseMark.step === step.id && phaseMark.phase > 1 && retries > 0) {
-        const e = boss.actor.e;
-        e.hp = Math.max(1, e.maxHp * (phaseMark.frac - 0.005));
+        if (boss.setPhase) boss.setPhase(phaseMark.phase);
+        else { const e = boss.actor.e; e.hp = Math.max(1, e.maxHp * (phaseMark.frac - 0.005)); }
         word(`PHASE ${phaseMark.phase}`, boss.actor.body.p, 'big');
       } else { phaseMark = { step: step.id, phase: 1, frac: 1 }; g.bossIntro?.(); }
     }

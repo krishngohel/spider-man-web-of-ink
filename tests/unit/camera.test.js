@@ -60,17 +60,18 @@ describe('camera rig', () => {
     for (let i = 0; i < 300; i++) rig.update(1 / 60, still, hero, null);
     expect(rig.yaw).toBeCloseTo(1, 5);
   });
-  it('on a wall it turns to face the wall from the open side', () => {
+  it('on a wall it tips the view up the wall and leaves the yaw to the player', () => {
     const w = createWorld();
     w.addBox({ min: [10, 0, -20], max: [30, 80, 20] });
     w.build();
     const rig = createCameraRig();
-    rig.yaw = -1.2;
+    rig.yaw = 1.2; rig.pitch = 0.3;
     const hero = heroAt(9.6, 20, 0, 0, 0, 0, 'wall');
     hero.wall = { nx: -1, nz: 0 };
     for (let i = 0; i < 120; i++) rig.update(1 / 60, still, hero, w);
-    expect(rig.fwd.x).toBeGreaterThan(0.85); // looking +x, into the wall
-    expect(rig.pos.x).toBeLessThan(9.6);     // from the open side
+    expect(rig.pitch).toBeLessThan(-0.1);     // looking a little up the wall
+    expect(rig.yaw).toBeCloseTo(1.2, 5);      // wall jumps leave along the player's aim
+    expect(rig.pos.x).toBeLessThan(9.6);      // never inside the wall
   });
   it('switches to the left shoulder when a wall blocks the right', () => {
     const w = createWorld();
@@ -114,7 +115,7 @@ describe('traversal camera (overhaul C2 to C6)', () => {
     const rig = createCameraRig();
     const hero = heroAt(0, 40, 0, 0, 0, 20, 'air');
     rig.sinceLook = 5;
-    rig.update(1 / 60, { dx: 0.3, dy: 0.2 }, hero, open());
+    rig.update(1 / 60, { dx: 0.2, dy: 0.1 }, hero, open());
     expect(rig.sinceLook).toBeGreaterThan(5);
     rig.update(1 / 60, { dx: 6, dy: 0 }, hero, open());
     expect(rig.sinceLook).toBe(0);
