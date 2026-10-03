@@ -569,6 +569,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const gpuTimes = new Float32Array(4000);
   let frameIdx = 0, frame = 0, fps = 60, last = performance.now(), time = 0;
   const events = [];
+  const eventLog = []; // event types for the test hook __game.events()
 
   const NO_LOOK = { dx: 0, dy: 0 };
   // Per-section frame cost (max over a window), read by scripts/fps-check.mjs.
@@ -817,6 +818,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (saveT > 20) { saveT = 0; save.playTime += 20; persist(); }
       districtCheck();
       for (const e of events) { sfx.event(e); hud.onEvent(e); worldEvent(e); }
+      for (const e of events) { eventLog.push(e.type); if (eventLog.length > 200) eventLog.shift(); }
       interpolate();
       rig.update(dt, locked() || input.device === 'pad' ? input.look : NO_LOOK, view, world, settings);
       hud.setLockHint(!locked() && input.device !== 'pad');
@@ -1156,7 +1158,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     profile: () => ({ ...profMax }),
     resetProfile() { for (const k in profMax) delete profMax[k]; },
     resetTimes() { frameTimes.fill(0); workTimes.fill(0); gpuTimes.fill(-1); frameIdx = 0; },
-    events: () => events.map((e) => e.type),
+    // Test hook: the event types since the last call (a rolling log, so an event in a frame between
+    // two polls is not lost; it used to return only the last frame's).
+    events: () => { const out = eventLog.splice(0); return out; },
     city, spawn, tune,
     dynRes: () => ({ scale: dynRes.scale, refresh: dynRes.refreshHz }),
     gpuMs: () => ink.gpuMs,
