@@ -91,6 +91,8 @@ export function createBossActor(ctx, opts) {
     e.A = { ...A, reach, ranged, unblockable };
     a.state('windup');
     combat.emit({ type: 'enemyWindup', e, at: t, ranged, unblockable });
+    // The anticipation pose (spec 1.10): every boss attack winds up visibly.
+    a.pose('windup', { kind: pose, t });
   };
   a.attacking = () => e.state === 'windup' || e.state === 'strike' || e.state === 'recover';
   a.meleeHit = (reach, arc, dmg, push = 6, unblockable = false) => {
