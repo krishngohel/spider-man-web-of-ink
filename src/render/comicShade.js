@@ -11,13 +11,13 @@ import { toonGradient } from './toon.js';
 // The light of the hour, shared by every material: how bright the world is (so a dark night still
 // reads in three tones instead of falling wholly into shadow) and the colour of the light (warm at
 // golden hour, blue at night). Set once a frame by the game; each material adds these uniforms.
-// uPattern: 1 prints hatching and dots on surfaces, 0 turns them off (the low quality preset).
+// uInkPattern: 1 prints hatching and dots on surfaces, 0 turns them off (the low quality preset).
 // uShadowVol / uShadowBox: the city's shadow colour volume (render/shadowVolume.js); until the
 // city is built it is one texel of the base violet.
 const baseVol = new THREE.Data3DTexture(new Uint8Array([143, 128, 173, 255]), 1, 1, 1);
 baseVol.needsUpdate = true;
 export const SHADE_UNIFORMS = {
-  uLightLevel: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) }, uPattern: { value: 1 },
+  uLightLevel: { value: 1 }, uTint: { value: new THREE.Color(1, 1, 1) }, uInkPattern: { value: 1 },
   uShadowVol: { value: baseVol }, uShadowBox: { value: new THREE.Vector4(-1000, -1000, 2000, 2000) }, uShadowTop: { value: 260 },
 };
 export function setShadowVolume(vol) {
@@ -33,7 +33,7 @@ export function setShadowVolume(vol) {
 export const addShadeUniforms = (shader) => Object.assign(shader.uniforms, SHADE_UNIFORMS);
 
 export const COMIC_SHADE = /* glsl */ `
-uniform float uLightLevel, uPattern, uShadowTop;
+uniform float uLightLevel, uInkPattern, uShadowTop;
 uniform vec3 uTint;
 uniform highp sampler3D uShadowVol;
 uniform vec4 uShadowBox;
@@ -79,7 +79,7 @@ vec3 comicPattern(vec3 c) {
   float pw = max(length(fwidth(uv)), 1e-4);
   float lv = log2(pw * 7.0), l0 = floor(lv), k = lv - l0;
   float s0 = exp2(l0), s1 = s0 * 2.0;
-  float fade = (1.0 - smoothstep(0.16, 0.4, pw)) * uPattern;
+  float fade = (1.0 - smoothstep(0.16, 0.4, pw)) * uInkPattern;
   if (fade <= 0.0) return c;
   const vec3 INK = vec3(0.006, 0.005, 0.012);
   if (gShadow > 0.02) {
@@ -135,7 +135,7 @@ ${COMIC_SHADE}`)
       .replace('#include <opaque_fragment>', 'outgoingLight = comicPattern(comicShade(diffuseColor.rgb, outgoingLight));' + String.fromCharCode(10) + '#include <opaque_fragment>')
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  const key = 'comic-toon-v4' + (hooks ? `-${hooks.key ?? (hooks.vertexBegin ?? '').length + (hooks.fragmentColor ?? '').length}` : '');
+  const key = 'comic-toon-v5' + (hooks ? `-${hooks.key ?? (hooks.vertexBegin ?? '').length + (hooks.fragmentColor ?? '').length}` : '');
   mat.customProgramCacheKey = () => key;
   return mat;
 }

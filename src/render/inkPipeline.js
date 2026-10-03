@@ -292,7 +292,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
   }
 
   function setComic(c) {
-    SHADE_UNIFORMS.uPattern.value = c.hatch;
+    SHADE_UNIFORMS.uInkPattern.value = c.hatch;
     uniforms.uWobble.value = c.wobble; uniforms.uHatch.value = c.hatch; uniforms.uMidDots.value = c.midDots;
     uniforms.uSkyDots.value = c.skyDots; uniforms.uColorEdges.value = c.colorEdges; uniforms.uMisreg.value = c.misreg;
     uniforms.uPaletteAmt.value = c.palette; uniforms.uPaperTex.value = c.paper;
