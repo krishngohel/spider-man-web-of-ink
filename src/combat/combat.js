@@ -34,8 +34,8 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   let encounter = null, encounterCooldown = 25;
   let authority = null; // multiplayer: only the host runs the world
   let occupation = null; // a faction holding the whole city (Sable in Act 4)
-  let onScreen = null;
-  let quiet = null;     // () => true while the city should stay calm (act cards, comic pages)   // (e) => is this enemy in view (off-screen guns wind up longer)
+  let onScreen = null;  // (e) => is this enemy in view (off-screen guns wind up longer)
+  let quiet = null;     // () => true while the city should stay calm (act cards, comic pages)
   // Windups in flight (thugs and bosses alike): the spider-sense turns red for the last 120 ms.
   const winding = new Map();
 

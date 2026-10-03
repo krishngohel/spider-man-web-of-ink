@@ -10,7 +10,7 @@ import { SPEAKERS } from '../story/steps.js';
 
 const esc = (t) => String(t).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
-export function createStoryUi(root, { getSettings, onSound = () => {} }) {
+export function createStoryUi(root, { getSettings, onSound = () => {}, canAdvanceRadio = null }) {
   // Comic ----------------------------------------------------------------------------------------
   const page = el('div', { class: 'cpage' });
   const comic = el('div', { class: 'comic hidden' }, [page, el('div', { class: 'chelp' }, COPY.story.comicHelp)]);
@@ -51,7 +51,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
   comic.addEventListener('mousedown', (e) => { e.stopPropagation(); if (e.button === 0) advance(); });
   window.addEventListener('keydown', (e) => {
     // Radio: Enter shows the whole line, then the next one (spec F4).
-    if (!resolver && line && (e.code === 'Enter' || e.code === 'NumpadEnter')) { e.preventDefault(); e.stopPropagation(); advanceRadio(); return; }
+    if (!resolver && line && !e.repeat && (e.code === 'Enter' || e.code === 'NumpadEnter') && (canAdvanceRadio?.() ?? true)) { e.preventDefault(); advanceRadio(); return; }
     if (!resolver) return;
     if (e.code === 'Escape') { e.preventDefault(); e.stopPropagation(); finishComic(); return; }
     if (['Space', 'Enter', 'KeyE', 'NumpadEnter'].includes(e.code)) { e.preventDefault(); e.stopPropagation(); advance(); }

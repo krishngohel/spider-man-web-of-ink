@@ -266,7 +266,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onNights: () => { if (storyOn) { director.stop(); storyOn = false; } storyEnv = { hour: 23, weather: 'clear' }; enterPlay(); content.startNights(); },
   });
   const slots = createSlots(uiRoot, { onPick: (slot, fresh) => enterStory(slot, fresh), onBack: () => menus.showTitle() });
-  const storyUi = createStoryUi(uiRoot, { getSettings: () => settings, onSound: (k) => sfx.event({ type: k }) });
+  const storyUi = createStoryUi(uiRoot, { getSettings: () => settings, onSound: (k) => sfx.event({ type: k }), canAdvanceRadio: () => mode === 'play' && !session?.active });
   combat.setQuiet(() => storyUi.comicOpen || storyUi.cardOpen);
   let padRadioWas = false;
   // Characters (spec 13): the roster unlocks in solo free roam after the story; ?roster opens it.
@@ -817,7 +817,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       hud.setTipQuiet(storyUi.tipsShown || storyUi.talking);
       // The pad's D-pad down moves the radio on (spec F4).
       {
-        const pad = input.device === 'pad' ? [...(navigator.getGamepads?.() ?? [])].find((q) => q && q.connected) : null;
+        const pad = [...(navigator.getGamepads?.() ?? [])].find((q) => q && q.connected) ?? null;
         const down = !!pad?.buttons[13]?.pressed;
         if (down && !padRadioWas && storyUi.talking) storyUi.advanceRadio();
         padRadioWas = down;
@@ -996,7 +996,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     // A boss fight opens with letterbox bars and a push-in; a boss going down gets a beat of slow
     // motion (spec 1.10).
     bossIntro: () => { hud.letterbox(1.6); rig.cinematic(1.3); },
-    faceToward: (p) => rig.faceYaw(Math.atan2(p.x - hero.body.p.x, p.z - hero.body.p.z)),
+    faceToward: (p) => {
+      const dx = p.x - hero.body.p.x, dz = p.z - hero.body.p.z;
+      const flyingFast = hero.state !== 'ground' && hero.state !== 'wall' && Math.hypot(hero.body.v.x, hero.body.v.z) > 10;
+      if (Math.hypot(dx, dz) > 10 && !flyingFast) rig.faceYaw(Math.atan2(dx, dz));
+    },
     bossDown: () => combat.heroCombat.slowmo(0.8),
     focusSun: (x, z) => { sun.target.position.set(x, 0, z); sun.position.copy(sun.target.position).addScaledVector(sunDir, 400); sun.target.updateMatrixWorld(); },
     aspect: () => innerWidth / innerHeight,
@@ -1106,14 +1110,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }),
     camera: () => ({ yaw: rig.yaw, pitch: rig.pitch, pos: { ...rig.pos }, fwd: { ...rig.fwd }, fov: rig.fov }),
     teleport: placeHeroAt,
-    setLook(yaw, pitch) { rig.yaw = yaw; rig.pitch = pitch; rig.sinceLook = 0; rig.sinceAim = 0; },
+    setLook(yaw, pitch) { rig.yaw = yaw; rig.pitch = pitch; rig.sinceLook = 0; rig.sinceAim = 0; rig.turnTo = null; },
     // Turns the camera so the crosshair sits on a world point (for scripted play).
     aimAt(x, y, z) {
       traceSkip = 3; // the probe ignores the camera snap a scripted aim makes
       interpolate();
       for (let i = 0; i < 4; i++) {
         const dx = x - rig.pos.x, dy = y - rig.pos.y, dz = z - rig.pos.z, l = Math.hypot(dx, dy, dz) || 1;
-        rig.yaw = Math.atan2(dx, dz); rig.pitch = -Math.asin(dy / l); rig.sinceLook = 0; rig.sinceAim = 0;
+        rig.yaw = Math.atan2(dx, dz); rig.pitch = -Math.asin(dy / l); rig.sinceLook = 0; rig.sinceAim = 0; rig.turnTo = null;
         rig.update(0, NO_LOOK, view, world, settings);
       }
       return findAimPoint(world, hero.body, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });

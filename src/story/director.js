@@ -31,6 +31,7 @@ export function createDirector(g) {
   let boss = null;      // the boss module of a boss or chase step
   // The phase a boss fight had reached and the health it began at, so a retry resumes there.
   let phaseMark = null;
+  let markerOn = false; // the step shows a beacon (hidden only while the hero stands at it)
   let blocking = false; // comic pages up: play waits
   let retryT = -1, retries = 0;
   // Bumped whenever the story is stopped or jumped: a pending card, comic or radio from before
@@ -64,7 +65,7 @@ export function createDirector(g) {
     const step = runner.step;
     cur = null;
     if (gauntlet && !step) { finishGauntlet(); return; }
-    if (!step) { ui.objective(null); marker.show(null); g.setWaypoint(null); setEnv(null); return; }
+    if (!step) { ui.objective(null); markerOn = false; marker.show(null); g.setWaypoint(null); setEnv(null); return; }
     const site = step.site ? resolveSite(city, step.site) : null;
     cur = { step, site, t: 0, phase: 'run', wave: 0, waveT: 0 };
     // Whose story this is: Miles in his missions, Peter everywhere else.
@@ -82,7 +83,8 @@ export function createDirector(g) {
     if (step.tutorial && !fightish) ui.tips(step.tutorial);
     cur.tips = fightish ? step.tutorial ?? null : null;
     // A beacon on every place to go (spec F2); hidden once the hero is there.
-    marker.show(['start', 'reach'].includes(step.type) ? site : null);
+    markerOn = ['start', 'reach'].includes(step.type) && !!site;
+    marker.show(markerOn ? site : null);
     // The camera turns toward where the step happens (spec F3).
     if (site && step.type !== 'radio' && step.type !== 'broadcast' && step.type !== 'title' && step.type !== 'panels' && step.type !== 'credits') g.faceToward?.(site);
     g.setWaypoint(site && ['start', 'reach', 'fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type) ? { x: site.x, z: site.z, story: true } : null);
@@ -105,7 +107,7 @@ export function createDirector(g) {
     if (!step || step.id !== id) return;
     if (step.type === 'fight' || step.type === 'defend' || step.type === 'stealth') g.reward('storyStep');
     // A mission won: a breather, back to full health (spec F3).
-    if (['fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type)) { const c = combat.heroCombat.c; c.hp = c.maxHp; }
+    if (['fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type) && !gauntlet) combat.heroCombat.revive();
     if (step.type === 'stealth' && !cur?.alarm) { g.reward('storyStep'); ui.stamp(COPY.story.ghost); }
     dropGenerator();
     if (step.type === 'boss' && !gauntlet) g.reward('bossDefeated');
@@ -212,7 +214,7 @@ export function createDirector(g) {
     combat.clear();
     props.clear();
     const s = cur?.site;
-    if (s) { g.placeHero(s.x + (s.ground ? 0 : 0), s.y + 0.2, s.z + (s.ground ? 8 : 0)); g.faceToward?.(s); }
+    if (s) g.placeHero(s.x + (s.ground ? 0 : 0), s.y + 0.2, s.z + (s.ground ? 8 : 0));
     combat.heroCombat.revive();
     g.fade(false);
     begin();
@@ -220,7 +222,7 @@ export function createDirector(g) {
 
   function update(dt) {
     marker.update(dt);
-    if (marker.group.visible) marker.group.visible = Math.hypot(hero.body.p.x - marker.group.position.x, hero.body.p.z - marker.group.position.z) > 7;
+    if (markerOn) marker.group.visible = Math.hypot(hero.body.p.x - marker.group.position.x, hero.body.p.z - marker.group.position.z) > 7;
     fx.update(dt);
     ui.update(dt);
     if (retryT >= 0) { retryStep(dt); return; }
@@ -390,7 +392,7 @@ export function createDirector(g) {
     get marker() { const s = runner.step; return s && s.type === 'start' && cur?.site ? { x: cur.site.x, z: cur.site.z } : null; },
     // From the save's step, or from a given step (chapter select, ?at=).
     start(at = null) { if (!started) { started = true; retries = 0; runner = createStoryRunner(STEPS, save.story); if (at) runner.jump(at); begin(); } },
-    stop() { g.setOccupation?.(null); if (gauntlet) { gauntlet = null; ui.timer(null); runner = createStoryRunner(STEPS, save.story); } epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
+    stop() { g.setOccupation?.(null); if (gauntlet) { gauntlet = null; ui.timer(null); runner = createStoryRunner(STEPS, save.story); } epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); markerOn = false; marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
     update(dt) { if (gauntlet && retryT < 0) { gauntlet.t += dt; ui.timer('GAUNTLET', gauntlet.t); } update(dt); },
     get gauntlet() { return gauntlet ? { t: gauntlet.t, step: runner.step?.id ?? null, index: runner.index } : null; },
     startGauntlet(from = 0) {

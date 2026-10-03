@@ -393,5 +393,5 @@ body.cb .bfill { background: linear-gradient(#5ab0ff, #1f4fb6); }
 .letterbox i:last-child { bottom: 0; }
 .letterbox.on i { height: 11vh; }
 .objective.pulse { animation: objpulse 0.9s ease-out; }
-@keyframes objpulse { 0% { transform: scale(1.12); box-shadow: 0 0 0 6px #f7e36a; } 100% { transform: scale(1); box-shadow: 0 0 0 0 transparent; } }
+@keyframes objpulse { 0% { transform: rotate(0.8deg) scale(1.12); box-shadow: 4px 4px 0 var(--ink), 0 0 0 6px #f7e36a; } 100% { transform: rotate(0.8deg) scale(1); box-shadow: 4px 4px 0 var(--ink), 0 0 0 0 transparent; } }
 .tip.quiet { opacity: 0; transition: opacity 0.2s; }
