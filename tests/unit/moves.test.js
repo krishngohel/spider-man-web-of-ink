@@ -48,3 +48,10 @@ describe('moves', () => {
     }
   });
 });
+
+describe('moves: a target below', () => {
+  it('from a roof over him, an attack web strikes down onto him', () => {
+    expect(chooseMove({ d: 1, dy: -9, step: 0, grounded: true }).key).toBe('strike');
+    expect(chooseMove({ d: 1, dy: -1, step: 0, grounded: true }).key).toBe('jab');
+  });
+});

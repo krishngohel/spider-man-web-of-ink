@@ -33,6 +33,8 @@ export function chooseMove({ d, dy = 0, step = 0, airStep = 0, grounded = true, 
   if (d > TUNE.strikeBand) return null;
   if (webbed && d <= TUNE.lungeBand) return { key: 'throw', lunge: d > TUNE.closeBand };
   if (d > TUNE.lungeBand) return { key: 'strike', lunge: false };
+  // A target well below (the hero on a roof or a ledge over him): a web strike down onto him.
+  if (dy < -3 && Math.hypot(d, dy) < TUNE.strikeBand) return { key: 'strike', lunge: false };
   if (!grounded || dy > TUNE.airBand) return { key: AIR[airStep % AIR.length], lunge: d > TUNE.closeBand };
   if (holdT >= TUNE.launchHold) return { key: 'launcher', lunge: d > TUNE.closeBand };
   return { key: STRING[step % STRING.length], lunge: d > TUNE.closeBand };
