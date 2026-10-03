@@ -105,3 +105,52 @@ export function createSky(scene, radius = 1900) {
     follow(camera, time = 0) { mesh.position.copy(camera.position); uniforms.uTime.value = time; },
   };
 }
+
+// The layered skyline (spec G8): three rings of flat building silhouettes past the city, in
+// colours stepping from the haze toward the horizon sky, so the far distance reads as layers of
+// printed city instead of an empty band. Drawn with the sky (no depth, so the real city always
+// draws over them and the ink pass treats them as sky), following the camera across the ground.
+export function createSkyline(scene, skyUniforms, fogColor) {
+  const group = new THREE.Group();
+  const rings = [[1500, 150, 0.15], [1650, 210, 0.45], [1800, 280, 0.75]];
+  rings.forEach(([r, h, k], i) => {
+    const geo = new THREE.CylinderGeometry(r, r, h, 160, 1, true);
+    geo.translate(0, h / 2, 0);
+    const mat = new THREE.ShaderMaterial({
+      side: THREE.BackSide, depthWrite: false, transparent: false, fog: false,
+      uniforms: { uFog: { value: fogColor }, uHorizon: skyUniforms.uHorizon, uMid: skyUniforms.uMid, uK: { value: k }, uSeed: { value: i * 17.3 }, uH: { value: h } },
+      vertexShader: /* glsl */ `
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+      fragmentShader: /* glsl */ `
+        uniform vec3 uFog, uHorizon, uMid;
+        uniform float uK, uSeed, uH;
+        varying vec2 vUv;
+        ${AUX_DECL}
+        float hsh(float x) { return fract(sin(x * 12.9898 + uSeed) * 43758.5453); }
+        void main() {
+          // Blocky towers: a height per column, now and then a tall one with a spire.
+          float cols = 260.0, c = floor(vUv.x * cols), f = fract(vUv.x * cols);
+          float t = hsh(c);
+          float hgt = 0.18 + 0.55 * t * t + step(0.93, hsh(c + 0.5)) * 0.3;
+          hgt += step(0.97, hsh(c + 0.25)) * step(abs(f - 0.5), 0.06) * 0.25;
+          float y = vUv.y;
+          if (y > hgt) discard;
+          vec3 col = mix(uFog, mix(uHorizon, uMid, 0.3), uK) * (0.82 + 0.1 * uK);
+          // An inked roofline, a couple of pixels thick.
+          float fw = fwidth(y);
+          col = mix(col, col * 0.55, 1.0 - smoothstep(fw * 1.5, fw * 3.0, hgt - y));
+          gl_FragColor = vec4(col, 1.0);
+          ${AUX_WRITE_FLAT}
+          #include <colorspace_fragment>
+        }`,
+    });
+    const m = new THREE.Mesh(geo, mat);
+    m.renderOrder = -9;
+    m.frustumCulled = false;
+    m.layers.set(LAYER_FX);
+    group.add(m);
+  });
+  scene.add(group);
+  return { group, follow(camera) { group.position.set(camera.position.x, 0, camera.position.z); } };
+}

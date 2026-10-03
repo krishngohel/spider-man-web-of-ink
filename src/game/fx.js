@@ -77,6 +77,20 @@ export function createFx(scene) {
     warns.push({ ring, fill, t: 0, all: 1, on: false });
   }
   let warnNext = 0;
+  // Comic dot bursts on a heavy hit (spec G9): a ring of fat dots flying out and shrinking.
+  const BURST_N = 12;
+  const bursts = [];
+  const dotTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.beginPath(); g.arc(16, 16, 14, 0, Math.PI * 2); g.fill(); g.strokeStyle = '#12101c'; g.lineWidth = 3; g.stroke(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
+  for (let i = 0; i < 3; i++) {
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(BURST_N * 3), 3));
+    const mat = new THREE.PointsMaterial({ map: dotTex, color: 0xffe14d, size: 0.5, transparent: true, depthWrite: false, alphaTest: 0.3 });
+    const pts = new THREE.Points(geo, mat);
+    pts.visible = false; pts.frustumCulled = false; pts.renderOrder = 4;
+    scene.add(pts);
+    bursts.push({ pts, t: 1, x: 0, y: 0, z: 0 });
+  }
+  let burstNext = 0;
   const n = new THREE.Vector3(), z = new THREE.Vector3(0, 0, 1);
 
   return {
@@ -102,6 +116,11 @@ export function createFx(scene) {
       r.t = 0; r.strength = strength;
       r.mesh.visible = true;
     },
+    burst(x, y, z2) {
+      const b = bursts[burstNext];
+      burstNext = (burstNext + 1) % bursts.length;
+      b.x = x; b.y = y; b.z = z2; b.t = 0; b.pts.visible = true;
+    },
     warn(x, y, z2, r, t) {
       const w = warns[warnNext];
       warnNext = (warnNext + 1) % warns.length;
@@ -111,6 +130,19 @@ export function createFx(scene) {
       w.ring.visible = w.fill.visible = true;
     },
     update(dt) {
+      for (const b of bursts) {
+        if (!b.pts.visible) continue;
+        b.t += dt / 0.32;
+        const k = 1 - (1 - Math.min(1, b.t)) ** 2, r = 0.4 + 1.6 * k;
+        const pos = b.pts.geometry.attributes.position;
+        for (let i = 0; i < BURST_N; i++) {
+          const a = (i / BURST_N) * Math.PI * 2;
+          pos.setXYZ(i, b.x + Math.cos(a) * r, b.y + Math.sin(a) * r * 0.8, b.z + Math.sin(a * 2.0) * 0.2);
+        }
+        pos.needsUpdate = true;
+        b.pts.material.size = 0.55 * (1 - Math.min(1, b.t)) + 0.05;
+        if (b.t >= 1) b.pts.visible = false;
+      }
       for (const w of warns) {
         if (!w.on) continue;
         w.t += dt;

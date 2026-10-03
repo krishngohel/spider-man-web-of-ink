@@ -15,7 +15,7 @@ import { createWorld } from '../physics/world.js';
 import { findAimPoint, findZipPoint, findAnchor } from '../physics/anchors.js';
 import { buildCity } from '../world/city.js';
 import { buildCityMeshes, setNight } from '../world/cityMesh.js';
-import { createSky } from '../world/sky.js';
+import { createSky, createSkyline } from '../world/sky.js';
 import { env as envAt, createClock, PRESETS, WEATHERS } from '../world/timeWeather.js';
 import { createRain } from '../world/rain.js';
 import { createCityLife } from '../world/cityLife.js';
@@ -92,6 +92,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   camera.layers.enable(LAYER_FX);
   const sky = createSky(scene);
   ink.setFog(fogState, sky.uniforms);
+  const skyline = createSkyline(scene, sky.uniforms, fogState.color);
   const hemi = new THREE.HemisphereLight(PALETTE.skyMid, 0xb8a58c, 1.25);
   scene.add(hemi);
   const sun = new THREE.DirectionalLight(PALETTE.sun, 1.9);
@@ -595,6 +596,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         // (enders, launchers, spikes) a one-frame impact panel.
         if (settings.cameraShake) rig.shake = Math.max(rig.shake, e.heavy ? 0.45 : 0.18);
         rig.fov += TUNE.fovPunch * (e.heavy ? 1.6 : 1);
+        if (e.heavy && e.e) fx.burst(e.e.body.p.x, e.e.body.p.y + 0.6, e.e.body.p.z);
         if (e.heavy && (e.stop ?? 0) >= 0.08 && settings.impactFrames !== 'off') {
           const s = screenOf(e.e.body.p.x, e.e.body.p.y, e.e.body.p.z);
           if (!impactLong) { ink.setImpact(1, true, s.x / innerWidth, 1 - s.y / innerHeight); clearTimeout(impactTimer); impactTimer = setTimeout(() => ink.setImpact(0), 50); }
@@ -908,6 +910,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (d < 20) { if (!waypoint.story) waypoint = null; hud.waypoint(false); } else hud.waypoint(true, (wpV.x * 0.5 + 0.5) * innerWidth, (-wpV.y * 0.5 + 0.5) * innerHeight, d, behind);
     } else hud.waypoint(false);
     sky.follow(camera, time);
+    // The print slips further out of register at speed (off with impact frames off).
+    ink.uniforms.uSpeedK.value = settings.impactFrames === 'off' ? 0 : Math.min(1, Math.max(0, (hero.speed - 30) / 30));
+    skyline.follow(camera);
     applyEnv(mode === 'play' ? dt : 0);
     // Mysterio's smoke: a green cast over the ink and a slow tilt of the camera (visual only).
     if (illusionK > 0 && !shadeFreeze) SHADE_UNIFORMS.uTint.value.lerp(C4.setRGB(0.62, 1.05, 0.7), 0.4 * illusionK);

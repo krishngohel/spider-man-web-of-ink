@@ -22,6 +22,7 @@ uniform vec2 uImpactCenter;
 uniform vec3 uPalette[6];
 uniform vec3 uInk, uPaper, uAccent;
 uniform float uDebugAux;
+uniform float uSpeedK;   // 0 to 1 with the hero's speed: the print slips further out of register
 // Fog (spec G3): applied after the ink, coloured by the sky toward each pixel.
 uniform vec3 uFogColor, uSkyHorizon, uSkyMid, uSkyTop, uCamPos;
 uniform float uFogNear, uFogFar;
@@ -120,7 +121,7 @@ void main() {
   // How deep in shadow the material says this pixel is (its alpha; see render/comicShade.js).
   float shadowK = raw0.a >= 0.5 ? clamp((1.0 - raw0.a) / 0.45, 0.0, 1.0) : 0.0;
   if (uMisreg > 0.0) {
-    vec2 o = uTexel * 1.1 * uMisreg;
+    vec2 o = uTexel * 1.1 * uMisreg * (1.0 + 2.5 * uSpeedK);
     col.r = mix(col.r, texture2D(tColor, vUv + vec2(o.x, o.y * 0.5)).r, 0.6);
     col.b = mix(col.b, texture2D(tColor, vUv - vec2(o.x, o.y * 0.5)).b, 0.6);
   }
@@ -258,7 +259,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     uFilter: { value: 0 },
     uWobble: { value: 0 }, uHatch: { value: 0 }, uMidDots: { value: 0 }, uSkyDots: { value: 0 },
     uColorEdges: { value: 0 }, uMisreg: { value: 0 }, uPaletteAmt: { value: 0 }, uPaperTex: { value: 0 },
-    uDebugAux: { value: 0 },
+    uDebugAux: { value: 0 }, uSpeedK: { value: 0 },
     uFogColor: { value: new THREE.Color(PALETTE.haze) }, uFogNear: { value: 320 }, uFogFar: { value: 1800 },
     uSkyHorizon: { value: new THREE.Color(PALETTE.skyHorizon) }, uSkyMid: { value: new THREE.Color(PALETTE.skyMid) }, uSkyTop: { value: new THREE.Color(PALETTE.skyTop) },
     uCamPos: { value: new THREE.Vector3() }, uInvProj: { value: new THREE.Matrix4() }, uCamMatrix: { value: new THREE.Matrix4() },
