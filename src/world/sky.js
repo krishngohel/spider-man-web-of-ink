@@ -132,8 +132,9 @@ export function createSkyline(scene, skyUniforms, fogColor) {
           // Blocky towers: a height per column, now and then a tall one with a spire.
           float cols = 260.0, c = floor(vUv.x * cols), f = fract(vUv.x * cols);
           float t = hsh(c);
-          float hgt = 0.18 + 0.55 * t * t + step(0.93, hsh(c + 0.5)) * 0.3;
-          hgt += step(0.97, hsh(c + 0.25)) * step(abs(f - 0.5), 0.06) * 0.25;
+          float hgt = 0.18 + 0.5 * t * t + step(0.93, hsh(c + 0.5)) * 0.22;
+          hgt += step(0.97, hsh(c + 0.25)) * step(abs(f - 0.5), 0.06) * 0.06;
+          hgt = min(hgt, 0.97);
           float y = vUv.y;
           if (y > hgt) discard;
           vec3 col = mix(uFog, mix(uHorizon, uMid, 0.3), uK) * (0.82 + 0.1 * uK);

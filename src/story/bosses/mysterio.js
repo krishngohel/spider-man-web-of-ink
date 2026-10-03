@@ -86,6 +86,7 @@ export function createMysterio(ctx) {
     // A projection: see-through, on the giant's own outfit material (one per model, so the comic
     // shading stays; a cloned material would lose its shader hooks).
     if (g.outfitMat) { g.outfitMat.transparent = true; g.outfitMat.opacity = 0.82; g.outfitMat.needsUpdate = true; }
+    for (const h of g.hulls ?? []) h.visible = false; // a projection has no drawn outline
     scene.add(g.root);
     const poser = ctx.createPoser(g);
     return { g, poser, puppet: { body: { p: { x: g.root.position.x, y: 0.9 * 8, z: g.root.position.z }, v: { x: 0, y: 0, z: 0 } }, state: 'ground', facing: { x: 0, z: 1 }, swing: { active: false, rope: { pivots: [] } }, rope: { active: false, pivots: [] }, wall: { nx: 0, nz: 1 }, speed: 0 }, events: [] };

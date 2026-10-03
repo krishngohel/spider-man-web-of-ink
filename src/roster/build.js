@@ -53,10 +53,10 @@ function buildOutfitModel(assets, def, female) {
     o.frustumCulled = false;
     if (!isFace) hulls.push(o);
   });
-  for (const o of hulls) addHullOutline(o); // the drawn outline (spec G6)
+  const hullMeshes = hulls.map((o) => addHullOutline(o)); // the drawn outline (spec G6)
   const bone = (n) => model.getObjectByName(n);
   return {
-    root, orient, model, suitMat: null, outfitMat: mat,
+    root, orient, model, suitMat: null, outfitMat: mat, hulls: hullMeshes,
     animator: createAnimator(model, assets.clips),
     bones: { handR: bone('hand_r'), handL: bone('hand_l'), head: bone('Head') },
   };

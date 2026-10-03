@@ -81,7 +81,7 @@ export function createFx(scene) {
   const BURST_N = 12;
   const bursts = [];
   const dotTex = (() => { const c = document.createElement('canvas'); c.width = c.height = 32; const g = c.getContext('2d'); g.fillStyle = '#fff'; g.beginPath(); g.arc(16, 16, 14, 0, Math.PI * 2); g.fill(); g.strokeStyle = '#12101c'; g.lineWidth = 3; g.stroke(); const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t; })();
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < 6; i++) {
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(BURST_N * 3), 3));
     const mat = new THREE.PointsMaterial({ map: dotTex, color: 0xffe14d, size: 0.5, transparent: true, depthWrite: false, alphaTest: 0.3 });

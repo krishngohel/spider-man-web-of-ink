@@ -72,7 +72,15 @@ float gAuxFlags = 0.0;
 #ifdef AUX_COMMON
 {
   float auxId = gAuxId >= 0.0 ? gAuxId : vAuxId;
-  float auxFlags = vAuxFlag > 0.5 ? 1.0 : gAuxFlags;
+  // Characters: 1.0 when they wear a drawn outline (AUX_HULLED, set by addHullOutline: the ink pass
+  // draws no creases on them), 0.92 otherwise (street enemies keep their crease lines).
+  float auxFlags = gAuxFlags;
+  if (vAuxFlag > 0.5) {
+    auxFlags = 0.92;
+    #ifdef AUX_HULLED
+    auxFlags = 1.0;
+    #endif
+  }
   #ifdef OPAQUE
     #ifdef AUX_NORMAL
     gAux = vec4(auxOct(normalize(normal)), auxId, auxFlags);

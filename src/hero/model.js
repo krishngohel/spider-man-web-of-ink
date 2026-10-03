@@ -326,10 +326,10 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
     if (o.name !== 'Eyes' && o.name !== 'Eyebrows') hulls.push(o);
   });
   // The drawn outline (spec G6), added after the traversal so the hulls are not visited.
-  for (const o of hulls) addHullOutline(o);
+  const hullMeshes = hulls.map((o) => addHullOutline(o));
   const bone = (n) => model.getObjectByName(n);
   return {
-    root, orient, model, suitMat,
+    root, orient, model, suitMat, hulls: hullMeshes,
     animator: createAnimator(model, assets.clips),
     bones: {
       upperarmR: bone('upperarm_r'), lowerarmR: bone('lowerarm_r'), handR: bone('hand_r'),

@@ -225,8 +225,9 @@ vec3 facade(vec3 base, float style, float seed) {
   float ex = (u - u0 - pil) / bayW - bx0;
   // A big shape: it fades further out than the fine detail (about 70 m, not 25 m).
   float escK = 1.0 - smoothstep(0.08, 0.35, pw);
-  if (escapeStyle && u1 - u0 > 12.0 && escK > 0.05 && ex > 0.0 && ex < 2.0 && id.y >= 0.0) {
-    const vec3 IRON = vec3(0.1, 0.09, 0.11);
+  float escFill = 0.0;
+  const vec3 IRON = vec3(0.1, 0.09, 0.11);
+  if (escapeStyle && nBays >= 3.0 && u1 - u0 > 12.0 && escK > 0.05 && ex > 0.0 && ex < 2.0 && id.y >= 0.0) {
     float fy = fp.y;
     float landing = 1.0 - step(0.38, fy);
     float rail = max(hline(fy, 1.1, pw, 1.8), hline(fy, 0.75, pw, 1.0) * 0.7);
@@ -236,8 +237,7 @@ vec3 facade(vec3 base, float style, float seed) {
     // The stair: a band between two inked stringers, climbing to the next landing.
     float sd = fy - sx * floorH;
     float stair = max(hline(sd, 0.0, pw, 2.2), hline(sd, 0.45, pw, 1.4)) * step(0.38, fy);
-    col = mix(col, IRON, landing * 0.92 * escK);
-    col = mix(col, IRON * 1.4, step(0.0, sd) * step(sd, 0.45) * step(0.38, fy) * 0.85 * escK);
+    escFill = max(landing * 0.92, step(0.0, sd) * step(sd, 0.45) * step(0.38, fy) * 0.85) * escK;
     gInk = max(gInk, max(max(rail, bars), stair) * escK);
     gInk = max(gInk, hline(fy, 0.38, pw, 1.6) * escK);
   }
@@ -263,7 +263,9 @@ vec3 facade(vec3 base, float style, float seed) {
     // Sill under each window.
     if (fp.y < lo.y && fp.y > lo.y - 0.22 && fp.x > lo.x - 0.1 && fp.x < hi.x + 0.1) col = mix(col, uStone, 0.75);
   }
-  gInk = max(gInk, frame(fp, lo, hi, pw, 1.3) * lineK);
+  // The fire escape hangs in front of windows and wall alike.
+  col = mix(col, IRON * 1.2, escFill);
+  gInk = max(gInk, frame(fp, lo, hi, pw, 1.3) * lineK * (1.0 - escFill));
   // A floor ledge line every floor for masonry.
   if (style < 1.5) gInk = max(gInk, hline(fp.y, 0.0, pw, 1.0) * lineK * 0.7);
   // Far away, the window grid is finer than a pixel: blend it to its average.
@@ -305,7 +307,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v8';
+  mat.customProgramCacheKey = () => 'city-building-v9';
   return mat;
 }
 

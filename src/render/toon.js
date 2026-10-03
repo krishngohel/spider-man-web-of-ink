@@ -79,7 +79,8 @@ export function bakeSmoothNormals(geo) {
   return geo;
 }
 
-// The screen size every hull is measured in (set by the ink pass on resize).
+// The screen size every hull is measured in, in CSS pixels (set by the ink pass on resize), so
+// a 3 px line is 3 px on a Retina screen too.
 export const HULL_UNIFORMS = { uHullRes: { value: new THREE.Vector2(1920, 1080) } };
 
 // Inverted-hull ink outline (spec G6, as Hi-Fi Rush draws its characters): the back faces pushed
@@ -88,7 +89,12 @@ export const HULL_UNIFORMS = { uHullRes: { value: new THREE.Vector2(1920, 1080) 
 // Skinned, so its aux texel is flagged as a character and the ink pass draws no creases there.
 export function addHullOutline(mesh, { px = 3, far = 1.2, color = PALETTE.ink } = {}) {
   bakeSmoothNormals(mesh.geometry);
+  // The body it outlines tells the ink pass it is outlined (no creases drawn on it).
+  for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {
+    if (!m.defines?.AUX_HULLED) { m.defines = { ...(m.defines ?? {}), AUX_HULLED: '' }; m.needsUpdate = true; }
+  }
   const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
+  mat.defines = { AUX_HULLED: '' };
   const skinned = mesh.isSkinnedMesh;
   mat.userData.hull = { uHullPx: { value: px }, uHullFar: { value: far } };
   mat.onBeforeCompile = (shader) => {
@@ -97,6 +103,7 @@ export function addHullOutline(mesh, { px = 3, far = 1.2, color = PALETTE.ink } 
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = smoothNormal;\n#ifdef USE_TANGENT\nvec3 objectTangent = vec3( tangent.xyz );\n#endif')
       .replace('#include <project_vertex>', `#include <project_vertex>
   {
+    if (-mvPosition.z < 0.4) gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // camera inside: drop it
     vec3 hn = normalize(normalMatrix * objectNormal);
     vec2 dir = (projectionMatrix * vec4(hn, 0.0)).xy;
     float dl = length(dir);
@@ -113,7 +120,7 @@ export function addHullOutline(mesh, { px = 3, far = 1.2, color = PALETTE.ink } 
   hull.layers.set(LAYER_FX);
   hull.frustumCulled = false;
   hull.castShadow = false;
-  hull.renderOrder = -1;
+  hull.renderOrder = 1;
   mesh.add(hull);
   return hull;
 }

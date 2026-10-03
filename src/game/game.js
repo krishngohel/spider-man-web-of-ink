@@ -989,7 +989,15 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     bossDown: () => combat.heroCombat.slowmo(0.8),
     focusSun: (x, z) => { sun.target.position.set(x, 0, z); sun.position.copy(sun.target.position).addScaledVector(sunDir, 400); sun.target.updateMatrixWorld(); },
     aspect: () => innerWidth / innerHeight,
-    snapshot: (cam) => { ink.render(scene, cam, time); return renderer.domElement.toDataURL('image/jpeg', 0.86); },
+    snapshot: (cam) => {
+      // The sky and the skyline rings follow the shot's camera; no speed slip in a panel.
+      const sk = ink.uniforms.uSpeedK.value;
+      sky.follow(cam, time); skyline.follow(cam); ink.uniforms.uSpeedK.value = 0;
+      ink.render(scene, cam, time);
+      const url = renderer.domElement.toDataURL('image/jpeg', 0.86);
+      sky.follow(camera, time); skyline.follow(camera); ink.uniforms.uSpeedK.value = sk;
+      return url;
+    },
     character: () => character.id,
     setCharacter: (id) => switchCharacter(id),
     setSuit: (id) => progress.setSuitOverride?.(id),
