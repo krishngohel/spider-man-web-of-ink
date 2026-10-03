@@ -43,7 +43,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
 
   function preStep(intent, dt) {
     const p = hero.body.p;
-    heroCombat.preStep(intent, dt, { groundBelow: world.groundHeight(p.x, p.y, p.z), groundAt: (x, z) => world.groundHeight(x, p.y + 0.5, z), g: G[getSettings().gravity] ?? G.comic });
+    heroCombat.preStep(intent, dt, { groundBelow: world.groundHeight(p.x, p.y, p.z), groundAt: (x, z) => world.groundHeight(x, p.y + 0.5, z), g: G[getSettings().gravity] ?? G.comic, finisherSlowmo: getSettings().finisherSlowmo });
     if (intent.gadgetPressed) gadgets.use(intent.camFwd);
   }
 

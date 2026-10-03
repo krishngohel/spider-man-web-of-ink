@@ -19,6 +19,8 @@ export const MOVES = {
   air3: { clips: ['Scissor_Kick', 'Kick_Round'], alt: 'Melee_Hook', time: TUNE.airHitTime, impact: 0.11, push: 1.4, lift: 0, dmg: 1.1, stop: 'light', air: true, kick: true },
   spike: { clips: ['Hurricane_Kick', 'Kick_Flying'], alt: 'Melee_Hook', time: 0.4, impact: 0.15, push: 3, lift: -16, dmg: 1.6, stop: 'ender', air: true, kick: true, knock: true },
   strike: { clips: ['Flying_Kick', 'Kick_Flying'], alt: 'Melee_Hook', time: 0.9, impact: 0.85, push: 8, lift: 3, dmg: 1.6, stop: 'ender', kick: true, travel: true },
+  // The finisher (spec 1.9): one second, the hero untouchable, it cannot be cancelled.
+  finisher: { clips: ['Kip_Kick', 'Kick_Spin'], alt: 'Melee_Hook', time: 1.0, impact: 0.55, push: 10, lift: 5, dmg: 1, stop: 'finisher', kick: true, knock: true, finisher: true },
   throw: { clips: ['Shoulder_Throw', 'Pull_Rope'], alt: 'Melee_Hook', time: 0.5, impact: 0.25, push: 14, lift: 4, dmg: 1.2, stop: 'ender', knock: true },
 };
 const STRING = ['jab', 'cross', 'round', 'ender'];

@@ -49,6 +49,15 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   const heroYaw = () => Math.atan2(hero.facing.x, hero.facing.z);
   let G = 19.62;
   let groundAt = null, groundHere = 0;
+  let finisherSlowmo = true;
+
+  // Why a move did not work (spec 1.7), at most once every 6 s per hint.
+  const hintAt = new Map();
+  function hint(text) {
+    if (c.clock - (hintAt.get(text) ?? -99) < 6) return;
+    hintAt.set(text, c.clock);
+    onEvent({ type: 'hint', text });
+  }
 
   function slowmo(s, kind = 'plain') { if (s > c.slowT) { c.slowT = s; c.slowKind = kind; } }
   function face(yaw) {
@@ -60,7 +69,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   function landHit(e, { dmg, push, lift, kind = 'melee', heavy = false, stop = 'light' }) {
     const u = toward(e);
     const r = enemies.hit(e, { dmg: dmg * c.dmgMul, dir: { x: u.x, z: u.z }, push, lift, kind, from: P() });
-    if (r.blocked) { word('CLANG!', e); onEvent({ type: 'blocked' }); return r; }
+    if (r.blocked) { word('CLANG!', e); onEvent({ type: 'blocked' }); if (e.arch === 'shield') hint('SHIELD UP: FLIP OVER HIM OR YANK IT AWAY'); return r; }
     c.combo++; c.comboT = 0;
     c.focus = Math.min(3, c.focus + COMBAT.focusPerHit * c.focusMul);
     // The last one down: a longer freeze and a beat of slow motion.
@@ -141,6 +150,15 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     const dmg = (COMBAT.punch + Math.min(8, c.combo * COMBAT.comboBonus)) * M.dmg * (m.key === 'strike' ? c.strikeMul : 1);
     let lift = M.lift;
     if (m.key === 'launcher') lift = COMBAT.uppercutLift;
+    if (M.finisher) {
+      enemies.hit(tgt, { dmg: 999, dir: { x: toward(tgt).x, z: toward(tgt).z }, push: M.push, lift: M.lift, from: P() });
+      const s = stopFor('finisher');
+      c.heroStop = Math.max(c.heroStop, s); c.heroStopAll = c.heroStop; enemies.freeze?.(tgt, s);
+      if (finisherSlowmo) slowmo(0.4);
+      word('FINISHER!', tgt, 'big');
+      onEvent({ type: 'finisher', e: tgt });
+      return;
+    }
     const r = landHit(tgt, { dmg, push: M.push, lift, kind: M.kick ? 'kick' : 'melee', heavy: !!M.knock || m.key === 'launcher', stop: M.stop });
     if (r.blocked) return;
     // Air Juggler (a skill raising airLift) keeps them up longer.
@@ -255,6 +273,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     const close = engaged.some((e) => toward(e).d < 15 || (e.state === 'windup' && toward(e).d < 45));
     if (intent.divePressed && close && (hero.state === 'ground' || hero.state === 'air')) buffer.press('dodge', c.clock);
     groundAt = ctx.groundAt ?? null;
+    finisherSlowmo = ctx.finisherSlowmo !== false;
     groundHere = ctx.groundBelow;
     if (intent.attack) c.attackHeldT += live; else c.attackHeldT = 0;
     if (intent.web) c.webHeldT += live; else c.webHeldT = 0;
@@ -266,7 +285,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
 
     // The dodge cancels anything but a finisher (PUB).
-    if (fight && c.state !== 'dodge' && buffer.take('dodge', c.clock)) { startDodge(intent, engaged); return; }
+    if (fight && c.state !== 'dodge' && !c.move?.M.finisher && buffer.take('dodge', c.clock)) { startDodge(intent, engaged); return; }
 
     // Moves in progress -------------------------------------------------------------------------
     if (c.state === 'move') { runMove(intent, live); return; }
@@ -299,6 +318,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (c.attackHeldT >= TUNE.launchHold && grounded() && tgt && near.d < 2.8 && !tgt.boss && !tgt.A?.heavy) {
       c.attackHeldT = -99; buffer.clear(); startMove('launcher'); return;
     }
+    if (c.attackHeldT >= TUNE.launchHold && tgt?.A?.heavy && !tgt.boss && near.d < 2.8) { c.attackHeldT = -99; hint('TOO HEAVY TO LAUNCH: WEB HIM, THEN HIT'); }
+    if (intent.attackPressed && tgt?.A?.flies && grounded() && near.dy > 2.5) hint('HE IS UP THERE: WEB STRIKE UP TO HIM');
     // A silent takedown on a guard who has not seen you.
     if (intent.attackPressed && enemies.takedownTarget) {
       const td = enemies.takedownTarget(hero);
@@ -393,12 +414,9 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (intent.finisher) c.finisherHoldT += dt; else {
       if (c.finisherHoldT > 0 && c.finisherHoldT < 0.45 && c.focus >= 1 && tgt && near.d < 3.2) {
         c.focus -= 1;
-        enemies.hit(tgt, { dmg: 999, dir: { x: near.x, z: near.z }, push: 10, lift: 5, from: P() });
-        const s = stopFor('finisher');
-        c.heroStop = Math.max(c.heroStop, s); c.heroStopAll = c.heroStop; enemies.freeze?.(tgt, s);
-        slowmo(0.45);
-        word('FINISHER!', tgt, 'big');
-        onEvent({ type: 'finisher', e: tgt });
+        startMove('finisher');
+        c.iframes = Math.max(c.iframes, MOVES.finisher.time);
+        onEvent({ type: 'finisherStart', e: tgt, time: MOVES.finisher.time });
       }
       c.finisherHoldT = 0;
     }

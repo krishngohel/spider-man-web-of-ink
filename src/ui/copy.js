@@ -151,6 +151,7 @@ export const COPY = {
     textSizeValues: { normal: 'NORMAL', large: 'LARGE', huge: 'HUGE' },
     colorblind: ['Colour-blind safe colours', 'Crosshair and prompts in blue and amber'],
     slowMo: ['Slow-motion assist', 'The whole game runs at three quarters speed'],
+    finisherSlowmo: ['Finisher slow motion', 'A beat of slow motion when a finisher lands'],
     fov: ['Field of view'],
     speedLines: ['Speed lines'],
     soundWords: ['Sound words', 'THWIP! and friends, in comic lettering.'],

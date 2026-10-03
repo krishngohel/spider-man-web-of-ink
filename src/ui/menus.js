@@ -88,6 +88,7 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       choice(C.textSize[0], C.textSize[1], ['normal', 'large', 'huge'], 'textSize', C.textSizeValues),
       toggle(C.colorblind[0], 'colorblind', C.colorblind[1]),
       toggle(C.slowMo[0], 'slowMo', C.slowMo[1]),
+      toggle(C.finisherSlowmo[0], 'finisherSlowmo', C.finisherSlowmo[1]),
       slider(C.fov[0], 50, 80, 1, () => getSettings().fov, (v) => update({ fov: v })),
       toggle(C.speedLines[0], 'speedLines'),
       toggle(C.soundWords[0], 'soundWords', C.soundWords[1]),

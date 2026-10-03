@@ -59,6 +59,9 @@ export function createCameraRig() {
     kick: 0,           // metres the camera is pulled in by a web attach (decays)
     level: 0,          // seconds left of easing back toward level after an attach
     state: 'ground',
+    push: 0, pushT: 0, pushAll: 1,
+    // A finisher or a takedown: push in by up to a third for `t` seconds, easing in and out.
+    cinematic(t) { rig.pushT = t; rig.pushAll = t; },
     // A web just attached: a small dolly kick, and level out unless the player is steering.
     onAttach() { rig.kick = CAM.attachKick; if (rig.sinceLook > 0.3) rig.level = 0.4; },
     focus: { x: 0, y: 0, z: 0 },
@@ -99,6 +102,7 @@ export function createCameraRig() {
         if (!moved) rig.pitch += (CAM.attachLevel - rig.pitch) * Math.min(1, dt * 4);
       }
       rig.kick = Math.max(0, rig.kick - dt * CAM.attachKick / 0.4);
+      if (rig.pushT > 0) { rig.pushT -= dt; const u = 1 - Math.max(0, rig.pushT) / rig.pushAll; rig.push = Math.sin(Math.PI * u); } else rig.push = 0;
       if (hero.state === 'wall' && hero.wall && rig.sinceLook > 0.3) {
         // On a wall: swing round to face the wall from the open side, looking slightly up it.
         const want = Math.atan2(-hero.wall.nx, -hero.wall.nz);
@@ -134,6 +138,8 @@ export function createCameraRig() {
       }
       // Looking steeply up to aim a web: pull in, so the hero stays big at the bottom of the frame.
       c.dist *= 1 - 0.4 * smooth((-rig.pitch - 0.35) / 0.7);
+      c.dist *= 1 - 0.33 * rig.push;
+      c.fov -= 5 * rig.push;
       rig.lastDt = dt;
       rig.vel.x = v.x; rig.vel.y = v.y; rig.vel.z = v.z;
       const kd = 1 - Math.exp(-dt * 3);

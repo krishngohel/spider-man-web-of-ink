@@ -610,6 +610,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       }
       case 'slam': fx.ring(e.at.x, e.at.y - 0.9, e.at.z, 2.2); if (settings.cameraShake) rig.shake = 0.8; break;
       case 'enemyOut': combatHud.ko(e.e); break;
+      case 'hint': hud.caption(e.text, 2.4); break;
+      case 'finisherStart': rig.cinematic(e.time); break;
+      case 'takedown': rig.cinematic(0.8); break;
       case 'enemyPinned': { const p = e.e.body.p; fx.splat(p.x, p.y, p.z, e.e.pin.nx, 0, e.e.pin.nz); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('PINNED!', s.x, s.y - 40); break; }
       case 'encounterStart': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; } break;
       case 'encounterDone': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangBusted); if (waypoint?.auto) waypoint = null; } break;

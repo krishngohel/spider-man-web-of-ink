@@ -173,3 +173,16 @@ describe('webs as crowd control', () => {
     expect(s.e.thrownT).toBeGreaterThan(0);
   });
 });
+
+describe('finisher', () => {
+  it('a one-second move the hero cannot be hit in, and a dodge cannot cancel', () => {
+    const s = setup();
+    s.hc.c.focus = 1;
+    s.frame({ finisher: true });
+    s.frame({ finisher: false });
+    expect(s.hc.c.move?.key).toBe('finisher');
+    expect(s.hc.c.iframes).toBeGreaterThan(0.9);
+    s.frame({ divePressed: true });
+    expect(s.hc.c.move?.key).toBe('finisher');
+  });
+});
