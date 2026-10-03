@@ -551,6 +551,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const fightView = { pts: [], spread: 0, threat: null };
   const view = {
     body: { p: renderP, get v() { return hero.body.v; } }, get state() { return hero.state; },
+    get wall() { return hero.state === 'wall' ? hero.wall : null; }, // the wall camera (it never ran without this)
     get fight() {
       const p = hero.body.p;
       const near = combat.enemies.engaged.map((e) => ({ e, d: Math.hypot(e.body.p.x - p.x, e.body.p.z - p.z) })).filter((q) => q.d < 14).sort((a, b) => a.d - b.d).slice(0, 3);
@@ -697,7 +698,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   function worldEvent(e) {
     const p = hero.body.p;
     switch (e.type) {
-      case 'attach': fx.splat(e.x, e.y, e.z, e.nx, e.ny, e.nz); break;
+      case 'attach': fx.splat(e.x, e.y, e.z, e.nx, e.ny, e.nz); rig.onAttach(); break;
       case 'release': case 'perfect': case 'swingJump': fx.letGo(); break;
       case 'thwip': {
         // THWIP! now and then, by the hand (every shot would be noise).

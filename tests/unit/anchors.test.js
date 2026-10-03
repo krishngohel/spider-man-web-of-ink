@@ -84,3 +84,26 @@ describe('findAnchor', () => {
     expect(left.x).toBeGreaterThan(0);
   });
 });
+
+import { findAimPoint } from '../../src/physics/anchors.js';
+describe('aimed web (crosshair first, then wider and upward)', () => {
+  const hero = createBody({ x: 0, y: 10, z: 0 });
+  const cam = (fy = 0) => ({ x: 0, y: 11, z: -5, fx: 0, fy, fz: Math.sqrt(1 - fy * fy) });
+  it('takes the exact crosshair point when it is on a wall', () => {
+    const w = createWorld(); w.addBox({ min: [-20, 0, 20], max: [20, 60, 30] }); w.build();
+    const h = findAimPoint(w, hero, cam());
+    expect(h.z).toBeCloseTo(20, 3);
+    expect(h.y).toBeCloseTo(11, 3);
+  });
+  it('a level aim still finds the building ahead and above', () => {
+    const w = createWorld(); w.addBox({ min: [-20, 18, 25], max: [20, 80, 35] }); w.build();
+    const h = findAimPoint(w, hero, cam());
+    expect(h).toBeTruthy();
+    expect(h.y).toBeGreaterThan(17.9);
+    expect(h.z).toBeGreaterThan(24.9); expect(h.z).toBeLessThan(35.1);
+  });
+  it('never webs something between the camera and the hero', () => {
+    const w = createWorld(); w.addBox({ min: [-20, 0, -3], max: [20, 40, -2] }); w.build();
+    expect(findAimPoint(w, hero, cam())).toBe(null);
+  });
+});

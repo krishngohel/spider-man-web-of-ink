@@ -153,14 +153,20 @@ export function findZipPoint(world, hero, cam) {
 }
 
 // Aimed web (spec 4.3): the web goes exactly where the crosshair points. The camera ray must hit a
-// building, tree or prop (not the street) within web range of the hero. A tiny cone (1.2 degrees)
-// forgives a pixel's miss on an edge; beyond that a miss is a miss.
+// building, tree or prop (not the street) within web range of the hero, in front of him. When the
+// crosshair is on nothing, it looks a little wider (a ring at 1.2 then 5 degrees), then upward (up
+// to 22 degrees above the crosshair, the lowest hit first), so a level aim still catches the
+// building ahead and above without craning the camera up (overhaul C1). The HUD preview uses this
+// same search, so it always shows where the web will really go.
 const AIM_RAY = { ground: false };
-const AIM_TOL = 1.2;
+const AIM_RINGS = [1.2, 5];
+const AIM_UP = [5, 10, 15, 22];
 function aimHit(world, hero, cam, fx, fy, fz) {
   const toHero = Math.hypot(cam.x - hero.p.x, cam.y - hero.p.y, cam.z - hero.p.z);
   const hit = world.raycast(cam.x, cam.y, cam.z, fx, fy, fz, tune.webMax + toHero + 2, AIM_RAY);
   if (!hit || !hit.box) return null;
+  // Never something between the camera and the hero.
+  if ((hit.x - hero.p.x) * fx + (hit.y - hero.p.y) * fy + (hit.z - hero.p.z) * fz < 0) return null;
   const d = Math.hypot(hit.x - hero.p.x, hit.y - (hero.p.y + 0.6), hit.z - hero.p.z);
   if (d > tune.webMax || d < 3) return null;
   hit.dist = d;
@@ -174,14 +180,20 @@ export function findAimPoint(world, hero, cam) {
   let rx = up[1] * f[2] - up[2] * f[1], ry = up[2] * f[0] - up[0] * f[2], rz = up[0] * f[1] - up[1] * f[0];
   const rl = Math.hypot(rx, ry, rz); rx /= rl; ry /= rl; rz /= rl;
   const ux = f[1] * rz - f[2] * ry, uy = f[2] * rx - f[0] * rz, uz = f[0] * ry - f[1] * rx;
-  const t = Math.tan(AIM_TOL * DEG);
-  for (let k = 0; k < 8; k++) {
-    const a = (k / 8) * Math.PI * 2;
-    let dx = f[0] + (rx * Math.cos(a) + ux * Math.sin(a)) * t;
-    let dy = f[1] + (ry * Math.cos(a) + uy * Math.sin(a)) * t;
-    let dz = f[2] + (rz * Math.cos(a) + uz * Math.sin(a)) * t;
-    const l = Math.hypot(dx, dy, dz); dx /= l; dy /= l; dz /= l;
-    const hit = aimHit(world, hero, cam, dx, dy, dz);
+  const along = (dx, dy, dz) => { const l = Math.hypot(dx, dy, dz); return aimHit(world, hero, cam, dx / l, dy / l, dz / l); };
+  for (const deg of AIM_RINGS) {
+    const t = Math.tan(deg * DEG);
+    for (let k = 0; k < 8; k++) {
+      const a = (k / 8) * Math.PI * 2;
+      const hit = along(f[0] + (rx * Math.cos(a) + ux * Math.sin(a)) * t, f[1] + (ry * Math.cos(a) + uy * Math.sin(a)) * t, f[2] + (rz * Math.cos(a) + uz * Math.sin(a)) * t);
+      if (hit) return hit;
+    }
+  }
+  // Upward, along the camera's own up (ux, uy, uz points up the screen).
+  const upSign = uy >= 0 ? 1 : -1;
+  for (const deg of AIM_UP) {
+    const t = Math.tan(deg * DEG) * upSign;
+    const hit = along(f[0] + ux * t, f[1] + uy * t, f[2] + uz * t);
     if (hit) return hit;
   }
   return null;

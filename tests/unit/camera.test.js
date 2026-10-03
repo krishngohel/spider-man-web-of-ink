@@ -99,3 +99,39 @@ describe('combat framing and the look stick', () => {
     expect(lookCurve(0.2)).toBeLessThan(0.1);
   });
 });
+
+describe('traversal camera (overhaul C2 to C6)', () => {
+  const open = () => { const w = createWorld(); w.addBox({ min: [-500, -1, -500], max: [500, 0, 500] }); w.build(); return w; };
+  it('in the air it never looks up past -0.6 rad and never sinks a metre under the hero', () => {
+    const rig = createCameraRig();
+    rig.pitch = -1.2;
+    const hero = heroAt(0, 40, 0, 0, 0, 20, 'swing');
+    for (let i = 0; i < 120; i++) rig.update(1 / 60, still, hero, open());
+    expect(rig.pitch).toBeGreaterThan(-0.62);
+    expect(rig.pos.y).toBeGreaterThan(40 + CAM.focusHeight - CAM.flyFloor - 0.01);
+  });
+  it('a hair of mouse jitter does not count as steering', () => {
+    const rig = createCameraRig();
+    const hero = heroAt(0, 40, 0, 0, 0, 20, 'air');
+    rig.sinceLook = 5;
+    rig.update(1 / 60, { dx: 0.3, dy: 0.2 }, hero, open());
+    expect(rig.sinceLook).toBeGreaterThan(5);
+    rig.update(1 / 60, { dx: 6, dy: 0 }, hero, open());
+    expect(rig.sinceLook).toBe(0);
+  });
+  it('the field of view only opens from 15 m/s', () => {
+    expect(speedCurves(14).fov).toBeCloseTo(60);
+    expect(speedCurves(35).fov).toBeGreaterThan(65);
+  });
+  it('a web attach kicks the camera in and the kick fades', () => {
+    const rig = createCameraRig();
+    rig.onAttach();
+    expect(rig.kick).toBeCloseTo(CAM.attachKick);
+    const hero = heroAt(0, 40, 0, 0, 0, 20, 'swing');
+    for (let i = 0; i < 40; i++) rig.update(1 / 60, still, hero, open());
+    expect(rig.kick).toBe(0);
+  });
+  it('the shoulder offset follows the state', () => {
+    expect(CAM.shoulderBy.swing).toBeLessThan(CAM.shoulderBy.ground);
+  });
+});
