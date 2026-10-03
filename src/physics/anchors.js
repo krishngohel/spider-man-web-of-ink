@@ -172,7 +172,9 @@ function aimHit(world, hero, cam, fx, fy, fz) {
   hit.dist = d;
   return hit;
 }
-export function findAimPoint(world, hero, cam) {
+// wide: false keeps the old tight 1.2 degree forgiveness only (the hang web, whose key is also the
+// yank: a missed yank must not haul the hero onto a roof).
+export function findAimPoint(world, hero, cam, { wide = true } = {}) {
   const direct = aimHit(world, hero, cam, cam.fx, cam.fy, cam.fz);
   if (direct) return direct;
   const f = [cam.fx, cam.fy, cam.fz];
@@ -181,7 +183,7 @@ export function findAimPoint(world, hero, cam) {
   const rl = Math.hypot(rx, ry, rz); rx /= rl; ry /= rl; rz /= rl;
   const ux = f[1] * rz - f[2] * ry, uy = f[2] * rx - f[0] * rz, uz = f[0] * ry - f[1] * rx;
   const along = (dx, dy, dz) => { const l = Math.hypot(dx, dy, dz); return aimHit(world, hero, cam, dx / l, dy / l, dz / l); };
-  for (const deg of AIM_RINGS) {
+  for (const deg of wide ? AIM_RINGS : [AIM_RINGS[0]]) {
     const t = Math.tan(deg * DEG);
     for (let k = 0; k < 8; k++) {
       const a = (k / 8) * Math.PI * 2;
@@ -189,6 +191,7 @@ export function findAimPoint(world, hero, cam) {
       if (hit) return hit;
     }
   }
+  if (!wide) return null;
   // Upward, along the camera's own up (ux, uy, uz points up the screen).
   const upSign = uy >= 0 ? 1 : -1;
   for (const deg of AIM_UP) {

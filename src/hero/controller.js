@@ -185,7 +185,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   // quiet: a miss says nothing (on the ground the same button is a parkour run).
   function shootWeb(intent, hang = false, quiet = false) {
     const cam = { x: intent.camPos.x, y: intent.camPos.y, z: intent.camPos.z, fx: intent.camFwd.x, fy: intent.camFwd.y, fz: intent.camFwd.z };
-    const hit = findAimPoint(world, body, cam);
+    const hit = findAimPoint(world, body, cam, { wide: !hang });
     if (!hit) { if (!quiet) emit('miss'); return false; }
     const t = tune.webTravel + hit.dist / tune.webSpeed;
     hero.pendingWeb = { anchor: hit, t, travel: t, hang };
