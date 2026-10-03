@@ -243,6 +243,7 @@ vec3 facade(vec3 base, float style, float seed) {
       .replace('#include <color_fragment>', `#include <color_fragment>
 {
   float style = floor(vStyle.x + 0.5), seed = floor(vStyle.y * 997.0 + 0.5) / 997.0;
+  gAuxId = seed; // each building its own id, for the ink pass's object edges
   vec3 base = diffuseColor.rgb;
   bool propStyle = (style > 8.5 && style < 16.5) || style > 17.5 && style < 18.5 || style > 19.5 && style < 20.5 || style > 24.5;
   if (vWNrm.y > 0.5 && !propStyle) {
@@ -269,7 +270,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v4';
+  mat.customProgramCacheKey = () => 'city-building-v5';
   return mat;
 }
 

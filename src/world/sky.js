@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AUX_DECL, AUX_WRITE_FLAT } from '../render/gbuffer.js';
 import { PALETTE } from '../render/palette.js';
 import { LAYER_FX } from '../render/layers.js';
 
@@ -36,6 +37,7 @@ export function createSky(scene, radius = 1900) {
       uniform vec3 uTop, uMid, uHorizon, uSun, uSunDir, uInk, uCloud, uCloudShade;
       uniform float uTime, uNight, uMoon, uCover;
       varying vec3 vDir;
+      ${AUX_DECL}
       float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
       float n2(vec2 p) {
         vec2 i = floor(p), f = fract(p);
@@ -89,6 +91,7 @@ export function createSky(scene, radius = 1900) {
           c = mix(c, uInk, edge * fade * 0.85);
         }
         gl_FragColor = vec4(c, 1.0);
+        ${AUX_WRITE_FLAT}
         #include <colorspace_fragment>
       }`,
   });

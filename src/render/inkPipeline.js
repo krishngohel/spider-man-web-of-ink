@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { PALETTE } from './palette.js';
 import { LAYER_FX } from './layers.js';
+import { installGbufferChunks } from './gbuffer.js';
 
 const vertexShader = /* glsl */ `
 varying vec2 vUv;
@@ -11,16 +12,25 @@ const fragmentShader = /* glsl */ `
 #include <packing>
 uniform sampler2D tColor;
 uniform sampler2D tDepth;
-uniform sampler2D tNormal;
+uniform sampler2D tAux;    // view normal (octahedral), object id, flags: see render/gbuffer.js
 uniform vec2 uTexel;
 uniform float uNear, uFar, uTime, uFlash, uHalftone, uHalftoneAmount;
 uniform float uWobble, uHatch, uMidDots, uSkyDots, uColorEdges, uMisreg, uPaletteAmt, uImpact, uImpactSoft, uPaperTex, uFilter;
 uniform vec2 uImpactCenter;
 uniform vec3 uPalette[6];
 uniform vec3 uInk, uPaper, uAccent;
+uniform float uDebugAux;
 varying vec2 vUv;
 
 float viewDepth(vec2 uv) { return -perspectiveDepthToViewZ(texture2D(tDepth, uv).x, uNear, uFar); }
+vec3 octDec(vec2 e) {
+  e = e * 2.0 - 1.0;
+  vec3 n = vec3(e, 1.0 - abs(e.x) - abs(e.y));
+  float t = max(-n.z, 0.0);
+  n.x += n.x >= 0.0 ? -t : t;
+  n.y += n.y >= 0.0 ? -t : t;
+  return normalize(n);
+}
 float luma(vec3 c) { return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
 float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
 float vnoise(vec2 p) {
@@ -49,44 +59,49 @@ vec3 snapPalette(vec3 c, float amount) {
 
 void main() {
   vec2 frag = gl_FragCoord.xy;
-  // Boiling line: sample positions drift a little and re-roll 8 times a second.
+  // Boiling line: sample positions drift a little and re-roll 12 times a second (on twos).
   vec2 uvE = vUv;
   if (uWobble > 0.0) {
-    vec2 bp = frag / 90.0 + floor(uTime * 8.0) * 17.13;
+    vec2 bp = frag / 90.0 + floor(uTime * 12.0) * 17.13;
     uvE += (vec2(vnoise(bp), vnoise(bp + 31.7)) - 0.5) * uTexel * 2.2 * uWobble;
   }
 
   // Depth edges from the Laplacian of inverse depth: 1/z is linear across any plane in screen
-  // space, so flat floors seen at grazing angles produce no false lines.
+  // space, so flat floors seen at grazing angles produce no false lines. Only the near side of an
+  // edge is inked (its neighbours are further away), so lines sit on the object, not in a halo
+  // round it. Line weight tapers with distance: about 2.5 px close, 1 px far.
   float dc = viewDepth(uvE);
   float ic = 1.0 / dc;
+  vec2 texel = uTexel * mix(1.7, 0.85, smoothstep(6.0, 60.0, dc));
   float lap = 0.0;
-  vec3 gxN = vec3(0.0), gyN = vec3(0.0);
-  // A wider kernel close to the camera gives near silhouettes a bolder brush line.
-  vec2 texel = uTexel * mix(1.6, 1.0, smoothstep(6.0, 28.0, dc));
-  for (int i = -1; i <= 1; i++) {
-    for (int j = -1; j <= 1; j++) {
-      vec2 uv = uvE + vec2(float(i), float(j)) * texel;
-      float kx = float(i) * (j == 0 ? 2.0 : 1.0);
-      float ky = float(j) * (i == 0 ? 2.0 : 1.0);
-      lap += 1.0 / viewDepth(uv);
-      vec3 n = texture2D(tNormal, uv).xyz * 2.0 - 1.0;
-      gxN += n * kx; gyN += n * ky;
-    }
-  }
+  for (int i = -1; i <= 1; i++)
+    for (int j = -1; j <= 1; j++) lap += 1.0 / viewDepth(uvE + vec2(float(i), float(j)) * texel);
   lap -= 9.0 * ic;
+  float depthEdge = smoothstep(0.12, 0.3, -lap / ic);
   // Brush weight: near silhouettes also test a ring twice as wide, so outlines swell.
-  float thick = 0.0;
   if (dc < 35.0) {
     vec2 t2 = texel * 2.0;
-    float m = max(max(abs(1.0 / viewDepth(uvE + vec2(t2.x, 0.0)) - ic), abs(1.0 / viewDepth(uvE - vec2(t2.x, 0.0)) - ic)),
-                  max(abs(1.0 / viewDepth(uvE + vec2(0.0, t2.y)) - ic), abs(1.0 / viewDepth(uvE - vec2(0.0, t2.y)) - ic)));
-    thick = smoothstep(0.25, 0.5, m / ic) * (1.0 - smoothstep(20.0, 35.0, dc));
+    float m = max(max(ic - 1.0 / viewDepth(uvE + vec2(t2.x, 0.0)), ic - 1.0 / viewDepth(uvE - vec2(t2.x, 0.0))),
+                  max(ic - 1.0 / viewDepth(uvE + vec2(0.0, t2.y)), ic - 1.0 / viewDepth(uvE - vec2(0.0, t2.y))));
+    depthEdge = max(depthEdge, smoothstep(0.25, 0.5, m / ic) * (1.0 - smoothstep(20.0, 35.0, dc)));
   }
-  float depthEdge = max(smoothstep(0.12, 0.3, abs(lap) / ic), thick);
-  // Creases are a thinner pen line.
-  float normalEdge = smoothstep(0.7, 1.3, length(gxN) + length(gyN)) * 0.8;
-  float edge = max(depthEdge, normalEdge) * (1.0 - smoothstep(70.0, 180.0, dc));
+  // Creases (a thinner pen line) and object edges (where two things touch at the same depth: a car
+  // on the road, a box on a roof) from the aux target, on a cross of four neighbours.
+  vec4 a0 = texture2D(tAux, uvE);
+  vec3 n0 = octDec(a0.xy);
+  float crease = 0.0, idEdge = 0.0;
+  vec2 offs[4];
+  offs[0] = vec2(texel.x, 0.0); offs[1] = vec2(-texel.x, 0.0); offs[2] = vec2(0.0, texel.y); offs[3] = vec2(0.0, -texel.y);
+  for (int k = 0; k < 4; k++) {
+    vec4 an = texture2D(tAux, uvE + offs[k]);
+    crease = max(crease, 1.0 - dot(n0, octDec(an.xy)));
+    float dn = viewDepth(uvE + offs[k]);
+    bool behind = dn > dc * 1.002 || (abs(dn - dc) <= dc * 0.002 && an.b < a0.b);
+    if (abs(an.b - a0.b) > 0.004 && behind && an.a < 0.9 && a0.a < 0.9) idEdge = 1.0;
+  }
+  float normalEdge = smoothstep(0.25, 0.5, crease) * 0.8;
+  idEdge *= 0.85 * (1.0 - smoothstep(40.0, 90.0, dc));
+  float edge = max(max(depthEdge, normalEdge), idEdge) * (1.0 - smoothstep(150.0, 400.0, dc));
 
   // Colour, with a hair of print misregistration.
   vec4 raw0 = texture2D(tColor, vUv);
@@ -201,33 +216,29 @@ void main() {
   vec4 raw = texture2D(tColor, vUv);
   if (raw.a < 0.5) col = raw.rgb * (1.0 - 0.36 * dot(v, v));
   gl_FragColor = vec4(col, 1.0);
+  if (uDebugAux > 0.5) gl_FragColor = vec4(texture2D(tAux, vUv).rgb, 1.0);
   #include <colorspace_fragment>
 }
 `;
 
-// The normal pass draws everything with one override material, so the usual grouping by each
-// object's own material buys nothing. Instead: one run per shader variant (plain, instanced,
-// skinned; switching variant makes three re-derive the program, ~40 us each), and front to back
-// inside each run so hidden surfaces fail the depth test early.
-const variantOf = (o) => (o.isSkinnedMesh ? 1 : 0) + (o.isInstancedMesh ? (o.instanceColor ? 4 : 2) : 0) + (o.isBatchedMesh ? 8 : 0);
-function normalPassSort(a, b) {
-  return (a.groupOrder - b.groupOrder) || (a.renderOrder - b.renderOrder)
-    || (variantOf(a.object) - variantOf(b.object)) || (a.z - b.z) || (a.id - b.id);
-}
 
 export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
   // Half-float targets need EXT_color_buffer_float; fall back to 8-bit where it's missing.
   const floatOK = renderer.extensions.has('EXT_color_buffer_float') || renderer.extensions.has('EXT_color_buffer_half_float');
   const type = floatOK ? THREE.HalfFloatType : THREE.UnsignedByteType;
-  const colorRT = new THREE.WebGLRenderTarget(1, 1, { type });
+  // One pass, two attachments: colour (with the shadow amount in alpha) and the aux texel.
+  installGbufferChunks();
+  const colorRT = new THREE.WebGLRenderTarget(1, 1, { type, count: 2 });
   colorRT.depthTexture = new THREE.DepthTexture(1, 1, THREE.FloatType);
-  const normalRT = new THREE.WebGLRenderTarget(1, 1, { type });
-  const normalMat = new THREE.MeshNormalMaterial({ side: THREE.DoubleSide });
+  const auxTex = colorRT.textures[1];
+  auxTex.type = THREE.UnsignedByteType;
+  auxTex.minFilter = auxTex.magFilter = THREE.NearestFilter;
+  auxTex.generateMipmaps = false;
 
   const uniforms = {
     tColor: { value: colorRT.texture },
     tDepth: { value: colorRT.depthTexture },
-    tNormal: { value: normalRT.texture },
+    tAux: { value: auxTex },
     uTexel: { value: new THREE.Vector2() },
     uNear: { value: 0.1 },
     uFar: { value: 1000 },
@@ -241,6 +252,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     uFilter: { value: 0 },
     uWobble: { value: 0 }, uHatch: { value: 0 }, uMidDots: { value: 0 }, uSkyDots: { value: 0 },
     uColorEdges: { value: 0 }, uMisreg: { value: 0 }, uPaletteAmt: { value: 0 }, uPaperTex: { value: 0 },
+    uDebugAux: { value: 0 },
     uImpact: { value: 0 }, uImpactSoft: { value: 0 }, uImpactCenter: { value: new THREE.Vector2(0.5, 0.5) },
     uPalette: { value: Array.from({ length: 6 }, () => new THREE.Color(0.5, 0.5, 0.5)) },
   };
@@ -258,7 +270,6 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     const w = Math.max(1, Math.floor(width * pr));
     const h = Math.max(1, Math.floor(height * pr));
     colorRT.setSize(w, h);
-    normalRT.setSize(Math.max(1, Math.floor(w * quality.normalScale)), Math.max(1, Math.floor(h * quality.normalScale)));
     uniforms.uTexel.value.set(1 / w, 1 / h).multiplyScalar(Math.max(1.35, pr * 1.05)); // ink line weight
     uniforms.uHalftone.value = 7 * pr;
   }
@@ -314,23 +325,6 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     if (!debug.cachedShadows) renderer.shadowMap.needsUpdate = true;
     renderer.setRenderTarget(colorRT);
     renderer.render(scene, camera);
-
-    camera.layers.set(0);
-    const { background, fog } = scene;
-    scene.background = null;
-    scene.fog = null;
-    scene.overrideMaterial = normalMat;
-    renderer.setRenderTarget(normalRT);
-    renderer.setOpaqueSort(normalPassSort);
-    // Nothing moved since the colour pass: skip the second scene-graph matrix walk.
-    const autoMatrices = scene.matrixWorldAutoUpdate;
-    scene.matrixWorldAutoUpdate = false;
-    if (!debug.skipNormals) renderer.render(scene, camera);
-    scene.matrixWorldAutoUpdate = autoMatrices;
-    renderer.setOpaqueSort(null);
-    scene.overrideMaterial = null;
-    scene.background = background;
-    scene.fog = fog;
 
     renderer.setRenderTarget(null);
     for (let k = 0; k < debug.repeat; k++) renderer.render(quadScene, quadCam);

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AUX_DECL, AUX_WRITE_FLAT } from '../render/gbuffer.js';
 import { createRng } from '../core/rng.js';
 import { LAND } from './city.js';
 import { comicToon } from '../render/comicShade.js';
@@ -174,7 +175,8 @@ export function createCityLife(scene, city, quality) {
   const birdMat = new THREE.ShaderMaterial({
     side: THREE.DoubleSide,
     vertexShader: `attribute float side; attribute float aFlap; void main() { vec3 p = position; p.y += abs(side) * sin(aFlap) * 0.2; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(p, 1.0); }`,
-    fragmentShader: `void main() { gl_FragColor = vec4(0.32, 0.33, 0.4, 1.0); }`,
+    fragmentShader: `${AUX_DECL}
+void main() { gl_FragColor = vec4(0.32, 0.33, 0.4, 1.0); ${AUX_WRITE_FLAT} }`,
   });
   const birds = new THREE.InstancedMesh(birdGeo, birdMat, BIRD_N);
   birds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

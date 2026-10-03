@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AUX_DECL, AUX_WRITE_NONE } from '../render/gbuffer.js';
 import { LAYER_FX } from '../render/layers.js';
 
 // Rain: inked streaks in a box that travels with the camera, falling and slanting with the wind.
@@ -40,7 +41,8 @@ export function createRain(scene, count = 2600) {
     fragmentShader: /* glsl */ `
       uniform vec3 uColor;
       varying float vA;
-      void main() { if (vA < 0.01) discard; gl_FragColor = vec4(uColor, 0.55 * vA); }`,
+      ${AUX_DECL}
+      void main() { if (vA < 0.01) discard; gl_FragColor = vec4(uColor, 0.55 * vA); ${AUX_WRITE_NONE} }`,
   });
   const lines = new THREE.LineSegments(geo, mat);
   lines.frustumCulled = false;

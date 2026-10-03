@@ -76,6 +76,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const renderer = createRenderer(canvas, quality);
   const basePixelRatio = () => pixelRatioCap(quality, navigator.userAgent, window.devicePixelRatio);
   const ink = createInkPipeline(renderer, quality, { gpuTime: params.has('gputime') });
+  if (params.has('aux')) ink.uniforms.uDebugAux.value = 1; // shows the aux target (normals, ids)
   if (params.has('inkrepeat')) ink.debug.repeat = Math.max(1, Math.min(16, Number(params.get('inkrepeat')) || 1));
   ink.setComic(quality.comic);
   const scene = new THREE.Scene();

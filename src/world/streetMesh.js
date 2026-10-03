@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { AUX_DECL, AUX_WRITE_FLAT, AUX_WRITE_NONE } from '../render/gbuffer.js';
 import { comicToon } from '../render/comicShade.js';
 import { PALETTE } from '../render/palette.js';
 
@@ -116,13 +117,15 @@ export function buildStreetMeshes(props, scene, quality) {
       uniforms: { uGlow: glow, uCol: { value: new THREE.Color(0xffd98a) } },
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
       vertexShader: `varying float vH; void main() { vH = position.y / 5.95; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `uniform float uGlow; uniform vec3 uCol; varying float vH; void main() { gl_FragColor = vec4(uCol * uGlow * 0.22 * (1.0 - vH * 0.85), 1.0); }`,
+      fragmentShader: `${AUX_DECL}
+uniform float uGlow; uniform vec3 uCol; varying float vH; void main() { gl_FragColor = vec4(uCol * uGlow * 0.22 * (1.0 - vH * 0.85), 1.0); ${AUX_WRITE_NONE} }`,
     });
     const cones = new THREE.InstancedMesh(cone, coneMat, props.lamps.length);
     const bulbMat = new THREE.ShaderMaterial({
       uniforms: { uGlow: glow },
       vertexShader: `void main() { gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
-      fragmentShader: `uniform float uGlow; void main() { gl_FragColor = vec4(mix(vec3(0.95, 0.92, 0.8), vec3(1.0, 0.9, 0.55) * 1.6, uGlow), 1.0); }`,
+      fragmentShader: `${AUX_DECL}
+uniform float uGlow; void main() { gl_FragColor = vec4(mix(vec3(0.95, 0.92, 0.8), vec3(1.0, 0.9, 0.55) * 1.6, uGlow), 1.0); ${AUX_WRITE_FLAT} }`,
     });
     const bulbGeo = new THREE.BoxGeometry(0.36, 0.08, 0.6); bulbGeo.translate(0, 5.94, 1.5);
     const bulbs = new THREE.InstancedMesh(bulbGeo, bulbMat, props.lamps.length);
