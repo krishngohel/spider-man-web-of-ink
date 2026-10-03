@@ -47,6 +47,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   const grounded = () => hero.state === 'ground';
   const heroYaw = () => Math.atan2(hero.facing.x, hero.facing.z);
   let G = 19.62;
+  let groundAt = null, groundHere = 0;
 
   function slowmo(s, kind = 'plain') { if (s > c.slowT) { c.slowT = s; c.slowKind = kind; } }
   function face(yaw) {
@@ -237,8 +238,11 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       // The next attack ends a perfect dodge's slow motion early.
       if (c.slowKind === 'perfect' && c.slowT > TUNE.perfectRamp) c.slowT = TUNE.perfectRamp;
     }
-    const close = engaged.some((e) => toward(e).d < 15);
+    // A dodge needs a fight nearby, or an attack on its way (a shot or a dive from far off).
+    const close = engaged.some((e) => toward(e).d < 15 || (e.state === 'windup' && toward(e).d < 45));
     if (intent.divePressed && close && (hero.state === 'ground' || hero.state === 'air')) buffer.press('dodge', c.clock);
+    groundAt = ctx.groundAt ?? null;
+    groundHere = ctx.groundBelow;
     if (intent.attack) c.attackHeldT += live; else c.attackHeldT = 0;
     if (intent.web) c.webHeldT += live; else c.webHeldT = 0;
     if (!fight) c.faceYaw = null;
@@ -390,8 +394,18 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (m > 0.2) { dx = intent.moveX / m; dz = intent.moveZ / m; } else if (Math.random() < 0.5) { dx = -dx; dz = -dz; }
     // A move in progress is dropped (every move but a finisher cancels into a dodge).
     c.move = null; c.airKeepT = 0;
-    const v = V(), sp = TUNE.dodgeDist / TUNE.dodgeTime;
     const air = !grounded();
+    // Never flip off a roof: a landing spot more than 2 m down turns the dodge the other way,
+    // and with drops on both sides it is a short hop instead.
+    let dist = TUNE.dodgeDist;
+    if (!air && groundAt) {
+      const drop = (x, z) => groundHere - groundAt(P().x + x * TUNE.dodgeDist, P().z + z * TUNE.dodgeDist) > 2;
+      if (drop(dx, dz)) {
+        if (!drop(-dx, -dz)) { dx = -dx; dz = -dz; }
+        else dist = 1.2;
+      }
+    }
+    const v = V(), sp = dist / TUNE.dodgeTime;
     if (air) applyDv(hero.body, 'rope', dx * sp - v.x, Math.max(0, 2 - v.y), dz * sp - v.z);
     else {
       // A flip or vault: off the ground for the whole dodge.

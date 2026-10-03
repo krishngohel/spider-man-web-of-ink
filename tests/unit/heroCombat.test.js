@@ -139,3 +139,18 @@ describe('review fixes', () => {
     expect(cancelled).toBe(4);
   });
 });
+
+describe('dodging on a roof', () => {
+  it('turns away from a drop instead of flipping off the edge', () => {
+    const hero = { body: createBody({ x: 0, y: 20.9, z: 0 }), state: 'ground', facing: { x: 0, z: 1 }, swing: { active: false, release() {} }, airTime: 0 };
+    const e = { id: 1, alive: true, alerted: true, state: 'engage', arch: 'brawler', A: ARCHETYPES.brawler, body: createBody({ x: 0, y: 20.9, z: 1.5 }), t: 0, strikeAt: 0, hp: 50, maxHp: 50 };
+    const enemies = { list: [e], get engaged() { return this.list; }, get active() { return this.list; }, hit: () => ({ dealt: 1 }), freeze() {}, hang() {}, stun() {}, interrupt() {}, tokens: { holdAll() {} }, takedownTarget: () => null };
+    const hc = createHeroCombat({ hero, enemies, projectiles: { fire() {} } });
+    // The roof ends at x = 1: everything past it is the street, 20 m down.
+    const groundAt = (x) => (x > 1 ? 0 : 20);
+    // Stick pushes toward the edge (+x).
+    hc.preStep({ camFwd: { x: 0, y: 0, z: 1 }, moveX: 1, moveZ: 0, divePressed: true }, 1 / 120, { groundBelow: 20, groundAt });
+    expect(hc.c.state).toBe('dodge');
+    expect(hero.body.v.x).toBeLessThan(0);
+  });
+});
