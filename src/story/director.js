@@ -77,8 +77,14 @@ export function createDirector(g) {
     if (step.env) setEnv(step.env);
     else if (step.type === 'start') setEnv(null);
     ui.objective(step.text ?? null);
-    if (step.tutorial) ui.tips(step.tutorial);
-    marker.show(step.type === 'start' ? site : null);
+    // Tutorial tips for a fight wait until the fight starts (they used to expire on the way there).
+    const fightish = ['fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type);
+    if (step.tutorial && !fightish) ui.tips(step.tutorial);
+    cur.tips = fightish ? step.tutorial ?? null : null;
+    // A beacon on every place to go (spec F2); hidden once the hero is there.
+    marker.show(['start', 'reach'].includes(step.type) ? site : null);
+    // The camera turns toward where the step happens (spec F3).
+    if (site && step.type !== 'radio' && step.type !== 'broadcast' && step.type !== 'title' && step.type !== 'panels' && step.type !== 'credits') g.faceToward?.(site);
     g.setWaypoint(site && ['start', 'reach', 'fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type) ? { x: site.x, z: site.z, story: true } : null);
     const ep = epoch;
     const done = () => { if (ep === epoch) complete(step.id); };
@@ -98,6 +104,8 @@ export function createDirector(g) {
     const step = runner.step;
     if (!step || step.id !== id) return;
     if (step.type === 'fight' || step.type === 'defend' || step.type === 'stealth') g.reward('storyStep');
+    // A mission won: a breather, back to full health (spec F3).
+    if (['fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type)) { const c = combat.heroCombat.c; c.hp = c.maxHp; }
     if (step.type === 'stealth' && !cur?.alarm) { g.reward('storyStep'); ui.stamp(COPY.story.ghost); }
     dropGenerator();
     if (step.type === 'boss' && !gauntlet) g.reward('bossDefeated');
@@ -166,6 +174,7 @@ export function createDirector(g) {
     bctx = { ...bossCtx(), site: cur.site, step };
     boss = BOSSES[step.boss](bctx);
     cur.phase = 'fight';
+    showFightTips();
     if (step.type === 'boss') {
       // A retry starts at the phase the last attempt reached (spec 1.10): the boss begins with the
       // health that phase began at, and its own rules step it into that phase.
@@ -178,6 +187,7 @@ export function createDirector(g) {
     g.setWaypoint(null);
     ui.objective(step.text);
   }
+  function showFightTips() { if (cur?.tips) { ui.tips(cur.tips); cur.tips = null; } }
   function endBoss() {
     boss?.dispose();
     boss = null;
@@ -202,7 +212,7 @@ export function createDirector(g) {
     combat.clear();
     props.clear();
     const s = cur?.site;
-    if (s) g.placeHero(s.x + (s.ground ? 0 : 0), s.y + 0.2, s.z + (s.ground ? 8 : 0));
+    if (s) { g.placeHero(s.x + (s.ground ? 0 : 0), s.y + 0.2, s.z + (s.ground ? 8 : 0)); g.faceToward?.(s); }
     combat.heroCombat.revive();
     g.fade(false);
     begin();
@@ -210,6 +220,7 @@ export function createDirector(g) {
 
   function update(dt) {
     marker.update(dt);
+    if (marker.group.visible) marker.group.visible = Math.hypot(hero.body.p.x - marker.group.position.x, hero.body.p.z - marker.group.position.z) > 7;
     fx.update(dt);
     ui.update(dt);
     if (retryT >= 0) { retryStep(dt); return; }
@@ -244,7 +255,7 @@ export function createDirector(g) {
         break;
       case 'fight': case 'defend': {
         if (cur.phase === 'arrive') {
-          if (heroD(site).d < 70) { cur.phase = 'fight'; cur.wave = 0; if (step.type === 'defend') placeGenerator(site); spawnWave(); }
+          if (heroD(site).d < 70) { cur.phase = 'fight'; cur.wave = 0; if (step.type === 'defend') placeGenerator(site); spawnWave(); showFightTips(); }
           break;
         }
         // Defend: the generator is a target too; if it goes, the step starts over.
@@ -267,7 +278,7 @@ export function createDirector(g) {
       }
       case 'stealth': {
         if (cur.phase === 'arrive') {
-          if (heroD(site).d < 90) { cur.phase = 'sneak'; spawnGuards(); }
+          if (heroD(site).d < 90) { cur.phase = 'sneak'; spawnGuards(); showFightTips(); }
           break;
         }
         if (heroD(site).d > 260) { for (const e of cur.waveList ?? []) combat.enemies.remove(e); ui.stealth(null); cur.phase = 'arrive'; break; }

@@ -34,7 +34,8 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   let encounter = null, encounterCooldown = 25;
   let authority = null; // multiplayer: only the host runs the world
   let occupation = null; // a faction holding the whole city (Sable in Act 4)
-  let onScreen = null;   // (e) => is this enemy in view (off-screen guns wind up longer)
+  let onScreen = null;
+  let quiet = null;     // () => true while the city should stay calm (act cards, comic pages)   // (e) => is this enemy in view (off-screen guns wind up longer)
   // Windups in flight (thugs and bosses alike): the spider-sense turns red for the last 120 ms.
   const winding = new Map();
 
@@ -149,7 +150,8 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       else if (encounter.kind !== 'story' && Math.hypot(encounter.x - hero.body.p.x, encounter.z - hero.body.p.z) > 420) { for (const e of encounter.list) enemies.remove(e); encounter = null; encounterCooldown = 20; }
       return;
     }
-    if (!getSettings().crimes || (authority && !authority())) return;
+    // No street gangs gather while an act card or a comic page is up (spec F5).
+    if (!getSettings().crimes || (authority && !authority()) || quiet?.()) return;
     encounterCooldown -= dt;
     if (encounterCooldown > 0) return;
     encounterCooldown = 15;
@@ -195,6 +197,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     setTargets(fn) { targetsFn = fn; },
     setAuthority(fn) { authority = fn; },
     setOnScreen(fn) { onScreen = fn; },
+    setQuiet(fn) { quiet = fn; },
     // A new host picks up the gang the old one was running.
     restoreEncounter(enc) {
       if (!enc) return;

@@ -99,6 +99,9 @@ export function createHud(root, getSettings) {
     // A comic caption box at the top left (a district name as you enter it).
     caption(text, secs = 2.6) { caption.textContent = text; caption.classList.remove('hidden'); void caption.offsetWidth; caption.classList.add('show'); captionT = secs; },
     setLockHint(on) { lockHint.classList.toggle('hidden', !on); },
+    // The first-play tip steps aside while story tips or dialogue are up (never more than one
+    // voice telling the player what to do).
+    setTipQuiet(on) { tip.classList.toggle('quiet', on); },
     toggleHelp() { renderHelp(); help.classList.toggle('hidden'); },
     get helpOpen() { return !help.classList.contains('hidden'); },
     lowPower() { toastText.textContent = COPY.lowPower; toast.classList.remove('hidden'); },

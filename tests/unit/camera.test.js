@@ -136,3 +136,18 @@ describe('traversal camera (overhaul C2 to C6)', () => {
     expect(CAM.shoulderBy.swing).toBeLessThan(CAM.shoulderBy.ground);
   });
 });
+
+describe('turning toward a new objective (spec F3)', () => {
+  it('eases the yaw toward the heading, and gives way the moment the player steers', () => {
+    const w = createWorld(); w.addBox({ min: [-500, -1, -500], max: [500, 0, 500] }); w.build();
+    const rig = createCameraRig();
+    rig.yaw = 0;
+    const hero = heroAt(0, 0.9, 0, 0, 0, 0, 'ground');
+    rig.faceYaw(1.0);
+    for (let i = 0; i < 40; i++) rig.update(1 / 60, still, hero, w);
+    expect(rig.yaw).toBeGreaterThan(0.8);
+    rig.faceYaw(-1.0);
+    rig.update(1 / 60, { dx: 30, dy: 0 }, hero, w);
+    expect(rig.turnTo).toBe(null);
+  });
+});

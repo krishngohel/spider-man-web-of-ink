@@ -60,6 +60,9 @@ export function createCameraRig() {
     level: 0,          // seconds left of easing back toward level after an attach
     state: 'ground',
     push: 0, pushT: 0, pushAll: 1,
+    turnTo: null,
+    // Ease the yaw toward a heading (a new objective) unless the player is steering.
+    faceYaw(yaw) { rig.turnTo = { yaw, t: 1.2 }; },
     // A finisher or a takedown: push in by up to a third for `t` seconds, easing in and out.
     cinematic(t) { rig.pushT = t; rig.pushAll = t; },
     // A web just attached: a small dolly kick, and level out unless the player is steering.
@@ -102,6 +105,11 @@ export function createCameraRig() {
         if (!moved) rig.pitch += (CAM.attachLevel - rig.pitch) * Math.min(1, dt * 4);
       }
       rig.kick = Math.max(0, rig.kick - dt * CAM.attachKick / 0.4);
+      if (rig.turnTo) {
+        rig.turnTo.t -= dt;
+        if (moved || rig.turnTo.t <= 0) rig.turnTo = null;
+        else rig.yaw = wrapAngle(rig.yaw + wrapAngle(rig.turnTo.yaw - rig.yaw) * Math.min(1, dt * 4));
+      }
       if (rig.pushT > 0) { rig.pushT -= dt; const u = 1 - Math.max(0, rig.pushT) / rig.pushAll; rig.push = Math.sin(Math.PI * u); } else rig.push = 0;
       if (hero.state === 'wall' && hero.wall && rig.sinceLook > 0.3) {
         // On a wall: look slightly up it. The yaw stays the player's (wall jumps leave along the

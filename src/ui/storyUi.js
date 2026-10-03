@@ -50,6 +50,8 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
   }
   comic.addEventListener('mousedown', (e) => { e.stopPropagation(); if (e.button === 0) advance(); });
   window.addEventListener('keydown', (e) => {
+    // Radio: Enter shows the whole line, then the next one (spec F4).
+    if (!resolver && line && (e.code === 'Enter' || e.code === 'NumpadEnter')) { e.preventDefault(); e.stopPropagation(); advanceRadio(); return; }
     if (!resolver) return;
     if (e.code === 'Escape') { e.preventDefault(); e.stopPropagation(); finishComic(); return; }
     if (['Space', 'Enter', 'KeyE', 'NumpadEnter'].includes(e.code)) { e.preventDefault(); e.stopPropagation(); advance(); }
@@ -72,7 +74,8 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
     textEl.textContent = '';
     onSound(broadcast ? 'crackle' : 'radio');
   }
-  radio.addEventListener('mousedown', (e) => { e.stopPropagation(); if (!line) return; if (shown < line.text.length) shown = line.text.length; else nextLine(); });
+  function advanceRadio() { if (!line) return; if (shown < line.text.length) shown = line.text.length; else nextLine(); }
+  radio.addEventListener('mousedown', (e) => { e.stopPropagation(); advanceRadio(); });
 
   // Objective, boss bar, cards, stamp, tips ---------------------------------------------------------
   const objective = el('div', { class: 'objective hidden' }, [el('div', { class: 'olabel' }, COPY.story.objective), el('div', { class: 'otext' })]);
@@ -101,6 +104,9 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
   return {
     get comicOpen() { return !!resolver; },
     get talking() { return !!line; },
+    get cardOpen() { return cardT > 0; },
+    get tipsShown() { return tips.childElementCount > 0; },
+    advanceRadio: () => advanceRadio(),
     // Comic pages: panels already carry their img (drawn by the director). Resolves when read.
     comic(list) {
       pages = list; pi = 0; shownAt = performance.now();
@@ -122,6 +128,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
     skipRadio() { queue = []; nextLine(); },
     objective(text) {
       objective.classList.toggle('hidden', !text);
+      if (text && objective.lastChild.textContent !== text) { objective.classList.remove('pulse'); void objective.offsetWidth; objective.classList.add('pulse'); }
       if (text) objective.lastChild.textContent = text;
     },
     boss(info) {
@@ -190,7 +197,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
     stamp(text) { stamp.textContent = text; stamp.classList.remove('hidden'); void stamp.offsetWidth; stamp.classList.add('show'); stampT = 2.2; },
     tips(ids) {
       tips.replaceChildren(...ids.filter((id) => COPY.story.tips[id]).map((id) => el('div', { class: 'stip', html: fill(COPY.story.tips[id]) })));
-      tips.dataset.t = '9';
+      tips.dataset.t = '20';
     },
     update(dt) {
       if (line) {
@@ -202,7 +209,11 @@ export function createStoryUi(root, { getSettings, onSound = () => {} }) {
       if (cardT > 0) { cardT -= dt; if (cardT <= 0) { card.classList.remove('show'); card.classList.add('hidden'); const r = cardDone; cardDone = null; r?.(); } }
       if (stampT > 0) { stampT -= dt; if (stampT <= 0) { stamp.classList.remove('show'); stamp.classList.add('hidden'); } }
       const t = parseFloat(tips.dataset.t ?? '0');
-      if (t > 0) { tips.dataset.t = String(t - dt); tips.style.opacity = String(Math.min(1, (t - dt) / 1.2)); if (t - dt <= 0) tips.replaceChildren(); }
+      if (t > 0) {
+        // Dialogue never stacks with tips: they wait (hidden, not counting down) while a line plays.
+        if (line) tips.style.opacity = '0';
+        else { tips.dataset.t = String(t - dt); tips.style.opacity = String(Math.min(1, (t - dt) / 1.2)); if (t - dt <= 0) tips.replaceChildren(); }
+      }
     },
     clear() {
       queue = []; line = null; radio.classList.remove('show'); radioDone = null;

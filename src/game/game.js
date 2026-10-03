@@ -267,6 +267,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   });
   const slots = createSlots(uiRoot, { onPick: (slot, fresh) => enterStory(slot, fresh), onBack: () => menus.showTitle() });
   const storyUi = createStoryUi(uiRoot, { getSettings: () => settings, onSound: (k) => sfx.event({ type: k }) });
+  combat.setQuiet(() => storyUi.comicOpen || storyUi.cardOpen);
+  let padRadioWas = false;
   // Characters (spec 13): the roster unlocks in solo free roam after the story; ?roster opens it.
   const rosterOpen = () => params.has('roster') || save.story.done.includes('act4.epilogue') || !!save.story.choices?.completedOnce;
   const rosterMenu = createRosterMenu(uiRoot, { isOpen: rosterOpen, current: () => character.id, onPick: (id) => { switchCharacter(id); rosterMenu.hide(); resume(); }, onBack: () => menus.showPause() });
@@ -810,8 +812,16 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (input.pressed('suitPower')) progress.usePower();
       if (storyOn && !session.active && input.pressed('scan')) director.scan();
       if (input.pressed('photo') && !session.active) takePhoto();
-      content.update(gdt, { active: !session.active && !(storyOn && director.quiet) });
+      content.update(gdt, { active: !session.active && !(storyOn && director.quiet) && !storyUi.cardOpen && !storyUi.comicOpen });
       if (!storyOn) storyUi.update(gdt); // radio lines and stamps from free roam
+      hud.setTipQuiet(storyUi.tipsShown || storyUi.talking);
+      // The pad's D-pad down moves the radio on (spec F4).
+      {
+        const pad = input.device === 'pad' ? [...(navigator.getGamepads?.() ?? [])].find((q) => q && q.connected) : null;
+        const down = !!pad?.buttons[13]?.pressed;
+        if (down && !padRadioWas && storyUi.talking) storyUi.advanceRadio();
+        padRadioWas = down;
+      }
       for (const e of events) progress.onHeroEvent(e);
       if (combat.heroCombat.c.defeated) defeatStep(dt);
       riverCheck(dt);
@@ -986,6 +996,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     // A boss fight opens with letterbox bars and a push-in; a boss going down gets a beat of slow
     // motion (spec 1.10).
     bossIntro: () => { hud.letterbox(1.6); rig.cinematic(1.3); },
+    faceToward: (p) => rig.faceYaw(Math.atan2(p.x - hero.body.p.x, p.z - hero.body.p.z)),
     bossDown: () => combat.heroCombat.slowmo(0.8),
     focusSun: (x, z) => { sun.target.position.set(x, 0, z); sun.position.copy(sun.target.position).addScaledVector(sunDir, 400); sun.target.updateMatrixWorld(); },
     aspect: () => innerWidth / innerHeight,
