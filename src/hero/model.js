@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
-import { toonGradient } from '../render/toon.js';
+import { toonGradient, addHullOutline } from '../render/toon.js';
 import { PALETTE } from '../render/palette.js';
 import { COMIC_SHADE, SHADOW_ALPHA, addShadeUniforms } from '../render/comicShade.js';
 
@@ -314,6 +314,7 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
   orient.add(model);
   const suitMat = suitMaterial(suit);
   if (female) suitMat.userData.suit.uBodyScale.value.set(...BODY_SCALE_F);
+  const hulls = [];
   model.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     // The eye and brow meshes stay: smoothed onto the mask and painted by the suit shader, they fill
@@ -322,7 +323,10 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
     o.geometry = smoothHead(o.geometry, female ? MASK_F : MASK);
     o.castShadow = true;
     o.frustumCulled = false;
+    if (o.name !== 'Eyes' && o.name !== 'Eyebrows') hulls.push(o);
   });
+  // The drawn outline (spec G6), added after the traversal so the hulls are not visited.
+  for (const o of hulls) addHullOutline(o);
   const bone = (n) => model.getObjectByName(n);
   return {
     root, orient, model, suitMat,

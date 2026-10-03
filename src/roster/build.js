@@ -3,6 +3,7 @@ import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { buildHeroModel, createAnimator, smoothHead, COM_HEIGHT, MASK, MASK_F, BODY_SCALE_F } from '../hero/model.js';
 import { outfitMaterial } from '../combat/enemyModel.js';
 import { comicToon } from '../render/comicShade.js';
+import { addHullOutline } from '../render/toon.js';
 import { suitById } from '../progress/progression.js';
 
 // Builds any roster character as a model the poser can drive (root, orient, model, animator), with
@@ -42,6 +43,7 @@ function buildOutfitModel(assets, def, female) {
   if (female) mat.userData.outfit.uBodyScale.value.set(...BODY_SCALE_F);
   const masked = (def.outfit.skin ?? 0) < -0.5 || [2, 3, 6].includes(def.outfit.head);
   const eyeMat = new THREE.MeshBasicMaterial({ color: 0x1a1612 });
+  const hulls = [];
   model.traverse((o) => {
     if (!o.isSkinnedMesh) return;
     const isFace = o.name === 'Eyes' || o.name === 'Eyebrows';
@@ -49,7 +51,9 @@ function buildOutfitModel(assets, def, female) {
     if (masked) o.geometry = smoothHead(o.geometry, female ? MASK_F : MASK);
     o.castShadow = true;
     o.frustumCulled = false;
+    if (!isFace) hulls.push(o);
   });
+  for (const o of hulls) addHullOutline(o); // the drawn outline (spec G6)
   const bone = (n) => model.getObjectByName(n);
   return {
     root, orient, model, suitMat: null, outfitMat: mat,

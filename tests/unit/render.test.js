@@ -33,3 +33,22 @@ describe('shadow colour volume', () => {
     expect(neon[0]).toBeGreaterThan(neon[1]);
   });
 });
+
+import * as THREE from 'three';
+import { bakeSmoothNormals } from '../../src/render/toon.js';
+describe('smoothed normals for the outline', () => {
+  it('a cube with split corners gets one shared normal per corner', () => {
+    const g = new THREE.BoxGeometry(1, 1, 1);
+    bakeSmoothNormals(g);
+    const p = g.attributes.position, s = g.attributes.smoothNormal;
+    const seen = new Map();
+    for (let i = 0; i < p.count; i++) {
+      const k = `${p.getX(i)},${p.getY(i)},${p.getZ(i)}`;
+      const n = [s.getX(i), s.getY(i), s.getZ(i)];
+      if (seen.has(k)) expect(n.map((v, j) => Math.abs(v - seen.get(k)[j])).every((d) => d < 1e-6)).toBe(true);
+      else seen.set(k, n);
+      expect(Math.abs(Math.abs(n[0]) - Math.sqrt(1 / 3))).toBeLessThan(1e-5);
+    }
+    expect(seen.size).toBe(8);
+  });
+});

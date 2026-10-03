@@ -3,6 +3,7 @@ import { PALETTE } from './palette.js';
 import { LAYER_FX } from './layers.js';
 import { installGbufferChunks } from './gbuffer.js';
 import { SHADE_UNIFORMS } from './comicShade.js';
+import { HULL_UNIFORMS } from './toon.js';
 
 const vertexShader = /* glsl */ `
 varying vec2 vUv;
@@ -103,7 +104,8 @@ void main() {
   offs[0] = vec2(texel.x, 0.0); offs[1] = vec2(-texel.x, 0.0); offs[2] = vec2(0.0, texel.y); offs[3] = vec2(0.0, -texel.y);
   for (int k = 0; k < 4; k++) {
     vec4 an = texture2D(tAux, uvE + offs[k]);
-    crease = max(crease, 1.0 - dot(n0, octDec(an.xy)));
+    // No creases on characters: their hull outline draws them (flag 1).
+    if (an.a < 0.9 && a0.a < 0.9) crease = max(crease, 1.0 - dot(n0, octDec(an.xy)));
     float dn = viewDepth(uvE + offs[k]);
     bool behind = dn > dc * 1.002 || (abs(dn - dc) <= dc * 0.002 && an.b < a0.b);
     if (abs(an.b - a0.b) > 0.004 && behind && an.a < 0.9 && a0.a < 0.9) idEdge = 1.0;
@@ -277,6 +279,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     const w = Math.max(1, Math.floor(width * pr));
     const h = Math.max(1, Math.floor(height * pr));
     colorRT.setSize(w, h);
+    HULL_UNIFORMS.uHullRes.value.set(w, h);
     uniforms.uTexel.value.set(1 / w, 1 / h).multiplyScalar(Math.max(1.35, pr * 1.05)); // ink line weight
     uniforms.uHalftone.value = 7 * pr;
   }

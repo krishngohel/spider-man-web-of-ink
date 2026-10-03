@@ -57,24 +57,63 @@ function posterize(mat, palette, stripes) {
   mat.customProgramCacheKey = () => `pal-${pal.length}-${stripeIdx}-${period}`;
 }
 
-// Inverted-hull ink line (LAYER_FX). Not used yet; when block 4 adds it to heroes it should mark
-// its aux texel as a character, or the ink pass reads its flat normal as a crease.
-export function addHullOutline(mesh, width = 0.011, color = PALETTE.ink) {
+// Smoothed normals for the outline (spec G6): vertices that share a position (split for hard
+// edges and UV seams) share one averaged normal, so the pushed-out hull never cracks at a seam.
+// Stored as a `smoothNormal` attribute; done once per geometry.
+export function bakeSmoothNormals(geo) {
+  if (geo.attributes.smoothNormal) return geo;
+  const p = geo.attributes.position, n = geo.attributes.normal;
+  const key = (i) => `${Math.round(p.getX(i) * 1e4)},${Math.round(p.getY(i) * 1e4)},${Math.round(p.getZ(i) * 1e4)}`;
+  const acc = new Map();
+  for (let i = 0; i < p.count; i++) {
+    const k = key(i), a = acc.get(k) ?? [0, 0, 0];
+    a[0] += n.getX(i); a[1] += n.getY(i); a[2] += n.getZ(i);
+    acc.set(k, a);
+  }
+  const out = new Float32Array(p.count * 3);
+  for (let i = 0; i < p.count; i++) {
+    const a = acc.get(key(i)), l = Math.hypot(a[0], a[1], a[2]) || 1;
+    out[i * 3] = a[0] / l; out[i * 3 + 1] = a[1] / l; out[i * 3 + 2] = a[2] / l;
+  }
+  geo.setAttribute('smoothNormal', new THREE.BufferAttribute(out, 3));
+  return geo;
+}
+
+// The screen size every hull is measured in (set by the ink pass on resize).
+export const HULL_UNIFORMS = { uHullRes: { value: new THREE.Vector2(1920, 1080) } };
+
+// Inverted-hull ink outline (spec G6, as Hi-Fi Rush draws its characters): the back faces pushed
+// out along the skinned smooth normal by a width in screen pixels, about 3 px close and 1.2 px at
+// 40 m, so a far figure keeps a thin clean line instead of a black blob. LAYER_FX (colour pass).
+// Skinned, so its aux texel is flagged as a character and the ink pass draws no creases there.
+export function addHullOutline(mesh, { px = 3, far = 1.2, color = PALETTE.ink } = {}) {
+  bakeSmoothNormals(mesh.geometry);
   const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide });
-  mat.userData.outline = { value: width };
   const skinned = mesh.isSkinnedMesh;
+  mat.userData.hull = { uHullPx: { value: px }, uHullFar: { value: far } };
   mat.onBeforeCompile = (shader) => {
-    shader.uniforms.uOutline = mat.userData.outline;
-    shader.vertexShader = 'uniform float uOutline;\n' + (skinned
-      ? shader.vertexShader.replace('#include <skinning_vertex>', '#include <skinning_vertex>\n\ttransformed += normalize(objectNormal) * uOutline;')
-      : shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\n\ttransformed += normalize(normal) * uOutline;'));
+    Object.assign(shader.uniforms, HULL_UNIFORMS, mat.userData.hull);
+    shader.vertexShader = 'uniform vec2 uHullRes;\nuniform float uHullPx, uHullFar;\nattribute vec3 smoothNormal;\n' + shader.vertexShader
+      .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = smoothNormal;\n#ifdef USE_TANGENT\nvec3 objectTangent = vec3( tangent.xyz );\n#endif')
+      .replace('#include <project_vertex>', `#include <project_vertex>
+  {
+    vec3 hn = normalize(normalMatrix * objectNormal);
+    vec2 dir = (projectionMatrix * vec4(hn, 0.0)).xy;
+    float dl = length(dir);
+    if (dl > 1e-5) {
+      float w = mix(uHullPx, uHullFar, smoothstep(4.0, 40.0, -mvPosition.z));
+      gl_Position.xy += dir / dl * w * 2.0 / uHullRes * gl_Position.w;
+    }
+  }`);
+    if (!skinned) shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvec3 objectNormal = smoothNormal;');
   };
-  mat.customProgramCacheKey = () => (skinned ? 'hull-skinned' : 'hull-static');
+  mat.customProgramCacheKey = () => (skinned ? 'hull-px-skinned' : 'hull-px-static');
   const hull = skinned ? new THREE.SkinnedMesh(mesh.geometry, mat) : new THREE.Mesh(mesh.geometry, mat);
   if (skinned) hull.bind(mesh.skeleton, mesh.bindMatrix);
   hull.layers.set(LAYER_FX);
   hull.frustumCulled = false;
   hull.castShadow = false;
+  hull.renderOrder = -1;
   mesh.add(hull);
   return hull;
 }
