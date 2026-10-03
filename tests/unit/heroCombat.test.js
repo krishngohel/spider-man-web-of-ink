@@ -109,3 +109,13 @@ describe('the hero move player', () => {
     expect(s.hc.c.move.key).toBe('strike');
   });
 });
+
+describe('dodging a telegraphed blow', () => {
+  it('covers the hero until that blow has landed', () => {
+    const s = setup();
+    Object.assign(s.e, { state: 'windup', strikeAt: 0.6, t: 0.6 - 0.35 });
+    s.frame({ divePressed: true });
+    expect(s.hc.c.iframes).toBeGreaterThan(0.35);
+    expect(s.hc.c.iframes).toBeLessThanOrEqual(0.5);
+  });
+});

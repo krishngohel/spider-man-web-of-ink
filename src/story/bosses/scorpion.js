@@ -11,7 +11,7 @@ import { BRIDGE } from '../../world/city.js';
 // deck for a moment (the opening). Phase 2 (50%): double stings and faster pounces.
 
 const L = (who, text) => ({ who, text });
-const POISON = 100;
+const POISON = 120; // 120 s: the perfect-dodge window is 120 ms now (spec 1.2), so fewer +5 s refills
 
 export function createScorpion(ctx) {
   const { site, step, hero, fx, say, word, shake, combat } = ctx;

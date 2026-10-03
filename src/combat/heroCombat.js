@@ -390,7 +390,9 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       applyDv(hero.body, 'surface', dx * sp - v.x, G * TUNE.dodgeTime / 2 - Math.max(0, v.y), dz * sp - v.z);
       hero.state = 'air'; hero.airTime = 0;
     }
-    c.state = 'dodge'; c.t = 0; c.iframes = COMBAT.iframes;
+    // Dodging a telegraphed blow clears that blow: covered until it has landed (at most 0.5 s),
+    // however early in the windup the dodge came.
+    c.state = 'dodge'; c.t = 0; c.iframes = threat ? Math.max(COMBAT.iframes, Math.min(0.5, soon + 0.08)) : COMBAT.iframes;
     enemies.tokens?.holdAll(TUNE.dodgeHold);
     const perfect = !!threat && soon <= COMBAT.perfectWindow + 1 / 60;
     // Which side relative to where the hero faces (the poser picks the flip).
