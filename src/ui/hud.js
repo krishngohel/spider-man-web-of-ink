@@ -23,6 +23,9 @@ export function createHud(root, getSettings) {
   const help = el('div', { class: 'help hidden' });
   const words = el('div', { class: 'words' });
   const fader = el('div', { class: 'fader' });
+  // Cinema bars for a boss's entrance (spec 1.10).
+  const letter = el('div', { class: 'letterbox' }, [el('i'), el('i')]);
+  let letterT = null;
   const caption = el('div', { class: 'caption hidden' });
   const wpMark = el('div', { class: 'waypoint hidden' }, [el('i'), el('span')]);
   const xpBox = el('div', { class: 'xpbox hidden' }, [el('b'), el('span', { class: 'xpbar' }, [el('i')])]);
@@ -31,7 +34,7 @@ export function createHud(root, getSettings) {
   const hud = el('div', { class: 'hud hidden' }, [lines, words, reticle, dot, noAnchor, speedo, fps, stateLabel, tip, lockHint, help]);
   const wordPool = Array.from({ length: 6 }, () => { const w = el('div', { class: 'word' }); words.append(w); return { el: w, t: 0 }; });
   let wordNext = 0;
-  root.append(hud, toast, fader);
+  root.append(hud, toast, fader, letter);
   hud.append(caption, wpMark, xpBox);
   const lctx = lines.getContext('2d');
 
@@ -92,6 +95,7 @@ export function createHud(root, getSettings) {
     show(on) { hud.classList.toggle('hidden', !on); if (on) showTip(); },
     // A full-screen fade to black (a fall into the river, a subway ride).
     fade(on) { fader.classList.toggle('on', on); },
+    letterbox(secs) { letter.classList.add('on'); clearTimeout(letterT); letterT = setTimeout(() => letter.classList.remove('on'), secs * 1000); },
     // A comic caption box at the top left (a district name as you enter it).
     caption(text, secs = 2.6) { caption.textContent = text; caption.classList.remove('hidden'); void caption.offsetWidth; caption.classList.add('show'); captionT = secs; },
     setLockHint(on) { lockHint.classList.toggle('hidden', !on); },

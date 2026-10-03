@@ -514,7 +514,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   }
 
   return {
-    c, preStep, takeHit, timeScale,
+    c, preStep, takeHit, timeScale, slowmo: (s) => slowmo(s),
     revive() { c.hp = c.maxHp; c.defeated = false; c.state = 'free'; c.combo = 0; c.iframes = 1.5; c.move = null; },
     // Down at once whatever the iframes (a poison clock running out), with the usual defeat event.
     knockOut() { if (c.defeated) return; c.hp = 0; c.defeated = true; slowmo(1.2); onEvent({ type: 'heroDefeated' }); },

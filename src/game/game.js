@@ -612,6 +612,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       case 'enemyOut': combatHud.ko(e.e); break;
       case 'hint': hud.caption(e.text, 2.4); break;
       case 'finisherStart': rig.cinematic(e.time); break;
+      case 'groundWarn': fx.warn(e.at.x, e.at.y, e.at.z, e.r, e.t); break;
       case 'takedown': rig.cinematic(0.8); break;
       case 'enemyPinned': { const p = e.e.body.p; fx.splat(p.x, p.y, p.z, e.e.pin.nx, 0, e.e.pin.nz); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('PINNED!', s.x, s.y - 40); break; }
       case 'encounterStart': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; } break;
@@ -975,6 +976,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     setEnv: (e) => { storyEnv = e; }, setWaypoint: (w) => { waypoint = w; },
     placeHero: (x, y, z) => placeHeroAt(x, y, z, 0, 0, 0, 'air'),
     hideHero: (on) => { heroModel.root.visible = !on; },
+    // A boss fight opens with letterbox bars and a push-in; a boss going down gets a beat of slow
+    // motion (spec 1.10).
+    bossIntro: () => { hud.letterbox(1.6); rig.cinematic(1.3); },
+    bossDown: () => combat.heroCombat.slowmo(0.8),
     focusSun: (x, z) => { sun.target.position.set(x, 0, z); sun.position.copy(sun.target.position).addScaledVector(sunDir, 400); sun.target.updateMatrixWorld(); },
     aspect: () => innerWidth / innerHeight,
     snapshot: (cam) => { ink.render(scene, cam, time); return renderer.domElement.toDataURL('image/jpeg', 0.86); },

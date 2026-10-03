@@ -91,8 +91,10 @@ export function createBossActor(ctx, opts) {
     e.A = { ...A, reach, ranged, unblockable };
     a.state('windup');
     combat.emit({ type: 'enemyWindup', e, at: t, ranged, unblockable });
-    // The anticipation pose (spec 1.10): every boss attack winds up visibly.
+    // The anticipation pose (spec 1.10): every boss attack winds up visibly; an area attack (a slam,
+    // a quake, a sweep) also marks its reach on the ground until it lands.
     a.pose('windup', { kind: pose, t });
+    if (pose === 'slamStart' || (arc >= 2.5 && reach <= 12)) combat.emit({ type: 'groundWarn', at: { x: body.p.x, y: body.p.y - 0.9, z: body.p.z }, r: reach, t });
   };
   a.attacking = () => e.state === 'windup' || e.state === 'strike' || e.state === 'recover';
   a.meleeHit = (reach, arc, dmg, push = 6, unblockable = false) => {
@@ -165,6 +167,8 @@ export function createBossActor(ctx, opts) {
     e.t += dt;
     e.lastHitT += dt;
     hurt.value = Math.max(0, hurt.value - dt * 5);
+    // An opening shows: a pulsing glow while he is stunned (spec 1.10).
+    if (e.state === 'stun') hurt.value = Math.max(hurt.value, 0.28 + 0.18 * Math.sin(e.t * 11));
     if (e.state === 'stun') { e.stunFor -= dt; if (e.stunFor <= 0) a.state('engage'); }
     attackStep(dt);
     if (!a.flying) applyGravity(body, g, dt);

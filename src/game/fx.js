@@ -62,6 +62,21 @@ export function createFx(scene) {
     rings.push({ mesh: m, t: 1 });
   }
   let ringNext = 0;
+  // Area-attack warnings: an inked red ring that fills in until the blow lands.
+  const warnGeo = new THREE.RingGeometry(0.9, 1, 48);
+  warnGeo.rotateX(-Math.PI / 2);
+  const fillGeo = new THREE.CircleGeometry(1, 48);
+  fillGeo.rotateX(-Math.PI / 2);
+  const warns = [];
+  for (let i = 0; i < 4; i++) {
+    const ring = new THREE.Mesh(warnGeo, new THREE.MeshBasicMaterial({ color: 0xe8322a, transparent: true, depthWrite: false, side: THREE.DoubleSide }));
+    const fill = new THREE.Mesh(fillGeo, new THREE.MeshBasicMaterial({ color: 0xe8322a, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
+    ring.visible = fill.visible = false;
+    ring.renderOrder = fill.renderOrder = 3;
+    scene.add(ring, fill);
+    warns.push({ ring, fill, t: 0, all: 1, on: false });
+  }
+  let warnNext = 0;
   const n = new THREE.Vector3(), z = new THREE.Vector3(0, 0, 1);
 
   return {
@@ -87,7 +102,23 @@ export function createFx(scene) {
       r.t = 0; r.strength = strength;
       r.mesh.visible = true;
     },
+    warn(x, y, z2, r, t) {
+      const w = warns[warnNext];
+      warnNext = (warnNext + 1) % warns.length;
+      w.ring.position.set(x, y + 0.06, z2); w.fill.position.set(x, y + 0.05, z2);
+      w.ring.scale.set(r, 1, r);
+      w.r = r; w.t = 0; w.all = Math.max(0.2, t); w.on = true;
+      w.ring.visible = w.fill.visible = true;
+    },
     update(dt) {
+      for (const w of warns) {
+        if (!w.on) continue;
+        w.t += dt;
+        const k = Math.min(1, w.t / w.all);
+        w.fill.scale.set(w.r * k, 1, w.r * k);
+        w.ring.material.opacity = 0.6 + 0.4 * Math.sin(w.t * 20);
+        if (w.t > w.all + 0.15) { w.on = false; w.ring.visible = w.fill.visible = false; }
+      }
       for (const s of splats) {
         if (!s.mesh.visible) continue;
         s.grow = Math.min(1, s.grow + dt * 9);

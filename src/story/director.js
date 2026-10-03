@@ -29,6 +29,8 @@ export function createDirector(g) {
 
   let cur = null;       // { step, site, phase, ... } for the step being run
   let boss = null;      // the boss module of a boss or chase step
+  // The phase a boss fight had reached and the health it began at, so a retry resumes there.
+  let phaseMark = null;
   let blocking = false; // comic pages up: play waits
   let retryT = -1, retries = 0;
   // Bumped whenever the story is stopped or jumped: a pending card, comic or radio from before
@@ -164,6 +166,15 @@ export function createDirector(g) {
     bctx = { ...bossCtx(), site: cur.site, step };
     boss = BOSSES[step.boss](bctx);
     cur.phase = 'fight';
+    if (step.type === 'boss') {
+      // A retry starts at the phase the last attempt reached (spec 1.10): the boss begins with the
+      // health that phase began at, and its own rules step it into that phase.
+      if (phaseMark && phaseMark.step === step.id && phaseMark.phase > 1 && retries > 0) {
+        const e = boss.actor.e;
+        e.hp = Math.max(1, e.maxHp * (phaseMark.frac - 0.005));
+        word(`PHASE ${phaseMark.phase}`, boss.actor.body.p, 'big');
+      } else { phaseMark = { step: step.id, phase: 1, frac: 1 }; g.bossIntro?.(); }
+    }
     g.setWaypoint(null);
     ui.objective(step.text);
   }
@@ -283,11 +294,14 @@ export function createDirector(g) {
         }
         if (!boss) break;
         boss.update(dt);
+        const ph = boss.state?.phase;
+        if (step.type === 'boss' && phaseMark?.step === step.id && typeof ph === 'number' && ph > phaseMark.phase) { phaseMark.phase = ph; phaseMark.frac = boss.actor.hpFrac(); }
         if (boss.objective !== undefined) { ui.objective(boss.objective ?? step.text); g.setWaypoint(boss.waypoint ? { ...boss.waypoint, story: true } : null); }
         if (step.type === 'boss') ui.boss({ name: boss.actor.name, hp: boss.actor.hpFrac() });
         if (boss.failed) { retry(); break; }
         if (boss.done && cur.phase === 'fight') {
-          cur.phase = 'won'; cur.wonT = 0;
+          cur.phase = 'won'; cur.wonT = 0; phaseMark = null;
+          if (step.type === 'boss') g.bossDown?.();
           if (step.type === 'boss') { ui.stamp(COPY.story.bossDown); g.sfx.event({ type: 'stamp' }); }
         }
         if (cur.phase === 'won') {
