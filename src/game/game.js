@@ -1080,14 +1080,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }),
     camera: () => ({ yaw: rig.yaw, pitch: rig.pitch, pos: { ...rig.pos }, fwd: { ...rig.fwd }, fov: rig.fov }),
     teleport: placeHeroAt,
-    setLook(yaw, pitch) { rig.yaw = yaw; rig.pitch = pitch; rig.sinceLook = 0; },
+    setLook(yaw, pitch) { rig.yaw = yaw; rig.pitch = pitch; rig.sinceLook = 0; rig.sinceAim = 0; },
     // Turns the camera so the crosshair sits on a world point (for scripted play).
     aimAt(x, y, z) {
       traceSkip = 3; // the probe ignores the camera snap a scripted aim makes
       interpolate();
       for (let i = 0; i < 4; i++) {
         const dx = x - rig.pos.x, dy = y - rig.pos.y, dz = z - rig.pos.z, l = Math.hypot(dx, dy, dz) || 1;
-        rig.yaw = Math.atan2(dx, dz); rig.pitch = -Math.asin(dy / l); rig.sinceLook = 0;
+        rig.yaw = Math.atan2(dx, dz); rig.pitch = -Math.asin(dy / l); rig.sinceLook = 0; rig.sinceAim = 0;
         rig.update(0, NO_LOOK, view, world, settings);
       }
       return findAimPoint(world, hero.body, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
