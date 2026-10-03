@@ -115,6 +115,8 @@ export function createSfx(getVolume) {
           tone({ freq: 1320, freq2: 1760, dur: 0.12, gain: 0.07, type: 'triangle' });
           tone({ freq: 1980, freq2: 1500, dur: 0.14, gain: 0.05, type: 'sine' });
           break;
+        case 'webEmpty': tone({ freq: 900, freq2: 700, dur: 0.04, gain: 0.08, type: 'square' }); break;
+        case 'webThrow': burst({ freq: 400, freq2: 1800, q: 0.9, dur: 0.25, gain: 0.35 }); break;
         case 'senseRed':
           // The perfect-dodge window: a sharp double tick; heavies get a low sting under it.
           tone({ freq: 2640, freq2: 2400, dur: 0.05, gain: 0.08, type: 'square' });

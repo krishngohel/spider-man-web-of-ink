@@ -154,3 +154,22 @@ describe('dodging on a roof', () => {
     expect(hero.body.v.x).toBeLessThan(0);
   });
 });
+
+describe('webs as crowd control', () => {
+  it('six cartridges, one per shot, refilling one every 1.5 s', () => {
+    const s = setup();
+    for (let i = 0; i < 6; i++) s.frame({ webPressed: true });
+    expect(s.hc.c.webAmmo).toBe(0);
+    s.frame({ webPressed: true });
+    expect(s.hc.c.webAmmo).toBe(0);
+    for (let i = 0; i < Math.ceil(TUNE.webRefill / DT) + 2; i++) s.frame();
+    expect(s.hc.c.webAmmo).toBe(1);
+  });
+  it('the yank throws a webbed enemy close by', () => {
+    const s = setup({ z: 2 });
+    s.e.state = 'webbed';
+    s.frame({ yankPressed: true, moveX: 1, moveZ: 0 });
+    expect(s.e.body.v.x).toBeGreaterThan(10);
+    expect(s.e.thrownT).toBeGreaterThan(0);
+  });
+});

@@ -35,6 +35,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     state: 'free', t: 0, combo: 0, comboT: 9, target: null,
     iframes: 0, outOfCombat: 9, attackHeldT: 0, webHeldT: 0, punchN: 0,
     timeScale: 1, slowT: 0, slowKind: 'plain', finisherHoldT: 0, defeated: false, lastWord: 0,
+    webAmmo: TUNE.webCap, webRefillT: 0,
     move: null, step: 0, airStep: 0, lastKey: '', sameRun: 0, mash: 0, lastMoveAt: -9, lastMoveEnd: -9, airKeepT: 0, clock: 0,
     heroStop: 0, heroStopAll: 0, faceYaw: null,
     dmgMul: 1, // skills raise this (Plan 4)
@@ -113,6 +114,16 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (key === 'launcher') onEvent({ type: 'uppercut' });
     if (M.travel && grounded()) { const v = V(); applyDv(hero.body, 'surface', 0, Math.max(0, 3 - v.y), 0); hero.state = 'air'; hero.airTime = 0; }
     onEvent({ type: 'moveStart', key, clip, air: !grounded() || !!M.air, time: M.time, impact: M.impact, travel: !!M.travel, n: c.punchN });
+  }
+
+  function webbedNear() {
+    let best = null, bd = TUNE.throwReach;
+    for (const e of enemies.list) {
+      if (!e.alive || e.state !== 'webbed' || e.boss) continue;
+      const d = toward(e).d;
+      if (d < bd) { bd = d; best = e; }
+    }
+    return best;
   }
 
   function nextMove() {
@@ -225,6 +236,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     const fight = engaged.length > 0;
     c.outOfCombat = fight ? 0 : c.outOfCombat + dt;
     if (c.outOfCombat > COMBAT.regenDelay) { c.hp = Math.min(c.maxHp, c.hp + COMBAT.regenRate * dt); c.resilientUsed = false; }
+    // Web cartridges refill one at a time.
+    if (c.webAmmo < TUNE.webCap) { c.webRefillT += dt; if (c.webRefillT >= TUNE.webRefill) { c.webRefillT = 0; c.webAmmo++; } } else c.webRefillT = 0;
     // Keep a target while it is valid and near; else pick the one the stick or camera points at.
     if (!c.target || !isActive(c.target) || toward(c.target).d > COMBAT.strikeRange + 4) c.target = null;
     const pick = pickTarget(P(), camFwd, enemies.list, COMBAT.strikeRange, { x: intent.moveX, z: intent.moveZ });
@@ -323,20 +336,41 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
     // A character's own special replaces the web shot (Shocker's blast, Goblin's bombs...).
     if (intent.webPressed && c.special) { c.special(camFwd); onEvent({ type: 'special' }); return; }
-    // Web shot.
+    // Web shot (one cartridge each; empty, it just clicks).
+    if (intent.webPressed && c.webAmmo < 1) { onEvent({ type: 'webEmpty' }); intent.webPressed = false; }
     if (intent.webPressed) {
+      c.webAmmo--;
       const t2 = pickTarget(P(), camFwd, enemies.list, COMBAT.webRange);
       const from = { x: P().x, y: P().y + 0.5, z: P().z };
       if (t2) {
         // Lead a moving target (a flyer at 20 m/s moves metres while the web is in the air).
         const q0 = t2.body.p, tv = t2.body.v, lead = Math.hypot(q0.x - from.x, q0.y - from.y, q0.z - from.z) / 75;
         const q = { x: q0.x + tv.x * lead, y: q0.y + tv.y * lead, z: q0.z + tv.z * lead };
-        projectiles.fire('web', from, { x: q.x, y: q.y + 0.3, z: q.z }, { owner: 'hero', dmg: 0.34 });
+        projectiles.fire('web', from, { x: q.x, y: q.y + 0.3, z: q.z }, { owner: 'hero', dmg: 1 / TUNE.webShots });
         onEvent({ type: 'thwip', x: q.x, y: q.y, z: q.z, combat: true });
       } else {
         const d = camFwd;
-        projectiles.fire('web', from, { x: from.x + d.x * 30, y: from.y + d.y * 30, z: from.z + d.z * 30 }, { owner: 'hero', dmg: 0.34 });
+        projectiles.fire('web', from, { x: from.x + d.x * 30, y: from.y + d.y * 30, z: from.z + d.z * 30 }, { owner: 'hero', dmg: 1 / TUNE.webShots });
         onEvent({ type: 'thwip', x: from.x + d.x * 30, y: from.y + d.y * 30, z: from.z + d.z * 30, combat: true });
+      }
+    }
+    // A webbed enemy close by: the yank swings him round and throws him (spec 1.6), along the stick
+    // or the camera; whoever he hits goes down, and a wall he hits keeps him.
+    if (intent.yankPressed && !hero.swing.active) {
+      const wb = webbedNear();
+      if (wb && (!tgt || toward(wb).d < near.d)) {
+        intent.hangPressed = false;
+        const m = Math.hypot(intent.moveX, intent.moveZ);
+        let dx = camFwd.x, dz = camFwd.z;
+        if (m > 0.3) { dx = intent.moveX; dz = intent.moveZ; }
+        const l = Math.hypot(dx, dz) || 1;
+        const v = wb.body.v;
+        applyDv(wb.body, 'rope', (dx / l) * TUNE.throwSpeed - v.x, TUNE.throwLift - v.y, (dz / l) * TUNE.throwSpeed - v.z);
+        wb.thrownT = 1.2;
+        wb.onGround = false;
+        word('THROWN!', wb);
+        onEvent({ type: 'webThrow', e: wb });
+        return;
       }
     }
     // Yank (the hang key, when a target is near and the hero is not on a web).

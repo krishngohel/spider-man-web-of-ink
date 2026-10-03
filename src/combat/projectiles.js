@@ -25,7 +25,7 @@ export function createProjectiles(scene, world) {
   const laserMat = new THREE.MeshBasicMaterial({ color: 0xff3a2a, transparent: true, opacity: 0.75 });
   const laserGeo = new THREE.CylinderGeometry(0.012, 0.012, 1, 4).translate(0, 0.5, 0).rotateX(Math.PI / 2);
 
-  function fire(kind, from, to, { dmg = 6, owner = 'enemy', target = null, aoe = 0, gadget = null } = {}) {
+  function fire(kind, from, to, { dmg = 6, owner = 'enemy', target = null, aoe = 0, gadget = null, shooter = null } = {}) {
     const dx = to.x - from.x, dy = to.y - from.y, dz = to.z - from.z, d = Math.hypot(dx, dy, dz) || 1;
     const s = SPEED[kind];
     const mesh = new THREE.Mesh(geo[kind], mat[kind]);
@@ -34,7 +34,7 @@ export function createProjectiles(scene, world) {
     scene.add(mesh);
     let trail = null;
     if (kind === 'rocket') { trail = new THREE.Mesh(new THREE.SphereGeometry(0.3, 6, 4), trailMat); scene.add(trail); }
-    const p = { kind, x: from.x, y: from.y, z: from.z, vx: (dx / d) * s, vy: (dy / d) * s, vz: (dz / d) * s, dmg, owner, target, aoe, gadget, life: 3, mesh, trail };
+    const p = { kind, x: from.x, y: from.y, z: from.z, vx: (dx / d) * s, vy: (dy / d) * s, vz: (dz / d) * s, dmg, owner, target, aoe, gadget, shooter, life: 3, mesh, trail };
     if (gadget === 'webBomb') { p.vy += 4; p.grav = 12; }
     list.push(p);
     return p;
@@ -56,7 +56,23 @@ export function createProjectiles(scene, world) {
       if (p.owner === 'enemy') {
         if (hits.hero(p, nx, ny, nz)) done = true;
       } else {
-        for (const e of hits.enemies) {
+        // A web shot that meets a rocket in flight catches it and slings it back at whoever fired it.
+        if (p.kind === 'web' && !p.gadget) {
+          for (const r of list) {
+            if (r.kind !== 'rocket' || r.owner !== 'enemy') continue;
+            if (Math.hypot(r.x - nx, r.y - ny, r.z - nz) > 1.4) continue;
+            const s = r.shooter?.body?.p;
+            const tx = s ? s.x - r.x : -r.vx, ty = s ? s.y + 0.4 - r.y : -r.vy, tz = s ? s.z - r.z : -r.vz;
+            const l = Math.hypot(tx, ty, tz) || 1;
+            r.owner = 'hero'; r.aoe = 3.5; r.dmg = Math.max(r.dmg, 20); r.life = 3;
+            r.vx = (tx / l) * (hits.rocketBack ?? 34); r.vy = (ty / l) * (hits.rocketBack ?? 34); r.vz = (tz / l) * (hits.rocketBack ?? 34);
+            r.mesh.lookAt(r.x + r.vx, r.y + r.vy, r.z + r.vz);
+            hits.rocketReturned?.(r);
+            done = true;
+            break;
+          }
+        }
+        if (!done) for (const e of hits.enemies) {
           if (!hits.canHit(e)) continue;
           const b = e.body.p;
           // Closest approach of this step's segment to the enemy's middle.

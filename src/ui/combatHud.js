@@ -14,7 +14,10 @@ export function createCombatHud(root, opts) {
   const hpFill = el('i'), hpBar = el('div', { class: 'cb-hp' }, [hpFill]);
   const pips = [0, 1, 2].map(() => el('b', { class: 'cb-pip' }, [el('i')]));
   const focus = el('div', { class: 'cb-focus' }, pips);
-  const panel = el('div', { class: 'cb-panel' }, [hpBar, focus]);
+  // Web cartridges: six small pips (spec 1.6).
+  const webPips = Array.from({ length: 6 }, () => el('i'));
+  const webs = el('div', { class: 'cb-webs' }, webPips);
+  const panel = el('div', { class: 'cb-panel' }, [hpBar, focus, webs]);
   const combo = el('div', { class: 'cb-combo hidden' }, [el('b'), el('span', {}, COPY.combat.combo)]);
   const sense = el('div', { class: 'cb-sense' });
   const arcs = Array.from({ length: 4 }, () => { const a = el('div', { class: 'cb-arc' }); sense.append(a); return { el: a, t: 0 }; });
@@ -83,6 +86,7 @@ export function createCombatHud(root, opts) {
       box.classList.toggle('hidden', !fighting && c.focus <= 0.01);
       hpFill.style.width = `${(c.hp / c.maxHp) * 100}%`;
       hpBar.classList.toggle('low', c.hp < c.maxHp * 0.3);
+      webPips.forEach((w, i) => w.classList.toggle('on', i < (c.webAmmo ?? 6)));
       pips.forEach((p, i) => { p.firstChild.style.width = `${Math.max(0, Math.min(1, c.focus - i)) * 100}%`; p.classList.toggle('full', c.focus >= i + 1); });
       if (c.combo !== shownCombo) { shownCombo = c.combo; combo.firstChild.textContent = `x${c.combo}`; combo.classList.toggle('hidden', c.combo < 2); if (c.combo >= 2) { combo.classList.remove('pop'); void combo.offsetWidth; combo.classList.add('pop'); } }
       squigT -= dt; squig.classList.toggle('show', squigT > 0);

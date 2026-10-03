@@ -24,6 +24,9 @@ export const TUNE = {
   airHitTime: 0.27, airKeep: 0.6, slamSplash: 3,
   // Web strike (EST)
   strikeSpeed: 30, strikeStop: 1.2, rebound: 2.5,
+  // Webs as crowd control (spec 1.6): shots to cocoon a thug (COMM), cartridge capacity and refill
+  // (EST), the throw of a webbed enemy, and a webbed rocket sent back.
+  webShots: 6, webCap: 6, webRefill: 1.5, throwSpeed: 16, throwLift: 5, throwReach: 6, rocketBack: 34,
   // Hitstop in seconds (REF Capcom 67 to 167 ms, Smash hitlag), on the attacker and victim only
   stop: { light: 0.05, ender: 0.08, launcher: 0.08, counter: 0.1, finisher: 0.14 }, stopCap: 0.15,
   shake: 0.04, shakeHero: 0.4,

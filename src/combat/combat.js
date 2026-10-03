@@ -92,6 +92,8 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       },
       explode,
       webWall: (hit, pr) => { if (pr.gadget) gadgets.payload(pr, null); feedback.splat(hit); },
+      rocketBack: TUNE.rocketBack,
+      rocketReturned: (r) => emit({ type: 'word', text: 'RIGHT BACK AT YOU!', at: { x: r.x, y: r.y, z: r.z }, kind: 'hit' }),
     });
     // Encounters.
     updateEncounter(dt);
@@ -125,7 +127,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
         const p = e.e.body.p, h = e.to ?? hero.body.p, v = e.to ? { x: 0, y: 0, z: 0 } : hero.body.v;
         // A little lead: shots aim where the hero will be.
         const lead = e.kind === 'rocket' ? 0.35 : 0.12;
-        projectiles.fire(e.kind, { x: p.x, y: p.y + 0.5, z: p.z }, { x: h.x + v.x * lead, y: h.y + v.y * lead + 0.1, z: h.z + v.z * lead }, { dmg: e.dmg });
+        projectiles.fire(e.kind, { x: p.x, y: p.y + 0.5, z: p.z }, { x: h.x + v.x * lead, y: h.y + v.y * lead + 0.1, z: h.z + v.z * lead }, { dmg: e.dmg, shooter: e.e });
         feedback.shot(e.e, e.kind);
         break;
       }

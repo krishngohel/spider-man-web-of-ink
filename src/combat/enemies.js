@@ -352,6 +352,20 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
         if (p.y < 0.9) { p.y = 0.9; if (v.y < 0) v.y = 0; e.onGround = true; }
         // A webbed enemy knocked into a wall sticks there.
         if (e.state === 'webbed' && C.wall && Math.hypot(v.x, v.z) > 3) { e.state = 'pinned'; e.t = 0; e.pin = { nx: C.nx, nz: C.nz }; v.x = v.y = v.z = 0; onEvent({ type: 'enemyPinned', e }); }
+        // A thrown webbed enemy bowls over whoever he flies into.
+        if (e.thrownT > 0) {
+          e.thrownT -= dt;
+          if (Math.hypot(v.x, v.z) > 6) {
+            for (const o of list) {
+              if (o === e || !isActive(o) || o.boss || o.isPlayer) continue;
+              if (Math.hypot(o.body.p.x - p.x, o.body.p.z - p.z) < 1.3 && Math.abs(o.body.p.y - p.y) < 1.6) {
+                const l = Math.hypot(v.x, v.z) || 1;
+                hit(o, { dmg: 18, dir: { x: v.x / l, z: v.z / l }, push: 10, lift: 2.5, kind: 'slam', from: { ...p } });
+                onEvent({ type: 'heroHit', e: o, heavy: true, kind: 'throw' });
+              }
+            }
+          }
+        }
       }
       // Bodies keep apart (a soft push), from each other and from the hero.
       if (isActive(e)) {
