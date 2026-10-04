@@ -429,7 +429,9 @@ export function createDirector(g) {
     targets() {
       const gen = cur?.gen;
       if (!gen || gen.hp <= 0) return null;
-      return [{ body: { p: gen.p, v: { x: 0, y: 0, z: 0 } }, invuln: () => false, hit: (h) => { gen.hp = Math.max(0, gen.hp - h.dmg * 0.8); word('CLANG!', gen.p, 'small'); return true; } }];
+      // One target object per generator, kept: the enemies' director keys its turns on the body.
+      gen.target ??= [{ body: { p: gen.p, v: { x: 0, y: 0, z: 0 } }, invuln: () => false, hit: (h) => { gen.hp = Math.max(0, gen.hp - h.dmg * 0.8); word('CLANG!', gen.p, 'small'); return true; } }];
+      return gen.target;
     },
     // Test hooks.
     state() {

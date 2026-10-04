@@ -82,7 +82,7 @@ export function pickMeleeTarget(heroP, camFwd, enemies, maxDist = 14, stick = nu
     if (best) return best;
   }
   const cur = current && cands.find((q) => q.e === current);
-  if (cur && cur.d <= 5) return current;
+  if (cur && (cur.h <= TUNE.lungeBand || (cur.d <= 5 && !cands.some((q) => q !== cur && q.d <= TUNE.lungeBand)))) return current;
   let near = null;
   for (const q of cands) if (q.d <= TUNE.lungeBand && (!near || q.d < near.d)) near = q;
   if (near) return near.e;
@@ -190,7 +190,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     }
     const { dmg = 10, dir = { x: 0, z: 1 }, kind = 'melee', from = null, noInterrupt = false } = args;
     let push = args.push ?? 3, lift = args.lift ?? 0;
-    if (!e.alive || e.state === 'out' || e.state === 'pinned' || (e.hp <= 0 && kind !== 'slam')) return { dealt: 0, blocked: false };
+    if (!e.alive || e.state === 'out' || e.state === 'pinned' || (e.hp <= 0 && kind !== 'slam')) return { dealt: 0, blocked: false, ignored: true };
     const front = from ? ((from.x - e.body.p.x) * Math.sin(e.facing) + (from.z - e.body.p.z) * Math.cos(e.facing)) > 0 : true;
     if (kind === 'web') {
       e.web = Math.min(1, e.web + dmg);
@@ -319,6 +319,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
             e.strikeAt = (gun ? A.windup : windupFor(A)) + (gun && ctx.onScreen?.(e) === false ? TUNE.offscreenDelay : 0);
             e.red = false;
             e.dodged = false;
+            e.atBody = T.body;
             setState(e, 'windup');
             e.hitThisAttack = false;
             onEvent({ type: 'enemyWindup', e, at: e.strikeAt, ranged: gun, unblockable: !!A.unblockable });
@@ -534,7 +535,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     // Hitstop on this body (seconds).
     freeze(e, s) { if (e.boss || e.puppet || e.isPlayer) return; e.stopT = Math.max(e.stopT ?? 0, s); e.stopAll = e.stopT; },
     // Kept in the air by an air string.
-    hang(e, s) { if (e.boss || e.puppet || e.isPlayer) return; e.hangT = s; if (e.state !== 'air' && isActive(e)) { setState(e, 'air'); } e.onGround = false; },
+    hang(e, s) { if (e.boss || e.puppet || e.isPlayer || e.hp <= 0) return; e.hangT = s; if (e.state !== 'air' && isActive(e)) { setState(e, 'air'); } e.onGround = false; },
     // Open for a beat (a perfect dodge's web to the face).
     stun(e, s) { if (e.boss || e.puppet || e.isPlayer || !isActive(e)) return; e.stunT = s; setState(e, 'stunned'); onEvent({ type: 'enemyStunned', e }); },
     // Beaten to the punch: the swing never comes.

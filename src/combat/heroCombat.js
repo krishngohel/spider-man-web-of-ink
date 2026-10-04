@@ -46,6 +46,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   const toward = (e) => { const p = P(), q = e.body.p; const dx = q.x - p.x, dz = q.z - p.z, d = Math.hypot(dx, dz) || 1; return { x: dx / d, z: dz / d, d, dy: q.y - p.y }; };
   const word = (text, e, kind = 'small') => onEvent({ type: 'word', text, at: e ? e.body.p : P(), kind });
   const grounded = () => hero.state === 'ground';
+  // On the ground, or about to be (falling within 0.6 m of it): a press here means a ground move.
+  const nearGround = () => grounded() || (groundHere != null && P().y - 0.9 - groundHere < 0.6 && V().y <= 0.5);
   const heroYaw = () => Math.atan2(hero.facing.x, hero.facing.z);
   let G = 19.62;
   let groundAt = null, groundHere = 0;
@@ -69,11 +71,12 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   function landHit(e, { dmg, push, lift, kind = 'melee', heavy = false, stop = 'light' }) {
     const u = toward(e);
     const r = enemies.hit(e, { dmg: dmg * c.dmgMul, dir: { x: u.x, z: u.z }, push, lift, kind, from: P(), noInterrupt: c.sameRun >= TUNE.sameMoveLimit });
+    if (r.ignored) return r;
     if (r.blocked) { word('CLANG!', e); onEvent({ type: 'blocked' }); if (e.arch === 'shield') hint('SHIELD UP: FLIP OVER HIM OR YANK IT AWAY'); return r; }
     c.combo++; c.comboT = 0;
     c.focus = Math.min(3, c.focus + COMBAT.focusPerHit * c.focusMul);
     // The last one down: a longer freeze and a beat of slow motion.
-    const last = e.state === 'out' && enemies.engaged.length === 0;
+    const last = e.hp <= 0 && enemies.engaged.length === 0;
     const s = stopFor(last ? 'finisher' : stop);
     c.heroStop = Math.max(c.heroStop, s); c.heroStopAll = c.heroStop;
     enemies.freeze?.(e, s);
@@ -175,7 +178,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     intent.moveX = intent.moveZ = 0;
     const t0 = m.t;
     m.t += dt;
-    const alive = tgt && (isActive(tgt) || tgt.state === 'air' || tgt.state === 'stagger');
+    const alive = tgt && (isActive(tgt) || (!(tgt.hp <= 0) && (tgt.state === 'air' || tgt.state === 'stagger')));
     if (m.key === 'strike') return strikeStep(m, dt);
     if (m.plan && dt > 0) {
       // Legs on the ground carry the hero along the warped root path.
@@ -267,9 +270,10 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     // (and at every chain point, in nextMove) from the stick, then nearness, then the camera.
     c.stick.x = intent.moveX; c.stick.z = intent.moveZ; c.camFwd = camFwd;
     if (!c.target || !isActive(c.target) || toward(c.target).d > COMBAT.strikeRange + 4) c.target = null;
-    if (c.state === 'free' || !c.target) c.target = pickMeleeTarget(P(), camFwd, enemies.list, COMBAT.strikeRange, c.stick, c.target) ?? c.target;
-    const tgt = c.target;
-    const near = tgt ? toward(tgt) : null;
+    const repick = () => { c.target = pickMeleeTarget(P(), camFwd, enemies.list, COMBAT.strikeRange, c.stick, c.target) ?? c.target; };
+    if (c.state === 'free' || !c.target) repick();
+    let tgt = c.target;
+    let near = tgt ? toward(tgt) : null;
 
     if (c.defeated) { intent.moveX = intent.moveZ = 0; return; }
     if (intent.attackPressed) {
@@ -279,7 +283,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
     // A dodge needs a fight nearby, or an attack on its way (a shot or a dive from far off).
     const close = engaged.some((e) => toward(e).d < 15 || (e.state === 'windup' && toward(e).d < 45));
-    if (intent.divePressed && close && ['ground', 'air', 'wall', 'perch'].includes(hero.state)) buffer.press('dodge', c.hclock);
+    if (intent.divePressed && close && ['ground', 'air', 'wall'].includes(hero.state)) buffer.press('dodge', c.hclock);
     groundAt = ctx.groundAt ?? null;
     finisherSlowmo = ctx.finisherSlowmo !== false;
     groundHere = ctx.groundBelow;
@@ -312,12 +316,14 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
     if (c.state === 'dodge') {
       if (c.t < TUNE.dodgeTime * 0.7) intent.moveX = intent.moveZ = 0;
-      if (c.t > TUNE.dodgeTime || (c.t > 0.25 && buffer.peek('attack', c.hclock))) c.state = 'free';
+      // An attack pressed during the dodge comes out as soon as the feet are down (never as an air
+      // kick off the flip, which floored the thug: review fix).
+      if (c.t > TUNE.dodgeTime || (c.t > 0.25 && nearGround() && buffer.peek('attack', c.hclock))) { c.state = 'free'; repick(); tgt = c.target; near = tgt ? toward(tgt) : null; }
       else return;
     }
     if (c.state === 'hurt') {
       intent.moveX = intent.moveZ = 0;
-      if (c.t > 0.32 || (c.t > 0.2 && buffer.peek('attack', c.hclock))) c.state = 'free';
+      if (c.t > 0.32 || (c.t > 0.2 && nearGround() && buffer.peek('attack', c.hclock))) { c.state = 'free'; repick(); tgt = c.target; near = tgt ? toward(tgt) : null; }
       else return;
     }
 
@@ -353,7 +359,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       // Back after a pause: the string starts over.
       if (c.clock - c.lastMoveEnd > 0.6) { c.step = 0; if (grounded()) c.airStep = 0; }
       if (tgt) {
-        const mv = chooseMove({ d: near.d, dy: near.dy, step: c.step, airStep: c.airStep, grounded: grounded(), webbed: false, holdT: 0 });
+        const mv = chooseMove({ d: near.d, dy: near.dy, step: c.step, airStep: c.airStep, grounded: nearGround(), webbed: false, holdT: 0 });
         if (mv && !(mv.key === 'strike' && hero.state === 'wall')) {
           if (grounded() && !MOVES[mv.key].air) c.airStep = 0;
           startMove(mv.key);
@@ -452,11 +458,13 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   function startDodge(intent, engaged) {
     // Away from the soonest attacker, sideways unless the stick says otherwise.
     let threat = null, soon = Infinity;
+    const aimed = [];
     for (const e of engaged) {
-      if (e.state !== 'windup') continue;
+      if (e.state !== 'windup' || (e.atBody && e.atBody !== hero.body)) continue;
       const left = e.strikeAt - e.t;
       const u = toward(e);
       const reach = (e.A.ranged && !e.disarmed) ? 40 : e.A.reach + 1.2;
+      if (u.d < reach) aimed.push({ e, left });
       if (u.d < reach && left < soon) { soon = left; threat = e; }
     }
     const ref = threat ?? engaged.reduce((a, b) => (toward(a).d < toward(b).d ? a : b));
@@ -470,7 +478,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       dx = intent.moveX / m; dz = intent.moveZ / m;
       if (dx * u.x + dz * u.z > Math.SQRT1_2) { const s = dx * u.z - dz * u.x > 0 ? 1 : -1; dx = u.z * s; dz = -u.x * s; }
     }
-    if (hero.state === 'wall' || hero.state === 'perch') { hero.state = 'air'; hero.airTime = 0; }
+    if (hero.state === 'wall') { hero.state = 'air'; hero.airTime = 0; }
     // A move in progress is dropped (every move but a finisher cancels into a dodge).
     c.move = null; c.airKeepT = 0;
     const air = !grounded();
@@ -493,8 +501,10 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
     // Dodging a telegraphed blow clears that blow: covered until it has landed (at most 1 s),
     // however early in the windup the dodge came, and that swing can no longer hit at all.
-    c.state = 'dodge'; c.t = 0; c.iframes = threat ? Math.max(COMBAT.iframes, Math.min(1.0, soon + 0.1)) : COMBAT.iframes;
-    if (threat) threat.dodged = true;
+    // Two fists spaced by the director's gap: one dodge clears both (fix spec B6).
+    let last = soon;
+    for (const q of aimed) if (q.left <= soon + TUNE.meleeGap + 0.1) { q.e.dodged = true; last = Math.max(last, q.left); }
+    c.state = 'dodge'; c.t = 0; c.iframes = threat ? Math.max(COMBAT.iframes, Math.min(1.0, last + 0.1)) : COMBAT.iframes;
     enemies.tokens?.holdAll(TUNE.dodgeHold);
     const perfect = !!threat && soon <= COMBAT.perfectWindow + 1 / 60;
     // Which side relative to where the hero faces (the poser picks the flip).

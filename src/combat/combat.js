@@ -73,7 +73,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
           const seg = Math.hypot(nx - pr.x, ny - pr.y, nz - pr.z) || 1;
           const t = Math.max(0, Math.min(1, ((h.x - pr.x) * (nx - pr.x) + (h.y - pr.y) * (ny - pr.y) + (h.z - pr.z) * (nz - pr.z)) / (seg * seg)));
           const d = Math.hypot(pr.x + (nx - pr.x) * t - h.x, pr.y + (ny - pr.y) * t - h.y, pr.z + (nz - pr.z) * t - h.z);
-          if (d > 0.7 || T.invuln()) continue;
+          if (d > 0.7 || T.invuln() || (pr.shooter?.dodged && pr.shooter.atBody === T.body)) continue;
           if (pr.kind === 'rocket') { explode(pr.x, pr.y, pr.z, pr); return true; }
           T.hit({ dmg: pr.dmg, dir: { x: pr.vx / 70, z: pr.vz / 70 }, from: null });
           return true;
@@ -201,7 +201,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     // A new host picks up the gang the old one was running.
     restoreEncounter(enc) {
       if (!enc) return;
-      const list = enc.list.map((q, i) => { const e = enemies.spawn({ x: q.x, z: q.z, faction: q.faction, arch: q.arch, look: q.look ?? i, alert: true }); e.hp = q.hp; return e; });
+      const list = enc.list.filter((q) => q.hp > 0).map((q, i) => { const e = enemies.spawn({ x: q.x, z: q.z, faction: q.faction, arch: q.arch, look: q.look ?? i, alert: true }); e.hp = q.hp; return e; });
       encounter = { x: enc.x, z: enc.z, list, district: enc.district, faction: enc.faction, kind: enc.kind ?? 'gang' };
     },
     get encounter() { return encounter; },

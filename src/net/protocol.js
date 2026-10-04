@@ -67,7 +67,7 @@ export function encodeWorld(seq, enemies) {
     d.setUint8(o + 5, Math.max(0, ENEMY_STATES.indexOf(e.state)));
     d.setFloat32(o + 6, e.p.x, true); d.setFloat32(o + 10, e.p.y, true); d.setFloat32(o + 14, e.p.z, true);
     d.setInt16(o + 18, q16(((e.facing % (Math.PI * 2)) + Math.PI * 3) % (Math.PI * 2) - Math.PI, 10000), true);
-    d.setUint8(o + 20, Math.max(0, Math.min(255, Math.round((e.hp / e.maxHp) * 255))));
+    d.setUint8(o + 20, e.hp > 0 ? Math.max(1, Math.min(255, Math.round((e.hp / e.maxHp) * 255))) : 0); // a sliver of health still reads as alive
     d.setUint8(o + 21, Math.max(0, Math.min(255, Math.round((e.web ?? 0) * 255))));
   }
   return buf;

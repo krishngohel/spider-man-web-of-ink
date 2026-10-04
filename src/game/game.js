@@ -54,7 +54,7 @@ import { createLobby } from '../ui/lobby.js';
 import { unlockedSave } from '../progress/unlocked.js';
 import { autoBuild } from '../progress/progression.js';
 import { newGamePlus } from '../story/gauntlet.js';
-import { ARCHETYPES } from '../combat/enemies.js';
+import { ARCHETYPES, isActive } from '../combat/enemies.js';
 import { DEFAULTS } from '../physics/constants.js';
 import { createDirector } from '../story/director.js';
 import { createStoryUi } from '../ui/storyUi.js';
@@ -306,7 +306,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     makeSnapshot: () => ({
       mode: modes.state,
       encounter: combat.encounter ? { x: combat.encounter.x, z: combat.encounter.z, district: combat.encounter.district, faction: combat.encounter.faction,
-        list: combat.enemies.list.filter((e) => e.alive && !e.puppet && !e.isPlayer && e.state !== 'out').map((e) => ({ arch: e.arch, faction: e.faction, look: e.look, x: e.body.p.x, z: e.body.p.z, hp: e.hp })) } : null,
+        list: combat.enemies.list.filter((e) => isActive(e) && !e.puppet && !e.isPlayer).map((e) => ({ arch: e.arch, faction: e.faction, look: e.look, x: e.body.p.x, z: e.body.p.z, hp: e.hp })) } : null,
     }),
     onSnapshot: (snap) => modes.adopt(snap?.mode),
     onBecomeHost: (snap) => { modes.adopt(snap?.mode); combat.restoreEncounter(snap?.encounter); },
@@ -638,7 +638,6 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       case 'encounterStart': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; } break;
       case 'encounterDone': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangBusted); if (waypoint?.auto) waypoint = null; } break;
       case 'thwip': if (e.combat) sfx.event({ type: 'thwip' }); break;
-      case 'moveStart': sfx.event({ type: 'moveStart' }); break;
       default: break;
     }
     progress.onCombatEvent(e);
