@@ -67,6 +67,9 @@ export const PAD = {
   swing: 7,     // RT / R2
   map: 8,       // Back / Share
   help: -1,     // the pause menu has it
+  scan: 12,     // D-pad up (Kraven and Mysterio need the scan: a pad once could not)
+  photo: 14,    // D-pad left
+  trick: 15,    // D-pad right (D-pad down advances the radio)
   pause: 9,     // Start / Options
 };
 

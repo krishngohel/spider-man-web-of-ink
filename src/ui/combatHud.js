@@ -91,8 +91,9 @@ export function createCombatHud(root, opts) {
       const combat = opts.combat;
       if (!combat) return;
       const c = combat.heroCombat.c;
-      const fighting = combat.enemies.engaged.length > 0 || c.hp < c.maxHp || wheelOpen;
-      box.classList.toggle('hidden', !fighting && c.focus <= 0.01);
+      // Only in a fight, a few seconds after one, or while hurt: never parked on screen for good.
+      const fighting = combat.enemies.engaged.length > 0 || wheelOpen || c.outOfCombat < 4 || c.hp < c.maxHp * 0.98;
+      box.classList.toggle('hidden', !fighting);
       hpFill.style.width = `${(c.hp / c.maxHp) * 100}%`;
       hpBar.classList.toggle('low', c.hp < c.maxHp * 0.3);
       webPips.forEach((w, i) => w.classList.toggle('on', i < (c.webAmmo ?? 6)));

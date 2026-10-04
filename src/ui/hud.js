@@ -51,6 +51,7 @@ export function createHud(root, getSettings) {
       hang: bindingLabel(b, 'hang'), trick: bindingLabel(b, 'trick'), map: bindingLabel(b, 'map'),
       suitPower: bindingLabel(b, 'suitPower'), attack: bindingLabel(b, 'attack'), web: bindingLabel(b, 'web'), finisher: bindingLabel(b, 'finisher'),
       gadget: bindingLabel(b, 'gadget'), gadgetWheel: bindingLabel(b, 'gadgetWheel'), forward: bindingLabel(b, 'forward'), back: bindingLabel(b, 'back'),
+      scan: bindingLabel(b, 'scan'), photo: bindingLabel(b, 'photo'),
       move: ['forward', 'left', 'back', 'right'].map((a) => bindingLabel(b, a)).join(' '),
     };
   };

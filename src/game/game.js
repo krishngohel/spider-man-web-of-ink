@@ -594,6 +594,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     return { x: (wp.x * 0.5 + 0.5) * innerWidth, y: (-wp.y * 0.5 + 0.5) * innerHeight, front: wp.z < 1 };
   }
   let lastThwipWord = -10, lastWhipWord = -10;
+  const wordAt = new Map();
+  const wordGate = (k, s) => { if (time - (wordAt.get(k) ?? -99) < s) return false; wordAt.set(k, time); return true; };
   let gdt = 0;
   // Combat feedback: words, sounds, shakes, impact frames, the HUD.
   let impactTimer = 0, impactLong = false;
@@ -730,8 +732,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       case 'attach': fx.splat(e.x, e.y, e.z, e.nx, e.ny, e.nz); rig.onAttach(); break;
       case 'release': case 'perfect': case 'swingJump': fx.letGo(); break;
       case 'thwip': {
-        // THWIP! now and then, by the hand (every shot would be noise).
-        if (time - lastThwipWord > 2.5) {
+        // THWIP! now and then, by the hand (every shot would be noise; the sound carries the rest).
+        if (time - lastThwipWord > 9) {
           lastThwipWord = time;
           const s = screenOf(p.x, p.y + 0.8, p.z);
           if (s.front) hud.word('THWIP!', s.x + 70, s.y - 40, 'small');
@@ -749,15 +751,16 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         break;
       default: break;
     }
-    if (e.type === 'perfect') { const s = screenOf(p.x, p.y + 1, p.z); hud.word('PERFECT!', s.x, s.y - 90, 'big'); }
-    if (e.type === 'swingJump') { const s = screenOf(p.x, p.y, p.z); hud.word('WHOOSH!', s.x - 100, s.y + 20, 'small'); }
+    // Swing words now and then, not on every release (the boost and its sound say it already).
+    if (e.type === 'perfect' && wordGate('perfect', 8)) { const s = screenOf(p.x, p.y + 1, p.z); hud.word('PERFECT!', s.x, s.y - 90, 'small'); }
+    if (e.type === 'swingJump' && wordGate('whoosh', 10)) { const s = screenOf(p.x, p.y, p.z); hud.word('WHOOSH!', s.x - 100, s.y + 20, 'small'); }
     if (e.type === 'corner') {
       const s = screenOf(p.x, p.y + 0.5, p.z);
       // The word now and then (corners come thick and fast down an avenue).
       if (s.front && time - lastWhipWord > 4) { lastWhipWord = time; hud.word('WHIP!', s.x + 90, s.y - 50, 'small'); }
       if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.25);
     }
-    if (e.type === 'launch') { const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('HUP!', s.x - 80, s.y - 40, 'small'); }
+    if (e.type === 'launch' && wordGate('hup', 8)) { const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('HUP!', s.x - 80, s.y - 40, 'small'); }
   }
   let camOverride = null;
   let trace = null, traceSkip = 0;
