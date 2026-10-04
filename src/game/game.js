@@ -642,6 +642,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       case 'encounterStart': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; } break;
       case 'encounterDone': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangBusted); if (waypoint?.auto) waypoint = null; } break;
       case 'thwip': if (e.combat) sfx.event({ type: 'thwip' }); break;
+      case 'webBlast': fx.ring(e.at.x, e.at.y - 0.9, e.at.z, 3); sfx.event({ type: 'webThrow' }); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.35); break;
       default: break;
     }
     progress.onCombatEvent(e);

@@ -36,7 +36,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     iframes: 0, outOfCombat: 9, attackHeldT: 0, webHeldT: 0, punchN: 0,
     timeScale: 1, slowT: 0, slowKind: 'plain', finisherHoldT: 0, defeated: false, lastWord: 0,
     webAmmo: TUNE.webCap, webRefillT: 0,
-    move: null, step: 0, airStep: 0, lastKey: '', sameRun: 0, mash: 0, lastMoveAt: -9, lastMoveEnd: -9, airKeepT: 0, clock: 0, hclock: 0, stick: { x: 0, z: 0 }, camFwd: { x: 0, y: 0, z: 1 },
+    move: null, step: 0, airStep: 0, lastKey: '', sameRun: 0, mash: 0, lastMoveAt: -9, lastMoveEnd: -9, airKeepT: 0, clock: 0, hclock: 0, counterUntil: -9, counterTgt: null, recent: [], used: {}, attackAt: -9, webAt: -9, stick: { x: 0, z: 0 }, camFwd: { x: 0, y: 0, z: 1 },
     heroStop: 0, heroStopAll: 0, faceYaw: null,
     dmgMul: 1, // skills raise this (Plan 4)
     special: null, strikeMul: 1, comboKeep: TUNE.comboReset, armor: 0, resilient: false, resilientUsed: false, focusMul: 1, brutalMul: 1,
@@ -74,7 +74,11 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (r.ignored) return r;
     if (r.blocked) { word('CLANG!', e); onEvent({ type: 'blocked' }); if (e.arch === 'shield') hint('SHIELD UP: FLIP OVER HIM OR YANK IT AWAY'); return r; }
     c.combo++; c.comboT = 0;
-    c.focus = Math.min(3, c.focus + COMBAT.focusPerHit * c.focusMul);
+    // Variety pays: four different moves in the last six fill focus half as fast again; the same
+    // string over and over fills it at half speed.
+    const kinds = new Set(c.recent).size;
+    const style = kinds >= 4 ? 1.5 : c.mash > 4 ? 0.5 : 1;
+    c.focus = Math.min(3, c.focus + COMBAT.focusPerHit * c.focusMul * style);
     // The last one down: a longer freeze and a beat of slow motion.
     const last = e.hp <= 0 && enemies.engaged.length === 0;
     const s = stopFor(last ? 'finisher' : stop);
@@ -94,7 +98,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     const dur = clips.get(clip)?.duration ?? 1;
     const tm = clipTiming(clip, dur);
     let plan = null;
-    if (tgt && !M.air && !M.travel && grounded()) {
+    if (tgt && !M.air && !M.travel && !M.noWarp && grounded()) {
       // Root travel in game time: the clip's own (mocap) or none (Quaternius), then warped.
       const data = CLIP_DATA[clip], n = Math.max(2, Math.ceil(M.time * 60) + 1), root = [];
       for (let i = 0; i < n; i++) {
@@ -119,6 +123,16 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     c.sameRun = c.mash > 4 ? 3 : 1;
     c.lastKey = key;
     c.punchN++;
+    c.recent.push(key); if (c.recent.length > 6) c.recent.shift();
+    c.used[key] = (c.used[key] ?? 0) + 1;
+    if (M.name) word(M.name, tgt, 'hit');
+    if (key === 'pull' && tgt) {
+      // The web pull: he flies in to arrive at the hero's fists on the impact frame.
+      const u = toward(tgt), gap = Math.max(0, u.d - 1.1), v = tgt.body.v;
+      enemies.hang?.(tgt, M.impact + 0.05);
+      applyDv(tgt.body, 'rope', -u.x * gap / M.impact - v.x, 2.5 - v.y, -u.z * gap / M.impact - v.z);
+      onEvent({ type: 'thwip', x: tgt.body.p.x, y: tgt.body.p.y, z: tgt.body.p.z, combat: true });
+    }
     // Beat to the punch (PUB): a slower blow from the enemy we are hitting is cancelled, unless
     // it is heavy, a boss, or the player is mashing.
     if (tgt && !tgt.boss && tgt.state === 'windup' && toward(tgt).d < 4 && beatsToPunch({ heroImpactIn: M.impact, enemyImpactIn: tgt.strikeAt - tgt.t, sameMoveRun: c.sameRun, heavy: !!tgt.A.heavy })) enemies.interrupt?.(tgt);
@@ -126,6 +140,22 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (key === 'launcher') onEvent({ type: 'uppercut' });
     if (M.travel && grounded()) { const v = V(); applyDv(hero.body, 'surface', 0, Math.max(0, 3 - v.y), 0); hero.state = 'air'; hero.airTime = 0; }
     onEvent({ type: 'moveStart', key, clip, air: !grounded() || !!M.air, time: M.time, impact: M.impact, travel: !!M.travel, n: c.punchN });
+  }
+
+  // Which combo move an attack press means, if any (else the plain string): a counter right after a
+  // dodge, a web pull on a thug just webbed out of reach, a sweep after a pause in the string, a
+  // back kick while steering away from the thug at your back.
+  function comboMove(tgt, near, gap, stepBefore) {
+    if (!grounded() && !nearGround()) return null;
+    const ct = c.counterTgt;
+    if (ct && c.clock < c.counterUntil && isActive(ct) && toward(ct).d < 6) { c.target = ct; c.counterUntil = -9; return 'counter'; }
+    if (!tgt || tgt.boss) return null;
+    if (tgt.webAgo < TUNE.pullWindow && near.d > 2.6 && near.d < 12 && !tgt.A?.heavy && tgt.state !== 'webbed') return 'pull';
+    if (stepBefore >= 2 && gap >= TUNE.pauseFrom && gap <= TUNE.pauseTo && near.d < 3) { c.step = 0; return 'sweep'; }
+    // Steering away from a thug at your back while you attack: kick back at him without turning.
+    const sl = Math.hypot(c.stick.x, c.stick.z);
+    if (near.d < 2.8 && sl > 0.3 && (c.stick.x * near.x + c.stick.z * near.z) / sl < -0.5) return 'backKick';
+    return null;
   }
 
   function webbedNear() {
@@ -164,7 +194,16 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       onEvent({ type: 'finisher', e: tgt });
       return;
     }
-    const r = landHit(tgt, { dmg, push: M.push, lift, kind: M.kick ? 'kick' : 'melee', heavy: !!M.knock || m.key === 'launcher', stop: M.stop });
+    if (M.aoe) {
+      for (const e of enemies.active) {
+        const u = toward(e);
+        if (e.boss || u.d > M.aoe || Math.abs(u.dy) > 1.6) continue;
+        landHit(e, { dmg, push: M.push, lift: 0, kind: 'sweep', heavy: true, stop: M.stop });
+      }
+      onEvent({ type: 'contact', e: tgt, key: m.key });
+      return;
+    }
+    const r = landHit(tgt, { dmg, push: M.push, lift, kind: M.kick ? 'kick' : 'melee', heavy: !!M.knock || m.key === 'launcher' || m.key === 'pull', stop: M.stop });
     if (r.blocked) return;
     // Air Juggler (a skill raising airLift) keeps them up longer.
     const keep = TUNE.airKeep * (COMBAT.airLift / COMBAT_BASE.airLift);
@@ -205,7 +244,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       c.attackHeldT = -99; startMove('launcher'); return;
     }
     if (!M.finisher && canChain(M, m.t) && buffer.take('attack', c.hclock)) {
-      if (m.key === 'launcher' && m.hitDone && m.t - M.impact <= TUNE.followWindow + 0.15 && alive) {
+      if ((m.key === 'launcher' || m.key === 'pull') && m.hitDone && m.t - M.impact <= TUNE.followWindow + 0.15 && alive) {
         // Follow him up: legs push off the ground after the launched enemy.
         const v = V();
         applyDv(hero.body, 'surface', -v.x * 0.5, Math.sqrt(2 * G * TUNE.launchHeight) + 1 - Math.max(0, v.y), -v.z * 0.5);
@@ -276,6 +315,17 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     let near = tgt ? toward(tgt) : null;
 
     if (c.defeated) { intent.moveX = intent.moveZ = 0; return; }
+    if (intent.webPressed) c.webAt = c.hclock;
+    if (intent.attackPressed) c.attackAt = c.hclock;
+    // Both buttons together on a long combo: the web blast webs everyone around (spends the combo).
+    if ((intent.attackPressed || intent.webPressed) && Math.abs(c.attackAt - c.webAt) < 0.15 && c.combo >= TUNE.blastCombo && !c.defeated) {
+      let n = 0;
+      for (const e of enemies.active) { const u = toward(e); if (!e.boss && u.d < TUNE.blastRadius && Math.abs(u.dy) < 3) { enemies.hit(e, { kind: 'web', dmg: 0.6 }); n++; } }
+      c.combo = 0; c.attackAt = c.webAt = -9; buffer.clear(); intent.webPressed = false; intent.attackPressed = false;
+      c.used.blast = (c.used.blast ?? 0) + 1;
+      word('WEB BLAST!', null, 'big');
+      onEvent({ type: 'webBlast', at: { ...P() }, n });
+    }
     if (intent.attackPressed) {
       buffer.press('attack', c.hclock);
       // The next attack ends a perfect dodge's slow motion early.
@@ -356,8 +406,11 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       c.state = 'slam'; c.t = 0; onEvent({ type: 'slamStart' }); return;
     }
     if (buffer.take('attack', c.hclock)) {
+      const gap = c.clock - c.lastMoveEnd, stepBefore = c.step;
       // Back after a pause: the string starts over.
-      if (c.clock - c.lastMoveEnd > 0.6) { c.step = 0; if (grounded()) c.airStep = 0; }
+      if (gap > 0.6) { c.step = 0; if (grounded()) c.airStep = 0; }
+      const special = comboMove(tgt, near, gap, stepBefore);
+      if (special) { startMove(special); return; }
       if (tgt) {
         const mv = chooseMove({ d: near.d, dy: near.dy, step: c.step, airStep: c.airStep, grounded: nearGround(), webbed: false, holdT: 0 });
         if (mv && !(mv.key === 'strike' && hero.state === 'wall')) {
@@ -406,6 +459,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
         wb.bowled = new Set();
         wb.onGround = false;
         word('THROWN!', wb);
+        c.used.throw = (c.used.throw ?? 0) + 1;
         onEvent({ type: 'webThrow', e: wb });
         return;
       }
@@ -435,6 +489,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
           const s = stopFor('finisher');
           c.heroStop = Math.max(c.heroStop, s); c.heroStopAll = c.heroStop; enemies.freeze?.(tgt, s);
           if (finisherSlowmo) slowmo(0.4);
+          c.used.finisher = (c.used.finisher ?? 0) + 1;
           word('FINISHER!', tgt, 'big');
           onEvent({ type: 'finisher', e: tgt });
         } else {
@@ -505,6 +560,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     let last = soon;
     for (const q of aimed) if (q.left <= soon + TUNE.meleeGap + 0.1) { q.e.dodged = true; last = Math.max(last, q.left); }
     c.state = 'dodge'; c.t = 0; c.iframes = threat ? Math.max(COMBAT.iframes, Math.min(1.0, last + 0.1)) : COMBAT.iframes;
+    if (threat && !threat.boss) { c.counterTgt = threat; c.counterUntil = c.clock + TUNE.dodgeTime + TUNE.counterWindow; }
     enemies.tokens?.holdAll(TUNE.dodgeHold);
     const perfect = !!threat && soon <= COMBAT.perfectWindow + 1 / 60;
     // Which side relative to where the hero faces (the poser picks the flip).

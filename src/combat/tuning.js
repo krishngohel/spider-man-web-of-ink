@@ -37,5 +37,8 @@ export const TUNE = {
   stop: { light: 0.07, round: 0.08, ender: 0.12, launcher: 0.1, counter: 0.12, finisher: 0.16 }, stopCap: 0.18,
   shake: 0.07, shakeHero: 0.6,
   // Camera
+  // Combo moves (EST): the counter window after a dodge, the pause between string hits that means a
+  // sweep, how long after a web hit a press means a web pull, the web blast's combo cost and reach.
+  counterWindow: 0.45, pauseFrom: 0.3, pauseTo: 0.9, pullWindow: 1.5, blastCombo: 10, blastRadius: 7,
   camKick: 0.06, fovPunch: -1.5,                            // the field of view punches in (fix spec C9)
 };

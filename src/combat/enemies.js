@@ -193,6 +193,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     if (!e.alive || e.state === 'out' || e.state === 'pinned' || (e.hp <= 0 && kind !== 'slam')) return { dealt: 0, blocked: false, ignored: true };
     const front = from ? ((from.x - e.body.p.x) * Math.sin(e.facing) + (from.z - e.body.p.z) * Math.cos(e.facing)) > 0 : true;
     if (kind === 'web') {
+      e.webAgo = 0; // a web pull can yank him in for a moment after
       e.web = Math.min(1, e.web + dmg);
       e.alerted = true;
       if (e.web >= 1 && e.state !== 'webbed') { setState(e, 'webbed'); onEvent({ type: 'enemyWebbed', e }); return { dealt: 0, webbed: true }; }
@@ -215,7 +216,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     // Poise (fix spec B5): the third light hit inside 1.5 s still flinches him, then he shrugs off
     // light hits for a second; enders, launchers, throws, slams and webs still knock him about.
     // The mash rule holds on contact too: four plain hits in a row no longer break his windup.
-    const light = kind !== 'slam' && push <= 6 && lift * k <= 2;
+    const light = kind !== 'slam' && kind !== 'sweep' && push <= 6 && lift * k <= 2;
     if (light) {
       if (!(e.hitWin > 0)) { e.hitN = 0; e.hitWin = TUNE.poiseWindow; }
       e.hitN++;
@@ -224,7 +225,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     if (light && e.hitN >= TUNE.poiseHits) { e.poiseT = TUNE.poiseTime; e.hitN = 0; e.hitWin = 0; }
     if (lift * k > 2) { setState(e, 'air'); e.onGround = false; }
     else if (e.hp <= 0) { setState(e, 'out'); onEvent({ type: 'enemyOut', e }); }
-    else if (kind === 'slam' || push > 9) setState(e, 'down');
+    else if (kind === 'slam' || kind === 'sweep' || push > 9) setState(e, 'down');
     // Brutes keep swinging through light hits (super armour while winding up).
     else if (e.A.heavy && (e.state === 'windup' || e.state === 'strike') && push < 6) { /* no flinch */ }
     // On the floor or getting up: a light hit lands, it does not stand him up into a flinch.
@@ -281,7 +282,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       e.cooldown -= dt;
       e.lastHitT += dt;
       e.model.hurt.value = Math.max(0, e.model.hurt.value - dt * 6);
-      e.poiseT = Math.max(0, (e.poiseT ?? 0) - dt); e.hitWin = (e.hitWin ?? 0) - dt;
+      e.poiseT = Math.max(0, (e.poiseT ?? 0) - dt); e.hitWin = (e.hitWin ?? 0) - dt; e.webAgo = (e.webAgo ?? 99) + dt;
       const dx = hp.x - p.x, dz = hp.z - p.z, dist = Math.hypot(dx, dz) || 1;
       const ux = dx / dist, uz = dz / dist;
       let wantVx = 0, wantVz = 0, face = null;

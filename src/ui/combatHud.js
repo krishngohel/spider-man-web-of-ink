@@ -4,6 +4,7 @@ import { COPY } from './copy.js';
 import { GADGETS } from '../combat/gadgets.js';
 import { isActive } from '../combat/enemies.js';
 import { TUNE } from '../combat/tuning.js';
+import { bindingLabel, DEFAULT_BINDINGS } from '../core/bindings.js';
 
 // The fight on the HUD: health and focus in a comic panel, the combo count, the spider-sense
 // (squiggles over Spidey's head and a mark over every attacker's head, white while an attack winds
@@ -37,7 +38,9 @@ export function createCombatHud(root, opts) {
     return { g, el: s, a };
   });
   const flash = el('div', { class: 'cb-flash' });
-  const box = el('div', { class: 'cb hidden' }, [panel, combo, sense, squig, ...rings.map((r) => r.el), ...tells.map((q) => q.el), target, gadget, flash, wheel]);
+  // Move prompts: what you can do right now, each fading for good once used a few times.
+  const prompts = el('div', { class: 'cb-prompts' });
+  const box = el('div', { class: 'cb hidden' }, [panel, combo, sense, squig, ...rings.map((r) => r.el), ...tells.map((q) => q.el), target, gadget, prompts, flash, wheel]);
   root.append(box);
   let squigT = 0, flashT = 0, shownCombo = 0, wheelOpen = false, wheelPick = null, wheelVec = { x: 0, y: 0 };
   const v = new THREE.Vector3();
@@ -146,6 +149,26 @@ export function createCombatHud(root, opts) {
           target.lastChild.style.opacity = t.hp < t.maxHp ? '1' : '0';
         } else target.classList.add('hidden');
       } else target.classList.add('hidden');
+      // Prompts: at most two at a time, the most urgent first.
+      {
+        const b = opts.getSettings?.()?.bindings ?? DEFAULT_BINDINGS, key = (a) => bindingLabel(b, a);
+        const used = c.used ?? {}, fresh = (k, n = 3) => (used[k] ?? 0) < n;
+        const t2 = c.target, near = t2 && isActive(t2) ? Math.hypot(t2.body.p.x - opts.hero.body.p.x, t2.body.p.z - opts.hero.body.p.z) : 99;
+        const onGround = opts.hero.state === 'ground';
+        const list = [];
+        if (c.clock < c.counterUntil && fresh('counter', 4)) list.push([key('attack'), 'COUNTER']);
+        if (c.combo >= TUNE.blastCombo && fresh('blast', 4)) list.push([`${key('attack')} + ${key('web')}`, 'WEB BLAST']);
+        if (c.focus >= 1 && fresh('finisher', 3)) list.push([key('finisher'), 'FINISHER']);
+        if (t2 && t2.webAgo < TUNE.pullWindow && near > 2.6 && near < 12 && !t2.A?.heavy && fresh('pull')) list.push([key('attack'), 'WEB PULL']);
+        if (combat.enemies.list.some((e) => e.alive && e.state === 'webbed' && Math.hypot(e.body.p.x - opts.hero.body.p.x, e.body.p.z - opts.hero.body.p.z) < TUNE.throwReach) && fresh('throw')) list.push([key('hang'), 'THROW HIM']);
+        if (onGround && t2 && near < 2.8 && !t2.A?.heavy && !t2.boss && fresh('launcher')) list.push([`HOLD ${key('attack')}`, 'LAUNCH']);
+        if (onGround && (c.step ?? 0) >= 2 && fresh('sweep')) list.push([`${key('attack')}, PAUSE, ${key('attack')}`, 'SWEEP']);
+        const want = list.slice(0, 2).map(([k, n]) => `${k}|${n}`).join(';');
+        if (prompts.dataset.k !== want) {
+          prompts.dataset.k = want;
+          prompts.replaceChildren(...list.slice(0, 2).map(([k, n]) => el('div', { class: 'cb-prompt' }, [el('kbd', {}, k), el('span', {}, n)])));
+        }
+      }
       // Gadget in hand.
       const gs = combat.gadgets, g = GADGETS.find((x) => x.id === gs.selected);
       gadget.firstChild.textContent = g.name;

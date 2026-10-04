@@ -397,3 +397,7 @@ body.cb .bfill { background: linear-gradient(#5ab0ff, #1f4fb6); }
 .objective.pulse { animation: objpulse 0.9s ease-out; }
 @keyframes objpulse { 0% { transform: rotate(0.8deg) scale(1.12); box-shadow: 4px 4px 0 var(--ink), 0 0 0 6px #f7e36a; } 100% { transform: rotate(0.8deg) scale(1); box-shadow: 4px 4px 0 var(--ink), 0 0 0 0 transparent; } }
 .tip.quiet { opacity: 0; transition: opacity 0.2s; }
+.cb-prompts { position: absolute; left: 50%; bottom: 150px; transform: translateX(-50%); display: flex; gap: 12px; pointer-events: none; }
+.cb-prompt { display: flex; align-items: center; gap: 6px; padding: 4px 9px 4px 5px; background: #fff; border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); transform: rotate(-1deg); font-family: var(--head); font-size: 16px; color: var(--ink); animation: cbprompt 0.18s ease-out; }
+.cb-prompt kbd { font-family: var(--head); font-size: 13px; padding: 1px 6px; background: #f7e36a; border: 2px solid var(--ink); }
+@keyframes cbprompt { from { transform: rotate(-1deg) scale(0.7); opacity: 0; } to { transform: rotate(-1deg) scale(1); opacity: 1; } }

@@ -22,6 +22,16 @@ export const MOVES = {
   // The finisher (spec 1.9): one second, the hero untouchable, it cannot be cancelled.
   finisher: { clips: ['Kip_Kick', 'Kick_Spin'], alt: 'Melee_Hook', time: 1.0, impact: 0.55, push: 10, lift: 5, dmg: 1, stop: 'finisher', kick: true, knock: true, finisher: true },
   throw: { clips: ['Shoulder_Throw', 'Pull_Rope'], alt: 'Melee_Hook', time: 0.5, impact: 0.25, push: 14, lift: 4, dmg: 1.2, stop: 'ender', knock: true },
+  // Combo moves (after Insomniac's Spider-Man): each one is its own input, so a fight is choices,
+  // not one string on repeat.
+  // Attack right after a dodge: a flying kick that floors the one who swung.
+  counter: { clips: ['Kick_Flying', 'Kick_Spin'], alt: 'Melee_Hook', time: 0.45, impact: 0.14, push: 10, lift: 2, dmg: 1.8, stop: 'counter', kick: true, knock: true, name: 'COUNTER!' },
+  // Attack, a beat's pause, attack: a spinning sweep that trips everyone close.
+  sweep: { clips: ['Kick_Spin'], alt: 'Melee_Hook', time: 0.5, impact: 0.18, push: 5, lift: 0, dmg: 1, stop: 'ender', kick: true, aoe: 2.6, name: 'SWEEP!' },
+  // A thug behind you: a back kick without turning round.
+  backKick: { clips: ['Kick_Round'], alt: 'Melee_Hook', time: 0.4, impact: 0.13, push: 10, lift: 1, dmg: 1.4, stop: 'ender', kick: true, knock: true, name: 'BACK KICK!' },
+  // A thug you just webbed, out of reach: yank him in and launch him.
+  pull: { clips: ['Pull_Rope', 'Melee_Hook'], alt: 'Melee_Hook', time: 0.5, impact: 0.28, push: 0.5, lift: 11, dmg: 1.2, stop: 'launcher', noWarp: true, name: 'GET OVER HERE!' },
 };
 const STRING = ['jab', 'cross', 'round', 'ender'];
 const AIR = ['air1', 'air2', 'air3', 'spike'];
