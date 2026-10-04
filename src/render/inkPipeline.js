@@ -132,6 +132,8 @@ void main() {
     float ce = smoothstep(0.16, 0.32, abs(lx) + abs(ly)) * (1.0 - smoothstep(30.0, 90.0, dc)) * 0.6 * uColorEdges;
     edge = max(edge, ce);
   }
+  // Alpha below 0.5 is reserved for "no ink here" (the suit's lenses, see render/comicShade.js).
+  if (raw0.a < 0.5) edge = 0.0;
   col = snapPalette(col, uPaletteAmt);
   float L = pow(max(luma(col), 0.0), 1.0 / 2.2);
 

@@ -100,8 +100,8 @@ function suitMaterial(suit) {
     addShadeUniforms(shader);
     Object.assign(shader.uniforms, uniforms);
     shader.vertexShader = shader.vertexShader
-      .replace('#include <common>', '#include <common>\nvarying vec3 vBind;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position * uBodyScale;')
+      .replace('#include <common>', '#include <common>\nvarying vec3 vBind, vBindN;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBind = position * uBodyScale; vBindN = normal;')
       .replace('#include <common>', '#include <common>\nuniform vec3 uBodyScale;');
     shader.fragmentShader = shader.fragmentShader
       .replace('#include <common>', `#include <common>
@@ -109,7 +109,7 @@ uniform vec3 uRed, uBlue, uBlack, uLens;
 uniform float uStyle;   // 0 classic, 1 symbiote, 2 iron, 3 noir, 4 2099, 5 stealth glow, 6 negative
 float gGlow = 0.0;      // glowing lines (stealth suits), painted after lighting
 ${COMIC_SHADE}
-varying vec3 vBind;
+varying vec3 vBind, vBindN;
 const float TAU = 6.2831853;
 float gLens = 0.0;
 // A line at every whole number of f, about px pixels wide, antialiased.
@@ -143,9 +143,50 @@ float spider(vec2 q, float s) {
   d = min(d, sdSeg(a, vec2(0.048, -0.06), vec2(0.058, -0.11)) - 0.0028);
   return d * s;
 }
+// The Amazing-film spider: a small body and long, thin, angular legs, the front pair reaching up
+// to the collarbones and the back pair down to the lower ribs.
+float spiderLong(vec2 q, float s) {
+  q /= s;
+  float d = length(q - vec2(0.0, 0.044)) - 0.013;
+  d = min(d, (length((q - vec2(0.0, 0.014)) / vec2(0.021, 0.027)) - 1.0) * 0.021);
+  d = min(d, (length((q - vec2(0.0, -0.036)) / vec2(0.017, 0.044)) - 1.0) * 0.017);
+  vec2 a = vec2(abs(q.x), q.y);
+  d = min(d, sdSeg(a, vec2(0.008, 0.032), vec2(0.044, 0.076)) - 0.006);
+  d = min(d, sdSeg(a, vec2(0.044, 0.076), vec2(0.072, 0.156)) - 0.0042);
+  d = min(d, sdSeg(a, vec2(0.01, 0.02), vec2(0.066, 0.048)) - 0.006);
+  d = min(d, sdSeg(a, vec2(0.066, 0.048), vec2(0.114, 0.1)) - 0.0042);
+  d = min(d, sdSeg(a, vec2(0.01, 0.004), vec2(0.066, -0.01)) - 0.006);
+  d = min(d, sdSeg(a, vec2(0.066, -0.01), vec2(0.11, -0.066)) - 0.0042);
+  d = min(d, sdSeg(a, vec2(0.008, -0.01), vec2(0.042, -0.064)) - 0.006);
+  d = min(d, sdSeg(a, vec2(0.042, -0.064), vec2(0.06, -0.162)) - 0.0042);
+  return d * s;
+}
+// Distance to the nearest edge of a hexagon grid (cells one unit across): 0 on an edge.
+float hexEdge(vec2 p) {
+  const vec2 s = vec2(1.0, 1.7320508);
+  vec2 a = mod(p, s) - s * 0.5, b = mod(p - s * 0.5, s) - s * 0.5;
+  vec2 g = dot(a, a) < dot(b, b) ? a : b;
+  vec2 q = abs(g);
+  return 0.5 - max(dot(q, s * 0.5), q.x);
+}
+// The raised honeycomb the Amazing suits are printed with: dark cell walls, about a centimetre
+// across, mapped onto the body from three sides. Fades out before it would shimmer.
+float honeycomb(vec3 p, vec3 n) {
+  vec3 w = pow(abs(n), vec3(4.0)); w /= w.x + w.y + w.z;
+  vec3 c = p / 0.011;
+  float e = 0.0;
+  if (w.x > 0.01) { float h = hexEdge(c.zy); e += w.x * (1.0 - smoothstep(0.0, fwidth(h) * 1.5 + 0.04, h)); }
+  if (w.y > 0.01) { float h = hexEdge(c.xz); e += w.y * (1.0 - smoothstep(0.0, fwidth(h) * 1.5 + 0.04, h)); }
+  if (w.z > 0.01) { float h = hexEdge(c.xy); e += w.z * (1.0 - smoothstep(0.0, fwidth(h) * 1.5 + 0.04, h)); }
+  float cellPx = 1.0 / max(length(fwidth(c)), 1e-4);
+  return e * smoothstep(5.0, 12.0, cellPx);
+}
+float gLensHex = 0.0;
 vec3 paintSuit(vec3 p) {
   float ax = abs(p.x);
   bool red; float lines = 0.0;
+  vec2 f = vec2(0.0); // the two web-line families (whole numbers fall on a line)
+  bool amazing = uStyle < 0.5;
   if (p.y > 1.53) {
     // Mask: web lines radiate from between the eyes over the whole head, crossed by rings.
     red = true;
@@ -153,27 +194,37 @@ vec3 paintSuit(vec3 p) {
     vec3 dir = normalize(p - c);
     float phi = (atan(dir.y, dir.x) / TAU + 0.5) * 16.0;
     float th = acos(clamp(dir.z, -1.0, 1.0)) / 0.26;
-    lines = max(lineAA(phi, 1.4), lineAA(th, 1.4));
+    f = vec2(phi, th);
   } else if (ax < 0.24 && p.y > 0.93) {
     // Torso: a red bib from the shoulders, narrowing to the waist; blue sides from the armpits.
     float bib = mix(0.07, 0.165, smoothstep(1.0, 1.42, p.y));
     red = ax < bib || p.y > 1.44 || p.y < 0.985;
     vec2 c = p.xy - vec2(0.0, 1.34);
-    lines = max(lineAA((atan(c.y, c.x) / TAU + 0.5) * 18.0, 1.4), lineAA(length(c) / 0.06, 1.4));
+    f = vec2((atan(c.y, c.x) / TAU + 0.5) * 18.0, length(c) / 0.06);
   } else if (ax >= 0.24) {
     // Arms: red over the top and outside, blue underneath the upper arm, red forearms and gloves.
     red = ax > 0.45 || p.y > 1.448;
     float phi = (atan(p.z + 0.065, p.y - 1.455) / TAU + 0.5) * 8.0;
-    lines = max(lineAA(ax / 0.065, 1.4), lineAA(phi, 1.4));
+    f = vec2(ax / 0.065, phi);
   } else {
     // Legs blue; red boots to mid-calf, the top edge dipping to a point at the front.
     float a = atan(p.z + 0.04, p.x - sign(p.x) * 0.114);
-    float bootTop = 0.43 - 0.06 * smoothstep(0.6, 1.0, sin(a));
+    // The Amazing boots come up to just under the knee.
+    float bootTop = amazing ? 0.5 - 0.07 * smoothstep(0.6, 1.0, sin(a)) : 0.43 - 0.06 * smoothstep(0.6, 1.0, sin(a));
     red = p.y < bootTop;
-    lines = max(lineAA(p.y / 0.065, 1.4), lineAA((a / TAU + 0.5) * 8.0, 1.4));
+    f = vec2(p.y / 0.065, (a / TAU + 0.5) * 8.0);
   }
+  // Amazing webbing is thicker and raised: a black cord with a thin light ridge either side.
+  float lw = amazing ? 2.1 : 1.4;
+  lines = max(lineAA(f.x, lw), lineAA(f.y, lw));
+  float ridge = amazing ? max(lineAA(f.x, lw + 2.4), lineAA(f.y, lw + 2.4)) - lines : 0.0;
   vec3 col = red ? uRed : uBlue;
-  if (uStyle < 0.5) { if (red) col = mix(col, uBlack, lines); }
+  if (uStyle < 0.5) {
+    // The printed honeycomb under everything, the cells a touch lighter than their walls.
+    float hc = honeycomb(p, normalize(vBindN));
+    col *= 1.06 - 0.2 * hc;
+    if (red) { col = mix(col, col * 1.3 + 0.06, ridge * 0.55); col = mix(col, uBlack, lines); }
+  }
   else if (uStyle < 1.5) col = uRed;                                                    // symbiote: one colour
   else if (uStyle < 2.5) { col = mix(col, col * 0.55, lines * 0.7); }                    // iron: panel seams
   else if (uStyle < 3.5) { col = mix(col, uBlack, lines * 0.55); }                       // noir: soft lines
@@ -195,21 +246,22 @@ vec3 paintSuit(vec3 p) {
     }
   }
   // Chest spider (black, front) and back spider (red with a black outline, bigger).
-  if (p.y > 1.12 && p.y < 1.56 && ax < 0.16) {
+  if (p.y > 1.04 && p.y < 1.56 && ax < (amazing ? 0.2 : 0.16)) {
     if (p.z > 0.04) {
       float big = (uStyle > 0.5 && uStyle < 1.5) || uStyle > 6.5 ? 1.9 : uStyle > 3.5 && uStyle < 4.5 ? 1.6 : 1.25;
-      float d = spider(vec2(p.x, p.y - 1.33), big);
+      float d = amazing ? spiderLong(vec2(p.x, p.y - 1.325), 1.05) : spider(vec2(p.x, p.y - 1.33), big);
       vec3 ec = uStyle > 3.5 && uStyle < 4.5 ? uRed : uStyle > 5.5 && uStyle < 6.5 ? uBlue : uBlack;
       col = mix(col, ec, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
       if (uStyle > 4.5 && uStyle < 5.5) gGlow = max(gGlow, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
     } else if (p.z < -0.04) {
       float big = (uStyle > 0.5 && uStyle < 1.5) || uStyle > 6.5 ? 2.2 : 1.7;
-      float d = spider(vec2(p.x, p.y - 1.3), big);
+      float d = amazing ? spiderLong(vec2(p.x, p.y - 1.29), 1.2) : spider(vec2(p.x, p.y - 1.3), big);
       float fw = fwidth(d) * 1.5;
       if ((uStyle > 0.5 && uStyle < 1.5) || uStyle > 6.5) col = mix(col, uBlack, 1.0 - smoothstep(0.0, fw, d));
       else {
         col = mix(col, uRed, 1.0 - smoothstep(0.0, fw, d));
-        col = mix(col, uStyle > 5.5 && uStyle < 6.5 ? uBlue : uBlack, 1.0 - smoothstep(0.0035, 0.0035 + fw, abs(d)));
+        float ow = amazing ? 0.0045 : 0.0035;
+        col = mix(col, uStyle > 5.5 && uStyle < 6.5 ? uBlue : uBlack, 1.0 - smoothstep(ow, ow + fw, abs(d)));
       }
     }
   }
@@ -221,16 +273,22 @@ vec3 paintSuit(vec3 p) {
     vec3 d = (p - vec3(0.0, 1.69, 0.0)) / vec3(0.091, 0.124, 0.104);
     float yaw = atan(d.x, d.z), pitch = asin(clamp(d.y / max(length(d), 1e-4), -1.0, 1.0));
     // Local frame in metres along the mask: u runs outward from the nose, v up.
-    vec2 q = vec2(abs(yaw) * 0.097 - 0.047, pitch * 0.124 - 0.031);
-    float a = 0.5;
+    vec2 q = vec2(abs(yaw) * 0.097 - 0.054, pitch * 0.124 - 0.029);
+    float a = 0.42;
     q = mat2(cos(a), -sin(a), sin(a), cos(a)) * q; // into the tilted lens frame (outer end up)
-    // Teardrop: full and round at the outer end, narrowing to a point by the nose.
-    float k = clamp(-q.x / 0.039, 0.0, 1.0);
-    q.y /= 1.0 - 0.72 * k * k;
-    float e = length(q / vec2(0.039, 0.025));
-    float aa = fwidth(e) * 1.5;
-    col = mix(col, uBlack, 1.0 - smoothstep(1.3, 1.3 + aa, e));
+    vec2 lq = q;
+    // Teardrop: full and round at the outer end, narrowing toward the nose.
+    vec2 r = vec2(0.047, 0.032);
+    float k = clamp(-q.x / r.x, 0.0, 1.0);
+    q.y /= 1.0 - 0.4 * k * k;
+    // Flatter along the top, the outer corner squared off a little: the film lens, not a comic oval.
+    q.y *= q.y > 0.0 ? 1.0 + 0.25 * smoothstep(-0.01, 0.04, q.x) : 1.0;
+    float e = length(q / r);
+    float aa = min(fwidth(e) * 1.5, 0.06); // capped: the eyelid folds smoothed onto the mask are slivers with huge derivatives
+    col = mix(col, uBlack, 1.0 - smoothstep(1.24, 1.24 + aa, e));
     gLens = max(gLens, 1.0 - smoothstep(1.0, 1.0 + aa, e));
+    float h = hexEdge(lq / 0.0045);
+    gLensHex = (1.0 - smoothstep(0.0, fwidth(h) * 1.5 + 0.05, h)) * smoothstep(4.0, 10.0, 1.0 / max(fwidth(lq.x / 0.0045), 1e-4));
   }
   return col;
 }
@@ -255,10 +313,10 @@ vec3 paintSuit(vec3 p) {
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>
 ${SHADOW_ALPHA}
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, uBlack * 1.3, gGlow * step(4.5, uStyle) * step(uStyle, 5.5));
-	gl_FragColor.rgb = mix(gl_FragColor.rgb, uLens * (0.92 + 0.08 * clamp(vBind.y * 6.0 - 9.9, 0.0, 1.0)), gLens);
+	gl_FragColor.rgb = mix(gl_FragColor.rgb, uLens * (0.92 + 0.08 * clamp(vBind.y * 6.0 - 9.9, 0.0, 1.0)) * (1.0 - 0.09 * gLensHex), gLens);
 	if (gLens > 0.5) gl_FragColor.a = 0.0;`);
   };
-  mat.customProgramCacheKey = () => 'suit-v7';
+  mat.customProgramCacheKey = () => 'suit-v8';
   return mat;
 }
 
@@ -273,8 +331,8 @@ export const COM_HEIGHT = 0.9; // the physics body's position is this far above 
 // The mask: blend the head's face sculpt (nose, brows, lips) onto a smooth ellipsoid, so the head
 // reads as a mask pulled over a skull, not a face. Positions and normals are bind-space, before
 // skinning, so the head still turns and nods with its bones.
-export const MASK = { cx: 0, cy: 1.69, cz: 0.0, rx: 0.091, ry: 0.124, rz: 0.104, from: 1.555, to: 1.6 };
-export const MASK_F = { cx: 0, cy: 1.645, cz: 0.0, rx: 0.085, ry: 0.118, rz: 0.098, from: 1.515, to: 1.56 };
+export const MASK = { cx: 0, cy: 1.69, cz: 0.0, rx: 0.091, ry: 0.124, rz: 0.104, from: 1.525, to: 1.585 };
+export const MASK_F = { cx: 0, cy: 1.645, cz: 0.0, rx: 0.085, ry: 0.118, rz: 0.098, from: 1.485, to: 1.545 };
 // The female body's bind positions mapped onto the male body the paint was drawn on.
 export const BODY_SCALE_F = [1 / 0.94, 1.69 / 1.645, 1];
 export function smoothHead(geometry, m = MASK) {

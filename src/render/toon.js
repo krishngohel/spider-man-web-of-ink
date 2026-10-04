@@ -99,12 +99,13 @@ export function addHullOutline(mesh, { px = 3, far = 1.2, color = PALETTE.ink } 
   mat.userData.hull = { uHullPx: { value: px }, uHullFar: { value: far } };
   mat.onBeforeCompile = (shader) => {
     Object.assign(shader.uniforms, HULL_UNIFORMS, mat.userData.hull);
-    shader.vertexShader = 'uniform vec2 uHullRes;\nuniform float uHullPx, uHullFar;\nattribute vec3 smoothNormal;\n' + shader.vertexShader
+    shader.vertexShader = 'uniform vec2 uHullRes;\nuniform float uHullPx, uHullFar;\nattribute vec3 smoothNormal;\nvarying float vHullFacing;\n' + shader.vertexShader
       .replace('#include <beginnormal_vertex>', 'vec3 objectNormal = smoothNormal;\n#ifdef USE_TANGENT\nvec3 objectTangent = vec3( tangent.xyz );\n#endif')
       .replace('#include <project_vertex>', `#include <project_vertex>
   {
     if (-mvPosition.z < 0.4) gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // camera inside: drop it
     vec3 hn = normalize(normalMatrix * objectNormal);
+    vHullFacing = dot(hn, normalize(-mvPosition.xyz));
     vec2 dir = (projectionMatrix * vec4(hn, 0.0)).xy;
     float dl = length(dir);
     if (dl > 1e-5) {
@@ -112,9 +113,14 @@ export function addHullOutline(mesh, { px = 3, far = 1.2, color = PALETTE.ink } 
       gl_Position.xy += dir / dl * w * 2.0 / uHullRes * gl_Position.w;
     }
   }`);
+    // The outline is the shell's back faces just past the silhouette, which face across the view.
+    // Back faces turned right away from the camera are the far side of the shell seen through a
+    // hole in the mesh; ones whose normal faces the camera are folds flipped inside out (the eyelids
+    // and lips smoothed onto the mask). Neither is an outline.
+    shader.fragmentShader = 'varying float vHullFacing;\n' + shader.fragmentShader.replace('void main() {', 'void main() {\n  if (vHullFacing < -0.4 || vHullFacing > 0.3) discard;');
     if (!skinned) shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvec3 objectNormal = smoothNormal;');
   };
-  mat.customProgramCacheKey = () => (skinned ? 'hull-px-skinned' : 'hull-px-static');
+  mat.customProgramCacheKey = () => (skinned ? 'hull-px2-skinned' : 'hull-px2-static');
   const hull = skinned ? new THREE.SkinnedMesh(mesh.geometry, mat) : new THREE.Mesh(mesh.geometry, mat);
   if (skinned) hull.bind(mesh.skeleton, mesh.bindMatrix);
   hull.layers.set(LAYER_FX);
