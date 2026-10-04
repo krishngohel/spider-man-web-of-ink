@@ -65,13 +65,14 @@ export function lerpPose(a, b, t, out = new Float32Array(LAYOUT.SIZE)) {
 
 // Swing poses are authored for the RIGHT hand on the web; mirror() gives the left-hand set.
 export const POSES = {
-  // Standing tall in the air, arms loose.
-  // Freefall between webs: back a little arched, arms out and bent, one knee up, never stiff.
+  // Freefall between webs (Insomniac's in-between pose): chest a little forward, one knee tucked
+  // high and the other leg trailing, the left arm low and forward, the right back by the hip. Never
+  // a T: hands stay below the shoulders and the elbows bend.
   air: pose({
-    spine: [-0.12, 0.06, 0.1], head: [-0.25, 0],
-    hl: [0.38, 0.06, 0.06], el: [0.4, -1, -0.4], gl: 'open',
-    hr: [-0.36, -0.08, 0.14], er: [-0.4, -1, -0.2], gr: 'relaxed',
-    fl: [0.1, -0.56, 0.26], kl: [0.1, 0.1, 1], fr: [-0.06, -0.8, -0.14], kr: [0, 0, 1], toe: [0.6, 0.9],
+    spine: [0.18, 0.06, 0.14], head: [-0.4, 0.05],
+    hl: [0.1, -0.36, 0.24], el: [0.3, -1, -0.3], gl: 'relaxed',
+    hr: [-0.1, -0.42, -0.16], er: [-0.25, -1, -0.4], gr: 'relaxed',
+    fl: [0.1, -0.36, 0.36], kl: [0.1, 0.2, 1], fr: [-0.08, -0.7, -0.3], kr: [0, -0.2, 1], toe: [0.8, 1.0],
   }),
   // Web just fired: right arm straight up toward the anchor (pinned by IK), left arm swept back,
   // legs together and trailing.
@@ -135,7 +136,7 @@ export const POSES = {
   // Getting ready to fire again: soaring with the web arm cocked forward.
   ready: pose({
     spine: [-0.1, -0.08, 0.1], head: [-0.45, 0],
-    hl: [0.3, -0.3, -0.2], el: [0.6, 0, -1], gl: 'open',
+    hl: [0.2, -0.4, -0.12], el: [0.4, -0.8, -0.6], gl: 'open',
     hr: [-0.12, 0.05, 0.42], er: [-1, -0.3, 0], gr: 'thwip', wrist: [0, 0.5],
     fl: [0.08, -0.8, -0.1], kl: [0, 0, 1], fr: [-0.04, -0.72, 0.06], kr: [0, 0, 1], toe: [1, 1],
   }),
@@ -153,12 +154,13 @@ export const POSES = {
     hr: [-0.12, -0.32, 0.36], er: [-1, 0, 0], gr: 'fist',
     fl: [0.1, -0.26, 0.4], kl: [0, 0.3, 1], fr: [-0.1, -0.26, 0.4], kr: [0, 0.3, 1], toe: [0.9, 0.9],
   }),
-  // Skydiver spread: arms and legs wide, back arched.
+  // Dropping: a skydiver with bent arms (elbows out, hands forward of the shoulders and below them)
+  // and the knees bent back, a little apart; the poser tips the body over the drop.
   spread: pose({
-    spine: [-0.3, 0, 0], head: [-0.35, 0],
-    hl: [0.44, 0.12, -0.12], el: [0, 0, -1], gl: 'open',
-    hr: [-0.44, 0.12, -0.12], er: [0, 0, -1], gr: 'open',
-    fl: [0.28, -0.76, -0.24], kl: [0.3, 0, 1], fr: [-0.28, -0.76, -0.24], kr: [-0.3, 0, 1], toe: [1, 1],
+    spine: [-0.12, 0, 0], head: [-0.55, 0],
+    hl: [0.2, -0.28, 0.2], el: [0.5, -0.8, -0.5], gl: 'open',
+    hr: [-0.2, -0.28, 0.2], er: [-0.5, -0.8, -0.5], gr: 'open',
+    fl: [0.18, -0.56, -0.36], kl: [0.2, -0.3, 1], fr: [-0.16, -0.6, -0.3], kr: [-0.2, -0.3, 1], toe: [1, 1],
   }),
   // Streamlined dive: arms swept back along the body, legs straight and together.
   dive: pose({

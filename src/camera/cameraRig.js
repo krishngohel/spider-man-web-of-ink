@@ -66,11 +66,13 @@ export function createCameraRig() {
     // A finisher or a takedown: push in by up to a third for `t` seconds, easing in and out.
     cinematic(t) { rig.pushT = t; rig.pushAll = t; },
     // A web just attached: a small dolly kick, and level out unless the player is steering.
-    onAttach() { rig.kick = CAM.attachKick; rig.fovPop = Math.max(rig.fovPop, 4); if (rig.sinceLook > 0.3) rig.level = 0.4; },
+    onAttach() { rig.kickWant = CAM.attachKick; rig.fovPop = Math.max(rig.fovPop, 4); if (rig.sinceLook > 0.3) rig.level = 0.4; },
     // A burst of speed (a perfect release, a zip boost): the field of view pops open and settles.
     pop(deg) { rig.fovPop = Math.max(rig.fovPop, deg); },
     fovPop: 0,
     focus: { x: 0, y: 0, z: 0 },
+    focusV: { x: 0, y: 0, z: 0 },
+    kickWant: 0,
     pos: { x: 0, y: 0, z: -5 },
     fwd: { x: 0, y: 0, z: 1 },
     shake: 0,
@@ -107,7 +109,8 @@ export function createCameraRig() {
         rig.level -= dt;
         if (!moved) rig.pitch += (CAM.attachLevel - rig.pitch) * Math.min(1, dt * 4);
       }
-      rig.kick = Math.max(0, rig.kick - dt * CAM.attachKick / 0.4);
+      rig.kickWant = Math.max(0, rig.kickWant - dt * CAM.attachKick / 0.4);
+      rig.kick += (rig.kickWant - rig.kick) * (1 - Math.exp(-dt * 18)); // eased in and out, never a one-frame jump
       if (rig.turnTo) {
         rig.turnTo.t -= dt;
         if (moved || rig.turnTo.t <= 0) rig.turnTo = null;
@@ -165,7 +168,6 @@ export function createCameraRig() {
       // eases between the two: switching it at once (letting go of a web) changes how far the
       // camera trails in a single frame, a visible lurch at speed.
       rig.followK += ((hero.state === 'swing' ? 11 : 18) - rig.followK) * (1 - Math.exp(-dt * 2.5));
-      const kf = 1 - Math.exp(-dt * rig.followK);
       // In a fight the framing leans a quarter of the way toward the nearest enemies.
       let fx = p.x, fz = p.z;
       if (fight && fight.pts.length) {
@@ -175,12 +177,22 @@ export function createCameraRig() {
         rig.fightMid = { x: mx - p.x, z: mz - p.z };
       }
       if (rig.fightMid && rig.fightK > 0.001) { fx += rig.fightMid.x * CAM.fightPull * rig.fightK; fz += rig.fightMid.z * CAM.fightPull * rig.fightK; }
-      rig.focus.x += (fx - rig.focus.x) * kf;
-      rig.focus.y += (p.y + CAM.focusHeight - rig.focus.y) * kf;
-      rig.focus.z += (fz - rig.focus.z) * kf;
+      // The focus rides a critically damped spring (second order) with about the old lag: its
+      // acceleration stays continuous when the hero stops dead on a wall or lands, where a first
+      // order follow turned every velocity step into a one-frame camera jolt.
+      {
+        const w0 = rig.followK * 2, n = Math.max(1, Math.ceil(dt / (1 / 120))), h = dt / n;
+        const ty = p.y + CAM.focusHeight, F = rig.focus, V = rig.focusV;
+        for (let s = 0; s < n; s++) {
+          V.x += (w0 * w0 * (fx - F.x) - 2 * w0 * V.x) * h; F.x += V.x * h;
+          V.y += (w0 * w0 * (ty - F.y) - 2 * w0 * V.y) * h; F.y += V.y * h;
+          V.z += (w0 * w0 * (fz - F.z) - 2 * w0 * V.z) * h; F.z += V.z * h;
+        }
+      }
       // A teleport (respawn, test hook) snaps instead of sweeping across the city.
       if (Math.hypot(p.x - rig.focus.x, p.y - rig.focus.y, p.z - rig.focus.z) > 30) {
         rig.focus.x = p.x; rig.focus.y = p.y + CAM.focusHeight; rig.focus.z = p.z;
+        rig.focusV.x = hero.body.v.x; rig.focusV.y = hero.body.v.y; rig.focusV.z = hero.body.v.z;
       }
 
       const cp = Math.cos(rig.pitch), sp = Math.sin(rig.pitch);

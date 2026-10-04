@@ -231,9 +231,10 @@ export function createPoser(heroModel) {
           target.set(POSES.perch);
         } else {
           wantProc = 0;
-          if (hs < 0.4) play('Idle_Loop');
-          else if (hs < 10.5) play('Jog_Fwd_Loop', { timeScale: Math.max(0.6, hs / 6.5) });
-          else play('Sprint_Loop', { timeScale: Math.max(0.8, hs / 11) });
+          // Long blends between stand, jog and sprint: a 0.15 s crossfade popped the feet.
+          if (hs < 0.4) play('Idle_Loop', { fade: 0.3 });
+          else if (hs < 10.5) play('Jog_Fwd_Loop', { timeScale: Math.max(0.6, hs / 6.5), fade: 0.28 });
+          else play('Sprint_Loop', { timeScale: Math.max(0.8, hs / 11), fade: 0.3 });
         }
       } else if (st === 'wall') {
         wantProc = 0;
@@ -244,8 +245,8 @@ export function createPoser(heroModel) {
         else tmp2.set(0, b.v.y < -0.8 ? -1 : 1, 0);
         basis(tmp, tmp2, qBase);
         offTarget.set(nx * WALL_OFFSET, 0, nz * WALL_OFFSET);
-        if (b.v.y > 4 || hero.wallMomentum) play('Sprint_Loop', { timeScale: 1.1 });
-        else play(Math.hypot(b.v.x, b.v.y, b.v.z) > 0.6 ? 'Crouch_Fwd_Loop' : 'Crouch_Idle_Loop');
+        if (b.v.y > 4 || hero.wallMomentum) play('Sprint_Loop', { timeScale: 1.1, fade: 0.25 });
+        else play(Math.hypot(b.v.x, b.v.y, b.v.z) > 0.6 ? 'Crouch_Fwd_Loop' : 'Crouch_Idle_Loop', { fade: 0.28 });
       } else if (hanging) {
         // Along the line. Upright: head toward the pivot, hands on the line. Upside down: feet
         // toward it, the web running from them.
@@ -320,7 +321,8 @@ export function createPoser(heroModel) {
           // a diver; slow, it stays upright.
           const lean = smoothstep(12, 32, speed) * smoothstep(-0.9, -0.2, vel.y / Math.max(1, speed)) * 0.85;
           // Dropping steeply: tip forward over the drop, belly toward the ground, like a skydiver.
-          const fallTilt = smoothstep(-4, -20, b.v.y) * (1 - lean);
+          // (Tips early: an upright body drifting down read as a puppet hanging on strings.)
+          const fallTilt = Math.max(0.5, smoothstep(-1, -14, b.v.y)) * (1 - lean);
           u.set(0, 1, 0).lerp(tmp2.copy(vel).normalize(), lean);
           u.lerp(tmp2.copy(tmp), fallTilt * 0.7).normalize();
           basis(u, lean + fallTilt > 0.3 ? DOWN : tmp, qBase);

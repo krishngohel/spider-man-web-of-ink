@@ -620,7 +620,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         fovKick = TUNE.fovPunch * (e.heavy ? 2 : 1);
         if (e.e) {
           const q = e.e.body.p, hp = hero.body.p, dx = q.x - hp.x, dz = q.z - hp.z, l = Math.hypot(dx, dz) || 1;
-          if (settings.cameraShake) { camKickV.set(dx / l, 0.25, dz / l).multiplyScalar(TUNE.camKick * (e.heavy ? 1.8 : 1)); camKickT = 0.05; }
+          if (settings.cameraShake) { camKickV.set(dx / l, 0.25, dz / l).multiplyScalar(TUNE.camKick * (e.heavy ? 1.8 : 1)); camKickT = 0.1; }
           if (settings.cameraShake && e.heavy) rig.shake = Math.max(rig.shake, 0.2);
           // A spark where the blow lands (between the two, at chest height); the big burst on heavies.
           const cx = hp.x + (dx / l) * Math.max(0.4, l - 0.35), cz = hp.z + (dz / l) * Math.max(0.4, l - 0.35);
@@ -774,7 +774,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   let camOverride = null;
   let trace = null, traceSkip = 0;
-  const traceDir = new THREE.Vector3();
+  const traceDir = new THREE.Vector3(), traceV = new THREE.Vector3(), traceRoot = new THREE.Vector3(), traceInv = new THREE.Quaternion();
   let camHeading = 0, camRoll = 0;
   const sideDir = { x: 1, z: 0 };
   function interpolate() {
@@ -942,10 +942,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       const want = flying && Math.hypot(v.x, v.z) > 6 && dt > 0 && settings.cameraShake ? Math.max(-0.12, Math.min(0.12, (turn / dt) * 0.06)) : 0;
       camRoll += (want - camRoll) * Math.min(1, dt * 3);
       camera.rotateZ(camRoll);
-      if (camKickT > 0) { camera.position.addScaledVector(camKickV, camKickT / 0.05); camKickT -= dt; }
+      if (camKickT > 0) { camera.position.addScaledVector(camKickV, Math.sin(Math.PI * (1 - camKickT / 0.1))); camKickT -= dt; }
       if (rig.shake > 0.001) {
-        const a = rig.shake * 0.06;
-        camera.rotateX((Math.random() - 0.5) * a); camera.rotateY((Math.random() - 0.5) * a);
+        // Smooth noise: a fresh random tilt every frame read as buzz at high frame rates.
+        const a = rig.shake * 0.035, t = time;
+        camera.rotateX(a * (Math.sin(t * 37) * 0.6 + Math.sin(t * 61 + 1.7) * 0.4));
+        camera.rotateY(a * (Math.sin(t * 43 + 0.6) * 0.6 + Math.sin(t * 29 + 2.9) * 0.4));
         rig.shake *= Math.exp(-dt * 7);
       }
     }
@@ -983,8 +985,19 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       // Test hook: what the player sees each frame (smoothness probes).
       camera.getWorldDirection(traceDir);
       const q = heroModel.orient.quaternion;
-      trace.push([traceSkip > 0 ? -dtMs : dtMs, camera.position.x, camera.position.y, camera.position.z, traceDir.x, traceDir.y, traceDir.z,
-        q.x, q.y, q.z, q.w, renderP.x, renderP.y, renderP.z, camera.fov, hero.state, rig.closeness]);
+      const row = [traceSkip > 0 ? -dtMs : dtMs, camera.position.x, camera.position.y, camera.position.z, traceDir.x, traceDir.y, traceDir.z,
+        q.x, q.y, q.z, q.w, renderP.x, renderP.y, renderP.z, camera.fov, hero.state, rig.closeness,
+        `${combat.heroCombat.c.move?.key ?? ''}|${heroModel.animator?.currentName ?? ''}`];
+      // Hands, feet and head in the body's own frame (animation pops show up here, not in the root).
+      const B = heroModel.bones;
+      traceInv.copy(heroModel.orient.quaternion).invert();
+      heroModel.orient.getWorldPosition(traceRoot);
+      for (const bn of [B?.handL, B?.handR, B?.footL, B?.footR, B?.head]) {
+        if (!bn) { row.push(0, 0, 0); continue; }
+        bn.getWorldPosition(traceV).sub(traceRoot).applyQuaternion(traceInv);
+        row.push(traceV.x, traceV.y, traceV.z);
+      }
+      trace.push(row);
       if (trace.length > 20000) trace.length = 0;
       traceSkip--;
     }

@@ -124,13 +124,18 @@ describe('traversal camera (overhaul C2 to C6)', () => {
     expect(speedCurves(14).fov).toBeCloseTo(60);
     expect(speedCurves(35).fov).toBeGreaterThan(65);
   });
-  it('a web attach kicks the camera in and the kick fades', () => {
+  it('a web attach kicks the camera in, eased in (no one-frame jump), and the kick fades', () => {
     const rig = createCameraRig();
     rig.onAttach();
-    expect(rig.kick).toBeCloseTo(CAM.attachKick);
+    expect(rig.kickWant).toBeCloseTo(CAM.attachKick);
     const hero = heroAt(0, 40, 0, 0, 0, 20, 'swing');
-    for (let i = 0; i < 40; i++) rig.update(1 / 60, still, hero, open());
-    expect(rig.kick).toBe(0);
+    rig.update(1 / 60, still, hero, open());
+    expect(rig.kick).toBeGreaterThan(0);
+    expect(rig.kick).toBeLessThan(CAM.attachKick * 0.4);
+    let peak = 0;
+    for (let i = 0; i < 90; i++) { rig.update(1 / 60, still, hero, open()); peak = Math.max(peak, rig.kick); }
+    expect(peak).toBeGreaterThan(CAM.attachKick * 0.4);
+    expect(rig.kick).toBeLessThan(0.01);
   });
   it('the shoulder offset follows the state', () => {
     expect(CAM.shoulderBy.swing).toBeLessThan(CAM.shoulderBy.ground);
