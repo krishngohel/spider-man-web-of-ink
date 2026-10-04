@@ -81,7 +81,8 @@ async function swingToward(h, q) {
   await key('KeyW', true);
   if (h.state === 'ground') { await key('ShiftLeft', false); swing.holding = false; await page.keyboard.press('Space'); await sleep(140); }
   if (h.state === 'wall') { await key('ShiftLeft', false); swing.holding = false; await page.keyboard.press('Space'); return; }
-  if (swing.holding && h.state === 'swing' && h.swing.angle > 22 && h.v.y > 0) { await key('ShiftLeft', false); swing.holding = false; swing.sinceRel = 0; }
+  // Let go inside the release window, late in the arc (30 to 58 degrees past the bottom).
+  if (swing.holding && h.state === 'swing' && h.swing.angle > 34 && h.v.y > 0) { await key('ShiftLeft', false); swing.holding = false; swing.sinceRel = 0; }
   else if (!swing.holding && (h.state === 'air') && swing.sinceRel > 160 && (h.v.y < 3 || h.p.y < 25)) {
     const t = await ev(([x, z]) => window.__game.suggest(x, z), [dx / l, dz / l]);
     if (t) { await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [t.x, t.y, t.z]); await key('ShiftLeft', true); swing.holding = true; }
@@ -155,7 +156,7 @@ await run('act1.vulture', 'pilot beats the Vulture on the Bugle roof', async ({ 
   const m = st.boss?.mode;
   const d = Math.hypot(bossE.x - h.p.x, bossE.y - h.p.y, bossE.z - h.p.z);
   // Fell off the roof: zip back up to it.
-  if (st.site && h.p.y < st.site.y - 5 && h.state === 'ground') { await key('KeyW', false); await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [st.site.x, st.site.y - 1.5, st.site.z]); await sleep(30); await page.keyboard.press('KeyQ'); await sleep(900); return; }
+  if (st.site && h.p.y < st.site.y - 5 && (h.state === 'ground' || h.state === 'wall' || (h.state === 'air' && h.v.y < 0))) { await key('KeyW', false); await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [st.site.x, st.site.y - 1.5, st.site.z]); await sleep(30); await page.keyboard.press('KeyQ'); await sleep(900); return; }
   if ((m === 'dive' || m === 'diveWind') && d < 13) {
     await key('KeyW', false);
     await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [bossE.x, bossE.y, bossE.z]);
@@ -461,7 +462,7 @@ await run('act4.goblinChase', 'pilot chases the Green Goblin', async ({ h, bossE
 await run('act4.goblin', 'pilot beats the Green Goblin on the bridge', async ({ st, h, bossE }) => {
   if (!bossE) return;
   const m = st.boss?.mode, d = Math.hypot(bossE.x - h.p.x, bossE.y - h.p.y, bossE.z - h.p.z);
-  if (st.site && h.p.y < st.site.y - 5 && h.state === 'ground') { await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [st.site.x, st.site.y - 1.5, st.site.z]); await page.keyboard.press('KeyQ'); await sleep(900); return; }
+  if (st.site && h.p.y < st.site.y - 5 && (h.state === 'ground' || h.state === 'wall' || (h.state === 'air' && h.v.y < 0))) { await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [st.site.x, st.site.y - 1.5, st.site.z]); await page.keyboard.press('KeyQ'); await sleep(900); return; }
   if ((m === 'ram' || m === 'ramWind') && d < 13) { await key('KeyW', false); await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [bossE.x, bossE.y, bossE.z]); await page.keyboard.press('KeyE'); await sleep(150); return; }
   if (m === 'down' || m === 'falling') { await brawl(bossE, h, st); return; }
   await key('KeyW', false);

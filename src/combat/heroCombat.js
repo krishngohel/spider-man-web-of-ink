@@ -584,7 +584,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     // Never flip off a roof: a landing spot more than 2 m down turns the dodge the other way,
     // and with drops on both sides it is a short hop instead.
     let dist = TUNE.dodgeDist;
-    if (!air && groundAt) {
+    // In the air too (a dodge off a jump near a roof edge used to fling him off the building).
+    if (groundAt) {
       const drop = (x, z) => groundHere - groundAt(P().x + x * TUNE.dodgeDist, P().z + z * TUNE.dodgeDist) > 2;
       if (drop(dx, dz)) {
         if (!drop(-dx, -dz)) { dx = -dx; dz = -dz; }
