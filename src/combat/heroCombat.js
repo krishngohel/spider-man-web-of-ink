@@ -405,6 +405,27 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       buffer.clear(); c.webHeldT = -99;
       c.state = 'slam'; c.t = 0; onEvent({ type: 'slamStart' }); return;
     }
+    // A shield thug facing you: jump at him to vault over onto his back (his shield is no use then).
+    if (intent.jumpPressed && grounded() && tgt?.arch === 'shield' && !tgt.shieldBroken && near.d < 3.4 && isActive(tgt)) {
+      const q = tgt.body.p, land = { x: q.x + near.x * 1.6, z: q.z + near.z * 1.6 };
+      // A high arc (about 2 m up) so the body clears his head and shield.
+      const T = 0.72, v = V();
+      applyDv(hero.body, 'surface', (land.x - P().x) / T - v.x, G * T / 2 - v.y + 1.5, (land.z - P().z) / T - v.z);
+      hero.state = 'air'; hero.airTime = 0;
+      intent.jumpPressed = false; intent.jump = false;
+      c.iframes = Math.max(c.iframes, T);
+      c.used.vault = (c.used.vault ?? 0) + 1;
+      word('HUP!', null, 'small');
+      onEvent({ type: 'vault', e: tgt });
+      return;
+    }
+    // Attack while swinging near a thug: a swing kick, off the web and feet first into him.
+    if (hero.swing.active && tgt && !tgt.boss && near.d < 12 && buffer.take('attack', c.hclock)) {
+      c.used.swingKick = (c.used.swingKick ?? 0) + 1;
+      startMove('strike');
+      word('SWING KICK!', tgt, 'hit');
+      return;
+    }
     if (buffer.take('attack', c.hclock)) {
       const gap = c.clock - c.lastMoveEnd, stepBefore = c.step;
       // Back after a pause: the string starts over.

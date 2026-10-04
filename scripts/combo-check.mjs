@@ -109,6 +109,21 @@ const click = async (button = 'left') => { await p.mouse.down({ button }); await
   const after = await p.evaluate(() => window.__game.combat().props.list.length);
   results.push([`street throw (${before} props round the gang)`, before > 0 && (flying || after < before)]);
 }
+// 7. Shield vault: jump at a shield thug and land behind him.
+{
+  await fresh([[0, -197.6]], { arch: 'shield' });
+  const s0 = await state(), e0 = s0.enemies[0], h0 = await hero();
+  await look(e0.x, e0.z);
+  // Wait for him to come within vaulting range (about 3 m).
+  for (let t = 0; t < 60; t++) { const s = await state(), h = await hero(), e = s.enemies[0]; if (Math.hypot(e.x - h.p.x, e.z - h.p.z) < 3) break; await sleep(50); }
+  const side0 = Math.sign(((await state()).enemies[0].z - (await hero()).p.z));
+  await p.keyboard.press('Space');
+  await sleep(900);
+  const h1 = await hero(), e1 = (await state()).enemies[0];
+  const dbg = await p.evaluate(() => { const c = window.__game.combat().heroCombat.c; return { used: c.used.vault ?? 0, tgt: c.target?.arch ?? null }; });
+  if (Math.sign(e1.z - h1.p.z) === side0) console.log('  vault debug', JSON.stringify(dbg), 'd0', Math.hypot(e0.x - h0.p.x, e0.z - h0.p.z).toFixed(2), 'hero state', h1.state);
+  results.push(['vault over a shield thug', Math.sign(e1.z - h1.p.z) !== side0]);
+}
 await b.close();
 let fail = 0;
 for (const [name, ok] of results) { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); if (!ok) fail++; }

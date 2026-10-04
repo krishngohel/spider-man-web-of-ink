@@ -807,6 +807,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (input.pressed('map')) openMap();
       buildIntent();
       gdt = dt * combat.timeScale(dt) * (settings.slowMo ? 0.75 : 1);
+      // The gadget wheel slows the world while it is open, and the stick picks instead of steering.
+      if (combatHud.wheelOpen) { gdt *= 0.25; intent.moveX = intent.moveZ = 0; }
       if (gadgetHold > 12) { if (!combatHud.wheelOpen) combatHud.openWheel(); combatHud.steerWheel(input.look, input.move); wheelUsed = true; }
       else if (combatHud.wheelOpen) { const pick = combatHud.closeWheel(); if (pick) combat.gadgets.select(pick); }
       if (storyOn) director.preStep(intent, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
