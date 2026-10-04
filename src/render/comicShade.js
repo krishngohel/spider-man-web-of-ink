@@ -82,15 +82,15 @@ vec3 comicPattern(vec3 c) {
   if (fade <= 0.0) return c;
   const vec3 INK = vec3(0.006, 0.005, 0.012);
   if (gShadow > 0.02) {
-    // Hatching is spaced wider than the dots (about 11 px), so a big shadow reads as a tone with
-    // texture rather than a wall of lines.
-    float hl = log2(pw * 11.0), h0 = floor(hl), hk = hl - h0;
+    // Hatching is spaced wide (about 16 px) and light, crossed only in the deepest shadow, so a big
+    // shadowed facade reads as a tone with a little texture, never a wall of grime (clean-up pass).
+    float hl = log2(pw * 16.0), h0 = floor(hl), hk = hl - h0;
     float hs0 = exp2(h0), hs1 = hs0 * 2.0;
     float a0 = pw * 1.3 / hs0, a1 = pw * 1.3 / hs1;
     float h = mix(comicLines((uv.x + uv.y) / hs0, 0.12, a0), comicLines((uv.x + uv.y) / hs1, 0.12, a1), hk);
     float h2 = mix(comicLines((uv.x - uv.y) / hs0, 0.1, a0), comicLines((uv.x - uv.y) / hs1, 0.1, a1), hk);
-    float hatch = max(h, h2 * gDeep) * smoothstep(0.55, 0.85, gShadow) * fade;
-    c = mix(c, mix(c * 0.5, INK, 0.35), hatch * 0.5);
+    float hatch = max(h, h2 * smoothstep(0.6, 0.95, gDeep)) * smoothstep(0.6, 0.9, gShadow) * fade;
+    c = mix(c, mix(c * 0.62, INK, 0.15), hatch * 0.3);
   }
   if (gMid > 0.02) {
     float r = 0.26 * sqrt(gMid);
