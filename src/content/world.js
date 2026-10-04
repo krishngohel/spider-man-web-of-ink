@@ -142,6 +142,16 @@ export function createContentWorld(g) {
     const kind = force ?? kinds[Math.floor(Math.random() * kinds.length)];
     const C = CRIMES[kind];
     crime = { kind, C, spot, t: 0, list: [] };
+    // A bonus objective on fight crimes (Insomniac's crime bonuses): style pays an extra token.
+    if (C.mix) {
+      const hc = combat.heroCombat.c;
+      const B = [
+        { id: 'combo', n: 15, text: 'BONUS: A 15-HIT COMBO' },
+        { id: 'throws', n: 2, text: 'BONUS: THROW TWO THINGS (BINS, CRATES OR WEBBED THUGS)' },
+        { id: 'perfect', n: 1, text: 'BONUS: A PERFECT DODGE' },
+      ][Math.floor(Math.random() * 3)];
+      crime.bonus = { ...B, got: 0, start: { throws: (hc.used.throw ?? 0) + (hc.used.propThrow ?? 0), perfect: hc.perfects ?? 0 } };
+    }
     if (C.mix) {
       let x = spot.x, z = spot.z, y = 0.9;
       if (C.roof) {
@@ -177,7 +187,7 @@ export function createContentWorld(g) {
         boss: { hit: (args) => { if (args.kind === 'web') carHit(); return { dealt: 0, blocked: true }; }, yank: () => { carHit(); return true; } } };
       combat.enemies.list.push(crime.car.e);
     }
-    g.caption(`CRIME: ${C.name}`, 3);
+    g.caption(crime.bonus ? `CRIME: ${C.name}. ${crime.bonus.text}` : `CRIME: ${C.name}`, crime.bonus ? 4.5 : 3);
     g.crimeWaypoint({ x: spot.x, z: spot.z });
   }
   function carHit() {
@@ -200,6 +210,7 @@ export function createContentWorld(g) {
       act.crimeByDistrict ??= {};
       const n = act.crimeByDistrict[d] = (act.crimeByDistrict[d] ?? 0) + 1;
       g.reward('crime', { tokens: n <= CRIME_QUOTA ? { crime: 1 } : null, at: crime.spot });
+      if (crime.bonus && crime.bonus.got >= crime.bonus.n) { g.reward('crime', { tokens: { crime: 1 }, at: crime.spot }); g.stamp('BONUS!'); }
       if (nights) { nights.score++; nights.level = 1 + Math.floor(nights.score / 3); g.caption(`CRIME NIGHTS: ${nights.score} STOPPED, LEVEL ${nights.level}`, 2.5); }
       g.caption(`${crime.C.name}: STOPPED`, 2.2);
       g.persist();
@@ -211,6 +222,13 @@ export function createContentWorld(g) {
     if (nights) nights.t += dt;
     if (!crime) { crimeCd -= dt; if (crimeCd <= 0 && (nights || !g.busy())) { crimeCd = 20; startCrime(nights ? ['mugging', 'robbery', 'gang', 'hostage', 'van', 'drones', 'sniper'][Math.floor(Math.random() * 7)] : null); } return; }
     crime.t += dt;
+    if (crime.bonus) {
+      const hc = combat.heroCombat.c, b = crime.bonus;
+      if (b.id === 'combo') b.got = Math.max(b.got, hc.combo);
+      else if (b.id === 'throws') b.got = (hc.used.throw ?? 0) + (hc.used.propThrow ?? 0) - b.start.throws;
+      else b.got = (hc.perfects ?? 0) - b.start.perfect;
+      if (b.got >= b.n && !b.told) { b.told = true; g.word('BONUS!', hero.body.p, 'big'); }
+    }
     const p = hero.body.p, sp = crime.spot;
     const far = Math.hypot(p.x - sp.x, p.z - sp.z) > 450;
     if (far && crime.t > 20) { for (const e of crime.list) combat.enemies.remove(e); endCrime(false); return; }

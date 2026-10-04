@@ -401,3 +401,7 @@ body.cb .bfill { background: linear-gradient(#5ab0ff, #1f4fb6); }
 .cb-prompt { display: flex; align-items: center; gap: 6px; padding: 4px 9px 4px 5px; background: #fff; border: 3px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); transform: rotate(-1deg); font-family: var(--head); font-size: 16px; color: var(--ink); animation: cbprompt 0.18s ease-out; }
 .cb-prompt kbd { font-family: var(--head); font-size: 13px; padding: 1px 6px; background: #f7e36a; border: 2px solid var(--ink); }
 @keyframes cbprompt { from { transform: rotate(-1deg) scale(0.7); opacity: 0; } to { transform: rotate(-1deg) scale(1); opacity: 1; } }
+.bpips { display: flex; gap: 6px; justify-content: center; margin: 3px 0 4px; }
+.bpips i { width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--ink); background: #fff; }
+.bpips i.done { background: var(--ink); }
+.bpips i.now { background: #ff3a2a; }

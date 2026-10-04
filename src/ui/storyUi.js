@@ -81,7 +81,8 @@ export function createStoryUi(root, { getSettings, onSound = () => {}, canAdvanc
   const objective = el('div', { class: 'objective hidden' }, [el('div', { class: 'olabel' }, COPY.story.objective), el('div', { class: 'otext' })]);
   const bossName = el('div', { class: 'bname' });
   const bossFill = el('div', { class: 'bfill' });
-  const bossBar = el('div', { class: 'bossbar hidden' }, [bossName, el('div', { class: 'btrack' }, bossFill)]);
+  const bossPips = el('div', { class: 'bpips' });
+  const bossBar = el('div', { class: 'bossbar hidden' }, [bossName, bossPips, el('div', { class: 'btrack' }, bossFill)]);
   const card = el('div', { class: 'actcard hidden' });
   const timerEl = el('div', { class: 'stimer hidden' });
   const stealthBox = el('div', { class: 'stealthbox' });
@@ -136,6 +137,12 @@ export function createStoryUi(root, { getSettings, onSound = () => {}, canAdvanc
       if (!info) return;
       bossName.textContent = info.name;
       bossFill.style.width = `${Math.round(Math.max(0, info.hp) * 100)}%`;
+      // Phase pips: one per phase, the ones behind you filled.
+      const key = `${info.phases ?? 0}:${info.phase ?? 0}`;
+      if (bossPips.dataset.k !== key) {
+        bossPips.dataset.k = key;
+        bossPips.replaceChildren(...Array.from({ length: info.phases ?? 0 }, (_, i) => el('i', { class: i < (info.phase ?? 1) - 1 ? 'done' : i === (info.phase ?? 1) - 1 ? 'now' : '' })));
+      }
     },
     // Act cards and the free-roam card. Resolves when it has been shown.
     card(kind, act) {

@@ -5,6 +5,9 @@ import { resolveSite } from './sites.js';
 import { BOSSES } from './bosses/index.js';
 import { GAUNTLET, gauntletMedal } from './gauntlet.js';
 import { createProps } from './props.js';
+
+// How many phases each boss has (pips by the boss bar, as in Insomniac's games).
+const BOSS_PHASES = { electro: 2, goblin: 2, kingpin: 3, kraven: 2, lizard: 3, mysterio: 3, ock: 3, rhino: 3, sandman: 3, scorpion: 2, shocker: 3, venom: 2, vulture: 2 };
 import { createStoryFx, buildMarker } from './storyFx.js';
 import { createActors } from './actors.js';
 import { LAYER_FX } from '../render/layers.js';
@@ -310,7 +313,7 @@ export function createDirector(g) {
         const ph = boss.state?.phase;
         if (step.type === 'boss' && phaseMark?.step === step.id && typeof ph === 'number' && ph > phaseMark.phase) { phaseMark.phase = ph; phaseMark.frac = boss.actor.hpFrac(); }
         if (boss.objective !== undefined) { ui.objective(boss.objective ?? step.text); g.setWaypoint(boss.waypoint ? { ...boss.waypoint, story: true } : null); }
-        if (step.type === 'boss') ui.boss({ name: boss.actor.name, hp: boss.actor.hpFrac() });
+        if (step.type === 'boss') ui.boss({ name: boss.actor.name, hp: boss.actor.hpFrac(), phase: boss.state?.phase ?? 1, phases: BOSS_PHASES[step.boss] ?? 0 });
         if (boss.failed) { retry(); break; }
         if (boss.done && cur.phase === 'fight') {
           cur.phase = 'won'; cur.wonT = 0; phaseMark = null;

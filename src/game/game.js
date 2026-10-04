@@ -647,8 +647,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       case 'groundWarn': fx.warn(e.at.x, e.at.y, e.at.z, e.r, e.t); break;
       case 'takedown': rig.cinematic(0.8); break;
       case 'enemyPinned': { const p = e.e.body.p; fx.splat(p.x, p.y, p.z, e.e.pin.nx, 0, e.e.pin.nz); const s = screenOf(p.x, p.y, p.z); if (s.front) hud.word('PINNED!', s.x, s.y - 40); break; }
-      case 'encounterStart': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; } break;
-      case 'encounterDone': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangBusted); if (waypoint?.auto) waypoint = null; } break;
+      case 'encounterStart': if (e.encounter.kind === 'gang') { hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; } break;
+      case 'encounterDone': if (e.encounter.kind === 'gang') { hud.caption(COPY.combat.gangBusted); if (waypoint?.auto) waypoint = null; } break;
       case 'thwip': if (e.combat) sfx.event({ type: 'thwip' }); break;
       case 'propBreak': fx.burst(e.at.x, e.at.y, e.at.z); sfx.event({ type: 'punch', heavy: true }); break;
       case 'enemyBrokeFree': { const p = e.e.body.p, s = screenOf(p.x, p.y + 1, p.z); if (s.front) hud.word('RIIP!', s.x, s.y - 30, 'small'); break; }

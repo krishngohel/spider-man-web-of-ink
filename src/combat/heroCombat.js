@@ -608,6 +608,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     // Which side relative to where the hero faces (the poser picks the flip).
     const side = dx * hero.facing.z - dz * hero.facing.x > 0 ? 'l' : 'r';
     if (perfect) {
+      c.perfects = (c.perfects ?? 0) + 1;
       slowmo(COMBAT.slowmo, 'perfect');
       c.focus = Math.min(3, c.focus + COMBAT.focusPerfect);
       word('PERFECT DODGE!', null, 'big');
