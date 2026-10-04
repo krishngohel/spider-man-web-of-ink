@@ -24,7 +24,8 @@ export const DEFAULT_SETTINGS = {
   quality: 'high',
   renderScale: 1,
   dynamicRes: true,
-  showFps: true,
+  showFps: false,
+  showSpeed: false,   // the KM/H counter (free roam is near empty by default, as in Insomniac's games)
   timeOfDay: 'cycle',
   difficulty: 'amazing',
   crimes: true,
@@ -86,6 +87,7 @@ export function sanitizeSettings(raw = {}) {
     renderScale: num(r.renderScale, 0.5, 1, d.renderScale),
     dynamicRes: bool(r.dynamicRes, d.dynamicRes),
     showFps: bool(r.showFps, d.showFps),
+    showSpeed: bool(r.showSpeed, d.showSpeed),
     difficulty: oneOf(r.difficulty, ['friendly', 'amazing', 'spectacular'], d.difficulty),
     crimes: bool(r.crimes, d.crimes),
     timeOfDay: oneOf(r.timeOfDay, ['cycle', 'day', 'golden', 'night'], d.timeOfDay),

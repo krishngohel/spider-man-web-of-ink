@@ -105,12 +105,12 @@ export const COPY = {
   ok: 'Got it',
   // First-play tips, in order. Each one leaves when you do the thing it asks.
   tips: [
-    { id: 'swing', text: 'Put the crosshair on a building (it turns white in range) and hold <kbd>{swing}</kbd>. Let go to fly, then aim the next web.', done: 'release' },
-    { id: 'perfect', text: 'Let go of <kbd>{swing}</kbd> just after the bottom of a swing, on the way up, for a perfect release boost.', done: 'perfect' },
+    { id: 'swing', text: 'Jump, then hold <kbd>{swing}</kbd> in the air to swing: the web finds a building. Let go to fly, hold again for the next web.', done: 'release' },
+    { id: 'perfect', text: 'Let go of <kbd>{swing}</kbd> late in the swing, as your legs come up, for a release boost.', done: 'perfect' },
     { id: 'jump', text: 'Tap <kbd>{jump}</kbd> mid-swing to leap off the web, high and fast.', done: 'swingJump' },
     { id: 'hang', text: 'Swinging, press <kbd>{hang}</kbd> to hang on the line. <kbd>{forward}</kbd> climbs, <kbd>{back}</kbd> slides down, <kbd>{dive}</kbd> rappels. Climb to a roof edge to pull yourself up.', done: 'hang' },
-    { id: 'zip', text: 'Look at a ledge and press <kbd>{zip}</kbd> to zip to it. Press <kbd>{jump}</kbd> the moment you land to launch.', done: 'launch' },
-    { id: 'wall', text: 'Swing into a wall to run along it. Hold <kbd>{swing}</kbd> to run up, <kbd>{jump}</kbd> to kick off.', done: 'wallJump' },
+    { id: 'zip', text: 'The white dot is a zip point: press <kbd>{zip}</kbd> to zip there, then <kbd>{jump}</kbd> as you land to launch. With nothing to zip to, <kbd>{zip}</kbd> is a boost.', done: 'launch' },
+    { id: 'wall', text: 'Swing into a wall to run on it. Hold <kbd>{swing}</kbd> to run up, steer to run across, <kbd>{jump}</kbd> to kick off.', done: 'wallJump' },
     { id: 'wings', text: 'In the air, press and hold <kbd>{jump}</kbd> for web wings. Hold <kbd>{dive}</kbd> to dive. Press <kbd>{help}</kbd> for all controls.', done: 'wings' },
   ],
   help: {
@@ -168,6 +168,7 @@ export const COPY = {
     renderScale: ['Render scale'],
     dynamicRes: ['Dynamic resolution', 'Drops resolution a little when the frame rate dips.'],
     showFps: ['Show frame rate'],
+    showSpeed: ['Show speed'],
     difficulty: ['Difficulty', 'How hard enemies hit and how many attack at once.'],
     difficultyValues: { friendly: 'Friendly', amazing: 'Amazing', spectacular: 'Spectacular' },
     crimes: ['Street crime', 'Gangs gather on street corners in free roam.'],

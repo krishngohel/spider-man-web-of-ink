@@ -2,7 +2,7 @@ import { el } from './dom.js';
 import { COPY } from './copy.js';
 import { bindingLabel } from '../core/bindings.js';
 
-const TIPS_KEY = 'web-of-ink-tips-v3'; // v3: tips rewritten for aimed webs
+const TIPS_KEY = 'web-of-ink-tips-v4'; // v4: tips rewritten for swing assist and zip points
 
 // The in-play overlay: reticle, where the next web would stick, speed, frame rate, first-play tips
 // (each leaves when you do what it asks: Gotham lesson, cards that linger get in the way), speed
@@ -58,7 +58,9 @@ export function createHud(root, getSettings) {
   const esc = (t) => String(t).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
   const fill = (s, k) => s.replace(/\{(\w+)\}/g, (_, n) => esc(k[n] ?? n));
 
+  let tipT = 0;
   function showTip() {
+    tipT = 0;
     if (tipIndex >= COPY.tips.length) { tip.classList.add('hidden'); return; }
     tip.innerHTML = fill(COPY.tips[tipIndex].text, keys());
     tip.classList.remove('hidden');
@@ -159,6 +161,14 @@ export function createHud(root, getSettings) {
       fps.classList.toggle('hidden', !s.showFps);
       if (s.showFps) fps.textContent = `${Math.round(f)} FPS`;
       speedNum.textContent = String(Math.round(speed * 3.6));
+      speedo.classList.toggle('hidden', !s.showSpeed);
+      // The crosshair only in the air (the swing finds its own anchor; on the ground it is noise).
+      reticle.classList.toggle('hidden', state === 'ground' || state === 'hang');
+      // A first-play tip moves on by itself after a while: never a card parked on screen.
+      if (!tip.classList.contains('hidden') && !tip.classList.contains('quiet')) {
+        tipT += dt;
+        if (tipT > 14) { tipT = 0; tipIndex++; try { localStorage.setItem(TIPS_KEY, String(tipIndex)); } catch { /* storage blocked */ } tip.classList.add('hidden'); setTimeout(showTip, 20000); }
+      }
       stateLabel.textContent = dev ? state : '';
       noAnchorT -= dt;
       if (captionT > 0) { captionT -= dt; if (captionT <= 0) caption.classList.remove('show'); }
