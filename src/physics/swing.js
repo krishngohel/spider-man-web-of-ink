@@ -76,8 +76,8 @@ export function createSwing() {
 export function releaseBoost(body, perfect) {
   const v = body.v;
   const sh = Math.hypot(v.x, v.z) || 1;
-  const b = perfect ? tune.perfectBoost : tune.releaseBoost;
-  applyDv(body, 'assist', (v.x / sh) * b, b * 0.2, (v.z / sh) * b);
+  const b = perfect ? Math.max(tune.perfectBoost, sh * tune.perfectMul) : tune.releaseBoost;
+  applyDv(body, 'assist', (v.x / sh) * b, perfect ? tune.perfectUp : b * 0.2, (v.z / sh) * b);
 }
 
 // Swing-jump: a push forward along the travel direction and up.

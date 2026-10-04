@@ -39,8 +39,12 @@ export const DEFAULTS = {
   pumpCone: 40,            // degrees either side of the bottom where the pump works
   groundClear: 2.2,        // the line shortens so the bottom of an arc stays this far over the ground
   releaseBoost: 1.5,       // letting go on the rise
-  perfectMin: 15, perfectMax: 55,
-  perfectBoost: 5,         // letting go inside the sweet window on the rise
+  // The release window (PlayStation pass P1.3): late in the arc, as the legs swing up. Inside it
+  // the flight carries a fifth more speed (at least perfectBoost) and lifts perfectUp.
+  perfectMin: 30, perfectMax: 58,
+  perfectBoost: 5, perfectMul: 0.2, perfectUp: 5,
+  diveCarry: 4,            // a dive just before a swing carries this much more speed into it (m/s)
+  zipBoostSpeed: 22, zipBoostUp: 6, zipBoosts: 2, // Q with nothing to zip to: a dash, twice per airtime
   swingJumpFwd: 6,
   swingJumpUp: 8,
   webSpeed: 600,           // m/s the web flies (on top of webTravel)

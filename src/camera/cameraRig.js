@@ -66,7 +66,10 @@ export function createCameraRig() {
     // A finisher or a takedown: push in by up to a third for `t` seconds, easing in and out.
     cinematic(t) { rig.pushT = t; rig.pushAll = t; },
     // A web just attached: a small dolly kick, and level out unless the player is steering.
-    onAttach() { rig.kick = CAM.attachKick; if (rig.sinceLook > 0.3) rig.level = 0.4; },
+    onAttach() { rig.kick = CAM.attachKick; rig.fovPop = Math.max(rig.fovPop, 4); if (rig.sinceLook > 0.3) rig.level = 0.4; },
+    // A burst of speed (a perfect release, a zip boost): the field of view pops open and settles.
+    pop(deg) { rig.fovPop = Math.max(rig.fovPop, deg); },
+    fovPop: 0,
     focus: { x: 0, y: 0, z: 0 },
     pos: { x: 0, y: 0, z: -5 },
     fwd: { x: 0, y: 0, z: 1 },
@@ -148,6 +151,9 @@ export function createCameraRig() {
       c.dist *= 1 - 0.4 * smooth((-rig.pitch - 0.35) / 0.7);
       c.dist *= 1 - 0.33 * rig.push;
       c.fov -= 5 * rig.push;
+      // Each web attach and burst widens the view for a moment (decays over about 0.4 s).
+      rig.fovPop = Math.max(0, rig.fovPop - dt * 10);
+      c.fov += rig.fovPop;
       rig.lastDt = dt;
       rig.vel.x = v.x; rig.vel.y = v.y; rig.vel.z = v.z;
       const kd = 1 - Math.exp(-dt * 3);

@@ -168,6 +168,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   function airForces(intent, dt, control = 1) {
     applyGravity(body, g(), dt);
     hero.diving = intent.dive && hero.state === 'air';
+    if (hero.diving) hero.lastDiveAt = hero.time;
     applyDrag(body, dragK(g(), hero.diving ? tune.diveTerminal : tune.terminal), dt);
     const m = Math.hypot(intent.moveX, intent.moveZ);
     if (m > 0.05) airControl(body, intent.moveX, intent.moveZ, m * control, dt);
@@ -211,6 +212,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     hero.pendingWeb = null; hero.zip = null;
     hero.state = 'ground';
     hero.ungrounded = 0;
+    hero.zipBoostsLeft = tune.zipBoosts;
     // On a roof, near its edge: a jump in the next moment is a point launch off the ledge.
     const gb = touch.groundBox, p = body.p;
     if (gb && gb.maxY > 2) {
@@ -258,6 +260,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   function enterWall(n) {
     const h = Math.hypot(n.nx, n.nz);
     if (h < 0.5) return false; // not a wall (a ceiling or a floor): stay as we are
+    hero.zipBoostsLeft = tune.zipBoosts;
     if (rope.active) { rope.release(); emit('release'); }
     if (swing.active) { swing.release(); emit('release'); }
     hero.wallMomentum = false;
@@ -272,7 +275,21 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   function tryZip(intent) {
     const cam = { x: intent.camPos.x, y: intent.camPos.y, z: intent.camPos.z, fx: intent.camFwd.x, fy: intent.camFwd.y, fz: intent.camFwd.z };
     const hit = findZipPoint(world, body, cam);
-    if (!hit) { emit('noAnchor'); return false; }
+    if (!hit) {
+      // Nothing in reach: in the air, a web zip boost (a dash forward and up), twice per airtime.
+      if (hero.state !== 'ground' && (hero.zipBoostsLeft ?? tune.zipBoosts) > 0) {
+        hero.zipBoostsLeft = (hero.zipBoostsLeft ?? tune.zipBoosts) - 1;
+        const fl = Math.hypot(cam.fx, cam.fz) || 1, fx = cam.fx / fl, fz = cam.fz / fl;
+        const v = body.v, keep = Math.max(0, v.x * fx + v.z * fz);
+        const sp = Math.max(tune.zipBoostSpeed, keep);
+        if (swing.active) { swing.release(); }
+        applyDv(body, 'rope', fx * sp - v.x, Math.max(tune.zipBoostUp, v.y + tune.zipBoostUp * 0.5) - v.y, fz * sp - v.z); // a web yank forward
+        hero.state = 'air';
+        emit('zipBoost');
+        return true;
+      }
+      emit('noAnchor'); return false;
+    }
     // The winch reels right up to the surface: the zip ends when the hero touches it.
     rope.attach(hit, body, 0.3);
     hero.zip = { top: hit.ny > 0.5, box: hit.box };
@@ -374,6 +391,13 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
         hero.state = hang ? 'hang' : 'swing';
         if (hang) startHang();
         emit('attach', { x: a.x, y: a.y, z: a.z, nx: a.nx, ny: a.ny, nz: a.nz });
+        // Dived into it: the speed of the dive carries on into the arc (Insomniac's dive-to-swing).
+        if (!hang && hero.time - (hero.lastDiveAt ?? -9) < 0.6) {
+          const vv = body.v, l = Math.hypot(vv.x, vv.y, vv.z) || 1;
+          if (l > 15) applyDv(body, 'assist', (vv.x / l) * tune.diveCarry, (vv.y / l) * tune.diveCarry, (vv.z / l) * tune.diveCarry);
+          hero.lastDiveAt = -9;
+          emit('diveCarry');
+        }
         const before = hero.speed;
         move(dt);
         swingContacts(before);
@@ -396,8 +420,17 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   // Swing ----------------------------------------------------------------------------------
   function swingStep(intent, dt) {
     hero.airTime += dt;
-    airForces(intent, dt, 0.5);
+    airForces(intent, dt, 0.85);
     const p = body.p, v = body.v;
+    // Hands off the stick: the swing settles along the street it is nearly following (the city's
+    // grid runs along x and z), so a run down an avenue does not drift into one side.
+    if (Math.hypot(intent.moveX, intent.moveZ) < 0.2) {
+      const sh = Math.hypot(v.x, v.z);
+      if (sh > 8) {
+        const ax = Math.abs(v.x) > Math.abs(v.z) ? Math.sign(v.x) : 0, az = ax ? 0 : Math.sign(v.z);
+        if ((v.x * ax + v.z * az) / sh > 0.9) airControl(body, ax, az, 0.35, dt);
+      }
+    }
     swing.preStep(body, dt, world.groundHeight(p.x, p.y - 0.9, p.z));
     const before = hero.speed;
     move(dt);
@@ -634,9 +667,13 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     const lx = mx + into * nx, lz = mz + into * nz; // lateral input along the wall
     let wantHx, wantHz, wantY, accH, accY;
     const lat = Math.hypot(lx, lz);
-    if (lat > 0.05) { wantHx = lx * tune.wallCrawlSpeed; wantHz = lz * tune.wallCrawlSpeed; accH = WALL_ACCEL; }
+    // Holding swing with the stick along the wall: a horizontal wall run at run speed, holding
+    // height (Insomniac's), not a crawl. Holding swing alone runs up.
+    const run = runningUp(intent);
+    if (lat > 0.05) { const sp = run ? tune.wallRunSpeed : tune.wallCrawlSpeed; wantHx = lx * sp; wantHz = lz * sp; accH = run ? RUN_UP_ACCEL : WALL_ACCEL; }
     else { wantHx = 0; wantHz = 0; accH = tune.wallFriction; }
-    if (runningUp(intent)) { wantY = tune.wallRunSpeed; accY = RUN_UP_ACCEL; }
+    if (run && lat > 0.5) { wantY = 0; accY = tune.wallFriction + g(); }
+    else if (run) { wantY = tune.wallRunSpeed; accY = RUN_UP_ACCEL; }
     else if (Math.abs(into) > 0.05) { wantY = into * tune.wallCrawlSpeed; accY = WALL_ACCEL; }
     else { wantY = 0; accY = tune.wallFriction + g(); }
     let dhx = wantHx - thx, dhz = wantHz - thz;

@@ -534,9 +534,13 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       previewT = 1 / 30;
       aimCam.x = rig.pos.x; aimCam.y = rig.pos.y; aimCam.z = rig.pos.z;
       aimCam.fx = rig.fwd.x; aimCam.fy = rig.fwd.y; aimCam.fz = rig.fwd.z;
-      previewPoint = findAimPoint(world, hero.body, aimCam);
-      preview.valid = !!previewPoint;
-      preview.zip = false;
+      const aim = findAimPoint(world, hero.body, aimCam);
+      preview.valid = !!aim;
+      // The dot marks where a zip would take you (zip points, as in Insomniac's games); with
+      // nothing to zip to, where the crosshair's web would stick.
+      const zp = findZipPoint(world, hero.body, aimCam);
+      previewPoint = zp ?? aim;
+      preview.zip = !!zp;
     }
     preview.visible = false;
     if (previewPoint) {
@@ -732,7 +736,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     const p = hero.body.p;
     switch (e.type) {
       case 'attach': fx.splat(e.x, e.y, e.z, e.nx, e.ny, e.nz); rig.onAttach(); break;
-      case 'release': case 'perfect': case 'swingJump': fx.letGo(); break;
+      case 'release': case 'perfect': case 'swingJump': fx.letGo(); if (e.type === 'perfect') rig.pop(6); break;
+      case 'zipBoost': rig.pop(7); sfx.event({ type: 'zip' }); break;
+      case 'diveCarry': rig.pop(5); break;
       case 'thwip': {
         // THWIP! now and then, by the hand (every shot would be noise; the sound carries the rest).
         if (time - lastThwipWord > 9) {
