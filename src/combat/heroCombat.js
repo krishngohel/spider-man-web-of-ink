@@ -132,8 +132,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (key === 'pull' && tgt) {
       // The web pull: he flies in to arrive at the hero's fists on the impact frame.
       const u = toward(tgt), gap = Math.max(0, u.d - 1.1), v = tgt.body.v;
-      enemies.hang?.(tgt, M.impact + 0.05);
-      applyDv(tgt.body, 'rope', -u.x * gap / M.impact - v.x, 2.5 - v.y, -u.z * gap / M.impact - v.z);
+      enemies.airborne?.(tgt);
+      applyDv(tgt.body, 'rope', -u.x * gap / M.impact - v.x, G * (M.impact + 0.1) / 2 - v.y, -u.z * gap / M.impact - v.z);
       onEvent({ type: 'thwip', x: tgt.body.p.x, y: tgt.body.p.y, z: tgt.body.p.z, combat: true });
     }
     // Beat to the punch (PUB): a slower blow from the enemy we are hitting is cancelled, unless
@@ -323,10 +323,10 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     let near = tgt ? toward(tgt) : null;
 
     if (c.defeated) { intent.moveX = intent.moveZ = 0; return; }
-    if (intent.webPressed) c.webAt = c.hclock;
-    if (intent.attackPressed) c.attackAt = c.hclock;
+    if (intent.webPressed) c.webAt = c.clock;
+    if (intent.attackPressed) c.attackAt = c.clock;
     // Both buttons together on a long combo: the web blast webs everyone around (spends the combo).
-    if ((intent.attackPressed || intent.webPressed) && Math.abs(c.attackAt - c.webAt) < 0.15 && c.combo >= TUNE.blastCombo && !c.defeated) {
+    if ((intent.attackPressed || intent.webPressed) && intent.attack && intent.web && Math.abs(c.attackAt - c.webAt) < 0.08 && c.combo >= TUNE.blastCombo && !c.defeated) {
       let n = 0;
       for (const e of enemies.active) { const u = toward(e); if (!e.boss && u.d < TUNE.blastRadius && Math.abs(u.dy) < 3) { enemies.hit(e, { kind: 'web', dmg: 0.6 }); n++; } }
       c.combo = 0; c.attackAt = c.webAt = -9; buffer.clear(); intent.webPressed = false; intent.attackPressed = false;
@@ -415,7 +415,9 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       c.state = 'slam'; c.t = 0; onEvent({ type: 'slamStart' }); return;
     }
     // A shield thug facing you: jump at him to vault over onto his back (his shield is no use then).
-    if (intent.jumpPressed && grounded() && tgt?.arch === 'shield' && !tgt.shieldBroken && near.d < 3.4 && isActive(tgt)) {
+    const stickToward = Math.hypot(c.stick.x, c.stick.z) > 0.3 && tgt && (c.stick.x * near.x + c.stick.z * near.z) / Math.hypot(c.stick.x, c.stick.z) > 0.5;
+    const shieldFacing = tgt && Math.sin(tgt.facing) * -near.x + Math.cos(tgt.facing) * -near.z > 0.3;
+    if (intent.jumpPressed && grounded() && tgt?.arch === 'shield' && !tgt.shieldBroken && near.d < 3.4 && isActive(tgt) && tgt.alerted && stickToward && shieldFacing) {
       const q = tgt.body.p, land = { x: q.x + near.x * 1.6, z: q.z + near.z * 1.6 };
       // A high arc (about 2 m up) so the body clears his head and shield.
       const T = 0.72, v = V();

@@ -94,6 +94,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     events: [],
 
     place(x, y, z, vx = 0, vy = 0, vz = 0, state = 'air') {
+      this.zipBoostsLeft = tune.zipBoosts;
       placeBody(body, x, y, z, vx, vy, vz);
       rope.release();
       swing.release();
@@ -184,7 +185,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
 
   // Fires a web where the crosshair points. Returns false on a miss.
   // quiet: a miss says nothing (on the ground the same button is a parkour run).
-  function shootWeb(intent, hang = false, quiet = false) {
+  function shootWeb(intent, hang = false, quiet = false, assist = true) {
     const cam = { x: intent.camPos.x, y: intent.camPos.y, z: intent.camPos.z, fx: intent.camFwd.x, fy: intent.camFwd.y, fz: intent.camFwd.z };
     let hit = findAimPoint(world, body, cam, { wide: !hang });
     // Insomniac's rule (swing assist on, the default): the swing button always finds something
@@ -192,7 +193,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     // anchor (well above the hero); otherwise the anchor finder picks the best point along the
     // stick or the camera's heading, scored by flying the arc. Assist off: only where you aim.
     // In the air only: on the ground the same button is the parkour run.
-    if (!hang && hero.state !== 'ground' && hero.assist !== 'off' && (hero.assist === 'high' || !hit || hit.y - body.p.y < 4)) {
+    if (assist && !hang && hero.state !== 'ground' && hero.assist !== 'off' && (hero.assist === 'high' || !hit || hit.y - body.p.y < 4)) {
       const d = wantedHeading(intent);
       const auto = findAnchor(world, body, { dirX: d.x, dirZ: d.z, assist: hero.assist, g: g() });
       if (auto) hit = { ...auto, auto: true };
@@ -277,7 +278,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     const hit = findZipPoint(world, body, cam);
     if (!hit) {
       // Nothing in reach: in the air, a web zip boost (a dash forward and up), twice per airtime.
-      if (hero.state !== 'ground' && (hero.zipBoostsLeft ?? tune.zipBoosts) > 0) {
+      if (hero.state !== 'ground' && hero.state !== 'wall' && !hero.mover && (hero.zipBoostsLeft ?? tune.zipBoosts) > 0) {
         hero.zipBoostsLeft = (hero.zipBoostsLeft ?? tune.zipBoosts) - 1;
         const fl = Math.hypot(cam.fx, cam.fz) || 1, fx = cam.fx / fl, fz = cam.fz / fl;
         const v = body.v, keep = Math.max(0, v.x * fx + v.z * fz);
@@ -394,9 +395,8 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
         // Dived into it: the speed of the dive carries on into the arc (Insomniac's dive-to-swing).
         if (!hang && hero.time - (hero.lastDiveAt ?? -9) < 0.6) {
           const vv = body.v, l = Math.hypot(vv.x, vv.y, vv.z) || 1;
-          if (l > 15) applyDv(body, 'assist', (vv.x / l) * tune.diveCarry, (vv.y / l) * tune.diveCarry, (vv.z / l) * tune.diveCarry);
+          if (l > 15) { applyDv(body, 'assist', (vv.x / l) * tune.diveCarry, (vv.y / l) * tune.diveCarry, (vv.z / l) * tune.diveCarry); emit('diveCarry'); }
           hero.lastDiveAt = -9;
-          emit('diveCarry');
         }
         const before = hero.speed;
         move(dt);
@@ -425,10 +425,13 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     // Insomniac's cheat: a gentle push away from the building the web is stuck to, stronger the
     // closer it is, so a swing runs down the middle of the street instead of hugging the facade.
     const piv = swing.rope.pivots[0], bx = piv?.box;
-    if (bx?.min && p.y < bx.max[1]) {
-      const cx = Math.max(bx.min[0], Math.min(bx.max[0], p.x)), cz = Math.max(bx.min[2], Math.min(bx.max[2], p.z));
+    if (bx && bx.maxY !== undefined && p.y < bx.maxY) {
+      const cx = Math.max(bx.minX, Math.min(bx.maxX, p.x)), cz = Math.max(bx.minZ, Math.min(bx.maxZ, p.z));
       const dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz);
-      if (d > 0.3 && d < tune.wallPushRange) { const k = tune.wallPush * (1 - d / tune.wallPushRange) * dt; applyDv(body, 'assist', (dx / d) * k, 0, (dz / d) * k); }
+      if (d > 0.3 && d < tune.wallPushRange && !world.raycast(p.x, p.y, p.z, dx / d, 0, dz / d, 4, { ground: false })) {
+        const k = tune.wallPush * (1 - d / tune.wallPushRange) * dt;
+        applyDv(body, 'assist', (dx / d) * k, 0, (dz / d) * k);
+      }
     }
     // Hands off the stick: the swing settles along the street it is nearly following (the city's
     // grid runs along x and z), so a run down an avenue does not drift into one side.
@@ -647,7 +650,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       return;
     }
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
-    if (intent.swingPressed && shootWeb(intent)) {
+    if (intent.swingPressed && shootWeb(intent, false, true, false)) {
       // Fire from the wall: kick off it and let the web catch.
       push(nx * 3, 2 - Math.min(0, v.y), nz * 3, 'kick off for a web');
       hero.state = 'air'; hero.airTime = 0.1; hero.wallMomentum = false;
@@ -681,7 +684,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     const run = runningUp(intent);
     if (lat > 0.05) { const sp = run ? tune.wallRunSpeed : tune.wallCrawlSpeed; wantHx = lx * sp; wantHz = lz * sp; accH = run ? RUN_UP_ACCEL : WALL_ACCEL; }
     else { wantHx = 0; wantHz = 0; accH = tune.wallFriction; }
-    if (run && lat > 0.5) { wantY = 0; accY = tune.wallFriction + g(); }
+    if (run && lat > 0.5) { wantY = Math.max(0, into) * tune.wallRunSpeed; accY = RUN_UP_ACCEL; }
     else if (run) { wantY = tune.wallRunSpeed; accY = RUN_UP_ACCEL; }
     else if (Math.abs(into) > 0.05) { wantY = into * tune.wallCrawlSpeed; accY = WALL_ACCEL; }
     else { wantY = 0; accY = tune.wallFriction + g(); }

@@ -31,6 +31,25 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   const props = createProps({ scene, world });
   const heroCombat = createHeroCombat({ hero, enemies, projectiles, onEvent: emit, clips: assets.clips, props });
   const gadgets = createGadgets({ scene, enemies, projectiles, hero, world, onEvent: emit });
+  // The street props' callbacks, made once (not a fresh object and three closures every frame).
+  const propCtx = {
+    hero, heroInvuln: () => true, hitHero: () => {},
+    // A thrown prop floors its target and anyone right next to him.
+    hitBoss: (target, p) => {
+      const at = target.body.p;
+      for (const e of enemies.active) {
+        if (e.boss) continue;
+        const d = Math.hypot(e.body.p.x - at.x, e.body.p.z - at.z);
+        if (e !== target && d > 2.2) continue;
+        const l = Math.hypot(p.v.x, p.v.z) || 1;
+        enemies.hit(e, { dmg: e === target ? p.K.dmg * 0.7 : p.K.dmg * 0.35, dir: { x: p.v.x / l, z: p.v.z / l }, push: 10, lift: 3, kind: 'slam' });
+      }
+      heroCombat.c.focus = Math.min(3, heroCombat.c.focus + 0.35);
+      emit({ type: 'word', text: 'KRASH!', at: { ...at }, kind: 'big' });
+      emit({ type: 'heroHit', e: target, heavy: true, kind: 'prop', stop: 0.1 });
+    },
+    onBreak: (p) => emit({ type: 'propBreak', at: { ...p.p } }),
+  };
   const strikeLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xf2f2f4 }));
   strikeLine.visible = false;
   scene.add(strikeLine);
@@ -61,24 +80,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       if (!w.red && e.strikeAt - e.t <= TUNE.redWindow) { w.red = true; emit({ type: 'enemyRed', e, heavy: w.heavy, ranged: w.ranged }); }
     }
     gadgets.step(dt);
-    props.step(dt, {
-      hero, heroInvuln: () => true, hitHero: () => {},
-      // A thrown prop floors its target and anyone right next to him.
-      hitBoss: (target, p) => {
-        const at = target.body.p;
-        for (const e of enemies.active) {
-          if (e.boss) continue;
-          const d = Math.hypot(e.body.p.x - at.x, e.body.p.z - at.z);
-          if (e !== target && d > 2.2) continue;
-          const l = Math.hypot(p.v.x, p.v.z) || 1;
-          enemies.hit(e, { dmg: e === target ? p.K.dmg * 0.7 : p.K.dmg * 0.35, dir: { x: p.v.x / l, z: p.v.z / l }, push: 10, lift: 3, kind: 'slam' });
-        }
-        heroCombat.c.focus = Math.min(3, heroCombat.c.focus + 0.35);
-        emit({ type: 'word', text: 'KRASH!', at: { ...at }, kind: 'big' });
-        emit({ type: 'heroHit', e: target, heavy: true, kind: 'prop', stop: 0.1 });
-      },
-      onBreak: (p) => emit({ type: 'propBreak', at: { ...p.p } }),
-    });
+    props.step(dt, propCtx);
     // Gunners aim with a laser while they wind up.
     for (const e of enemies.list) {
       const aiming = e.alive && e.state === 'windup' && e.A.ranged && !e.disarmed;
@@ -168,7 +170,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   function updateEncounter(dt) {
     if (encounter) {
       const left = encounter.list.filter((e) => e.alive && isActive(e)).length;
-      if (left === 0) { emit({ type: 'encounterDone', encounter }); encounter = null; encounterCooldown = 70 + rng.range(0, 60); }
+      if (left === 0) { emit({ type: 'encounterDone', encounter }); if (encounter.kind !== 'story') props.clear(); encounter = null; encounterCooldown = 70 + rng.range(0, 60); }
       else if (encounter.kind !== 'story' && Math.hypot(encounter.x - hero.body.p.x, encounter.z - hero.body.p.z) > 420) { for (const e of encounter.list) enemies.remove(e); encounter = null; encounterCooldown = 20; }
       return;
     }
@@ -213,7 +215,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       for (let i = 0; i < 4; i++) {
         const a = rng.range(0, Math.PI * 2), r = rng.range(4.5, 8);
         const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
-        if (world.groundHeight(px, 3, pz) < 1.5) props.add({ x: px, y: 0, z: pz, kind: kinds[i] });
+        if (world.groundHeight(px, 3, pz) < 1.5 && !world.pointInside(px, 0.6, pz, 0.6)) props.add({ x: px, y: 0, z: pz, kind: kinds[i] });
       }
     }
     emit({ type: 'encounterStart', encounter });

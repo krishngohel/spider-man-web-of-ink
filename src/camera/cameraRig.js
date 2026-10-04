@@ -152,8 +152,7 @@ export function createCameraRig() {
       c.dist *= 1 - 0.33 * rig.push;
       c.fov -= 5 * rig.push;
       // Each web attach and burst widens the view for a moment (decays over about 0.4 s).
-      rig.fovPop = Math.max(0, rig.fovPop - dt * 10);
-      c.fov += rig.fovPop;
+      rig.fovPop = Math.max(0, rig.fovPop - dt * 10); // shown on top of the smoothed FOV (game.js)
       rig.lastDt = dt;
       rig.vel.x = v.x; rig.vel.y = v.y; rig.vel.z = v.z;
       const kd = 1 - Math.exp(-dt * 3);

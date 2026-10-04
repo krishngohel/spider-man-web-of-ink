@@ -58,7 +58,10 @@ const click = async (button = 'left') => { await p.mouse.down({ button }); await
   await click('right');
   await sleep(250);
   await click();
-  results.push(['web pull on a webbed thug out of reach', (await watch(900)).has('pull')]);
+  const pulled = (await watch(900)).has('pull');
+  const after = (await state()).enemies[0];
+  // It must land: he is launched (air) or at least hurt, not a whiff at range.
+  results.push(['web pull on a webbed thug out of reach (and it lands)', pulled && (after.state === 'air' || after.state === 'down' || after.hp < s.enemies[0].hp)]);
 }
 // 3. Sweep: two hits, a pause, a hit.
 {
@@ -117,7 +120,8 @@ const click = async (button = 'left') => { await p.mouse.down({ button }); await
   // Wait for him to come within vaulting range (about 3 m).
   for (let t = 0; t < 60; t++) { const s = await state(), h = await hero(), e = s.enemies[0]; if (Math.hypot(e.x - h.p.x, e.z - h.p.z) < 3) break; await sleep(50); }
   const side0 = Math.sign(((await state()).enemies[0].z - (await hero()).p.z));
-  await p.keyboard.press('Space');
+  // Steer at him and jump.
+  await p.keyboard.down('KeyW'); await sleep(60); await p.keyboard.press('Space'); await sleep(80); await p.keyboard.up('KeyW');
   await sleep(900);
   const h1 = await hero(), e1 = (await state()).enemies[0];
   const dbg = await p.evaluate(() => { const c = window.__game.combat().heroCombat.c; return { used: c.used.vault ?? 0, tgt: c.target?.arch ?? null }; });

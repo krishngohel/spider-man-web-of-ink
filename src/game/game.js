@@ -808,7 +808,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       buildIntent();
       gdt = dt * combat.timeScale(dt) * (settings.slowMo ? 0.75 : 1);
       // The gadget wheel slows the world while it is open, and the stick picks instead of steering.
-      if (combatHud.wheelOpen) { gdt *= 0.25; intent.moveX = intent.moveZ = 0; }
+      if (combatHud.wheelOpen) { if (!session.active) gdt *= 0.25; intent.moveX = intent.moveZ = 0; }
       if (gadgetHold > 12) { if (!combatHud.wheelOpen) combatHud.openWheel(); combatHud.steerWheel(input.look, input.move); wheelUsed = true; }
       else if (combatHud.wheelOpen) { const pick = combatHud.closeWheel(); if (pick) combat.gadgets.select(pick); }
       if (storyOn) director.preStep(intent, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
@@ -950,7 +950,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       }
     }
     fovKick *= Math.exp(-dt * 25);
-    if (!camOverride && Math.abs(camera.fov - (rig.fov + fovKick)) > 0.01) { camera.fov = rig.fov + fovKick; camera.updateProjectionMatrix(); }
+    if (!camOverride && Math.abs(camera.fov - (rig.fov + fovKick + rig.fovPop)) > 0.01) { camera.fov = rig.fov + fovKick + rig.fovPop; camera.updateProjectionMatrix(); }
     if (waypoint && mode === 'play') {
       wpV.set(waypoint.x, Math.max(2, hero.body.p.y * 0.5), waypoint.z).project(camera);
       const behind = wpV.z > 1;

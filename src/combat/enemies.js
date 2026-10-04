@@ -153,6 +153,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
   function setState(e, s) {
     e.state = s; e.t = 0;
     if (e.model.tell) e.model.tell.value = s === 'windup' ? 1 : s === 'out' ? -1 : 0; // -1: knocked out, greyed
+    if (s === 'webbed') e.outT = 0;
     const a = e.model.animator;
     switch (s) {
       case 'idle': a.play('Idle_Loop'); break;
@@ -194,9 +195,9 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     const front = from ? ((from.x - e.body.p.x) * Math.sin(e.facing) + (from.z - e.body.p.z) * Math.cos(e.facing)) > 0 : true;
     if (kind === 'web') {
       e.webAgo = 0; // a web pull can yank him in for a moment after
-      e.web = Math.min(1, e.web + dmg / (e.A.heavy ? 2 : e.A.shield ? 1.34 : 1));
+      e.web = Math.min(1, e.web + dmg / (e.A.heavy ? 2 : e.A.shield ? 4 / 3 : 1));
       e.alerted = true;
-      if (e.web >= 1 && e.state !== 'webbed') { setState(e, 'webbed'); onEvent({ type: 'enemyWebbed', e }); return { dealt: 0, webbed: true }; }
+      if (e.web >= 1 - 1e-6 && e.state !== 'webbed') { setState(e, 'webbed'); onEvent({ type: 'enemyWebbed', e }); return { dealt: 0, webbed: true }; }
       // A web always breaks a windup (the ranged answer to a thug you cannot reach, fix spec B7).
       if (e.state !== 'air' && e.state !== 'down' && e.state !== 'getup') setState(e, 'stagger');
       return { dealt: 0, blocked: false };
@@ -346,7 +347,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
               const reach = e.disarmed ? 1.9 : A.reach;
               // Fists cannot reach a hero in the air (spec 1.1, the air is safe); whips can.
               const up = airSafe(hp.y, groundUnder(hp)) && e.arch !== 'whip';
-              if (!up && !e.dodged && dist < reach + 0.4 && Math.abs(hp.y - p.y) < 2.4 && !heroInvuln()) {
+              if (!up && !e.dodged && dist < reach + 0.4 && Math.abs(hp.y - p.y) < (e.arch === 'whip' ? 4.8 : 2.4) && !heroInvuln()) {
                 heroHit({ dmg: A.dmg * (DIFFICULTY_DMG[difficulty] ?? 1), dir: { x: ux, z: uz }, from: e, unblockable: !!A.unblockable });
               } else onEvent({ type: 'enemyMiss', e });
             }
@@ -386,7 +387,8 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           // A cocoon on the ground holds about six seconds while the fight goes on (stuck to a wall,
           // pinned, it holds for good; with everyone else down, the police collect him).
           e.outT += dt;
-          if (e.outT > TUNE.webHold && !(e.thrownT > 0) && list.some((o) => o !== e && isActive(o) && !o.boss)) {
+          if (e.outT > TUNE.webHold && !(e.thrownT > 0) && !e.stealth && !e.takenDown
+              && list.some((o) => o !== e && o.alerted && isActive(o) && !o.boss && Math.hypot(o.body.p.x - p.x, o.body.p.z - p.z) < 25)) {
             e.web = 0; e.outT = 0; e.alerted = true;
             setState(e, 'stagger');
             onEvent({ type: 'enemyBrokeFree', e });
@@ -529,6 +531,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
   // A silent takedown: webbed up where they stand (out of the fight). Guards who can see the
   // victim grow suspicious.
   function takedown(e, kind, { silent = false } = {}) {
+    e.takenDown = true; // a takedown is for good (no breaking out of it)
     setState(e, 'webbed');
     e.web = 1;
     if (kind === 'hang') applyDv(e.body, 'rope', 0, 7, 0);
@@ -548,6 +551,8 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     // Hitstop on this body (seconds).
     freeze(e, s) { if (e.boss || e.puppet || e.isPlayer) return; e.stopT = Math.max(e.stopT ?? 0, s); e.stopAll = e.stopT; },
     // Kept in the air by an air string.
+    // Airborne without the hang's damping (a web pull flies him in on a planned arc).
+    airborne(e) { if (e.boss || e.puppet || e.isPlayer || e.hp <= 0 || !isActive(e)) return; setState(e, 'air'); e.onGround = false; e.hangT = 0; },
     hang(e, s) { if (e.boss || e.puppet || e.isPlayer || e.hp <= 0) return; e.hangT = s; if (e.state !== 'air' && isActive(e)) { setState(e, 'air'); } e.onGround = false; },
     // Open for a beat (a perfect dodge's web to the face).
     stun(e, s) { if (e.boss || e.puppet || e.isPlayer || !isActive(e)) return; e.stunT = s; setState(e, 'stunned'); onEvent({ type: 'enemyStunned', e }); },

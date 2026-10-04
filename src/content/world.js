@@ -210,7 +210,7 @@ export function createContentWorld(g) {
       act.crimeByDistrict ??= {};
       const n = act.crimeByDistrict[d] = (act.crimeByDistrict[d] ?? 0) + 1;
       g.reward('crime', { tokens: n <= CRIME_QUOTA ? { crime: 1 } : null, at: crime.spot });
-      if (crime.bonus && crime.bonus.got >= crime.bonus.n) { g.reward('crime', { tokens: { crime: 1 }, at: crime.spot }); g.stamp('BONUS!'); }
+      if (crime.bonus && crime.bonus.got >= crime.bonus.n) { g.reward('crime', { tokens: n <= CRIME_QUOTA ? { crime: 1 } : null, at: crime.spot }); g.stamp('BONUS!'); }
       if (nights) { nights.score++; nights.level = 1 + Math.floor(nights.score / 3); g.caption(`CRIME NIGHTS: ${nights.score} STOPPED, LEVEL ${nights.level}`, 2.5); }
       g.caption(`${crime.C.name}: STOPPED`, 2.2);
       g.persist();
