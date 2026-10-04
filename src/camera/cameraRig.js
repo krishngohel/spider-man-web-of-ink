@@ -16,9 +16,9 @@ export const CAM = {
   shoulder: 0.85, shoulderUp: 0.25,
   minDist: 1.8,
   // Combat framing (spec C7): pulled back with the spread of the fight, a little down and wider,
-  // framing pulled toward the nearest three, auto-turning to a threat after 0.5 s hands-off.
-  fightDist: 6, fightSpread: 0.35, fightMax: 9.5, fightPitch: 0.38, fightFov: 4, fightPull: 0.25,
-  fightTurnAfter: 0.5, fightTurnRate: 1.6, fightTurnMin: 0.6, lookDeadPx: 1.5,
+  // framing pulled toward the nearest three, auto-turning to an off-screen threat after 1 s hands-off.
+  fightDist: 5.2, fightSpread: 0.35, fightMax: 8, fightPitch: 0.38, fightFov: 4, fightPull: 0.25,
+  fightTurnAfter: 1.0, fightTurnRate: 1.6, fightTurnMin: 0.75, lookDeadPx: 1.5,
   // Traversal (overhaul C2 to C6): in the air the camera may look up only so far (-0.6 rad) and never
   // sinks more than 1 m under the hero, so a swing never ends low and staring into a wall; the
   // shoulder offset follows the state; FOV opens between 15 and 55 m/s; a web attach kicks the
@@ -124,11 +124,12 @@ export function createCameraRig() {
         rig.pitch += (wantPitch - rig.pitch) * k * 0.6;
       }
 
-      if (framing && rig.sinceAim > CAM.fightTurnAfter && hero.state === 'ground') {
-        // Hands off the camera mid-fight: tip down over the fight and turn toward a threat
-        // that is well off to one side.
+      if (framing && fight.handsOff && rig.sinceAim > CAM.fightTurnAfter && hero.state === 'ground') {
+        // Hands off the camera and the stick mid-fight: ease down over the fight and turn toward a
+        // threat that is out of view (past 43 degrees to one side). Never while the player steers:
+        // movement is camera-relative, so a turning camera bends their heading and their target.
         const k = 1 - Math.exp(-dt * CAM.fightTurnRate);
-        rig.pitch += (CAM.fightPitch - rig.pitch) * k * rig.fightK;
+        rig.pitch += (CAM.fightPitch - rig.pitch) * k * rig.fightK * 0.25;
         if (fight.threat) {
           const want = Math.atan2(fight.threat.x - hero.body.p.x, fight.threat.z - hero.body.p.z);
           const off = wrapAngle(want - rig.yaw);

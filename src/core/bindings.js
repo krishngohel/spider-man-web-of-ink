@@ -8,7 +8,7 @@ export const ACTIONS = [
   { id: 'jump', label: 'Jump. While swinging: swing-jump. In the air: web wings', group: 'Move' },
   { id: 'zip', label: 'Web zip to where the camera points', group: 'Move' },
   { id: 'hang', label: 'Hang on the web (climb with forward and back), press again to let go', group: 'Move' },
-  { id: 'dive', label: 'Dive (hold in the air)', group: 'Move' },
+  { id: 'dive', label: 'Dodge (fighting) / Dive (hold in the air)', group: 'Move' },
   { id: 'trick', label: 'Air trick (flips and spins)', group: 'Move' },
   { id: 'attack', label: 'Attack (hold next to an enemy: launcher). Far away: web strike', group: 'Fight' },
   { id: 'web', label: 'Web shot (webs enemies up)', group: 'Fight' },

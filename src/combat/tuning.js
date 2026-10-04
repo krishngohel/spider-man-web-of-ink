@@ -15,7 +15,7 @@ export const TUNE = {
   perfectStun: 1.5, perfectScale: 0.3, perfectSlow: 0.9, perfectRamp: 0.15,
   // Ground string (EST; buffer REF Smash 167 ms)
   lightTime: 0.33, lightImpact: 0.11, enderTime: 0.5, enderPush: 4,
-  chainFrom: 0.55, buffer: 0.15,
+  chainFrom: 0.55, buffer: 0.3,                             // fix spec A2 (was 0.15; Arkham queues generously)
   closeBand: 1.5, lungeBand: 4, strikeBand: 18, airBand: 1.5, wallBand: 2,
   contactGap: 1.0, warpClamp: 4, faceBy: 0.3,
   comboReset: 3.5,                                          // PUB-adjacent rule, EST time

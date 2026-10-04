@@ -469,6 +469,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     // Camera-relative: forward is where the camera looks (flattened), right is (-cos, sin).
     intent.moveX = sy * input.move.y - cy * input.move.x;
     intent.moveZ = cy * input.move.y + sy * input.move.x;
+    moveIdleT = Math.hypot(input.move.x, input.move.y) > 0.2 ? 0 : moveIdleT + (rig.lastDt ?? 1 / 60);
     intent.camFwd.x = rig.fwd.x; intent.camFwd.y = rig.fwd.y; intent.camFwd.z = rig.fwd.z;
     intent.camPos.x = rig.pos.x; intent.camPos.y = rig.pos.y; intent.camPos.z = rig.pos.z;
     let swing;
@@ -551,7 +552,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const renderP = { x: 0, y: 0, z: 0 };
   // The fight for the camera (spec C7): the nearest three engaged enemies within 14 m, how far
   // they spread, and the soonest attacker.
-  const fightView = { pts: [], spread: 0, threat: null };
+  const fightView = { pts: [], spread: 0, threat: null, handsOff: false };
+  let moveIdleT = 0; // seconds since the player last steered (the fight camera only helps after a second of nothing)
   const view = {
     body: { p: renderP, get v() { return hero.body.v; } }, get state() { return hero.state; },
     get wall() { return hero.state === 'wall' ? hero.wall : null; }, // the wall camera (it never ran without this)
@@ -563,6 +565,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       fightView.spread = near[near.length - 1].d;
       const w = near.filter((q) => q.e.state === 'windup').sort((a, b) => (a.e.strikeAt - a.e.t) - (b.e.strikeAt - b.e.t))[0];
       fightView.threat = w ? w.e.body.p : null;
+      // The camera may only turn by itself with the pointer captured (or a pad), after a second with
+      // no camera and no move input (fix spec A4).
+      fightView.handsOff = (locked() || input.device === 'pad') && moveIdleT > 1.0;
       return fightView;
     },
   };

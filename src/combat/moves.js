@@ -75,7 +75,7 @@ export function clipTimeAt(tm, M, t, arrivedAt = null) {
 // A move can be followed from 55% of the way through (spec 1.4).
 export const canChain = (move, t) => t >= move.time * TUNE.chainFrom;
 
-// Presses are kept for 0.15 s, so a slightly early press still counts (REF Smash buffer).
+// Presses are kept for 0.3 s, so an early press still counts (fix spec A2).
 export function createBuffer() {
   const at = new Map();
   return {

@@ -48,6 +48,43 @@ export function pickTarget(heroP, camFwd, enemies, maxDist = 14, stick = null) {
   return best;
 }
 
+// The enemy an attack press means (fix spec A1, Arkham freeflow): with the stick pushed, the
+// nearest in a 50 degree cone along it (a thug past lunge range only within 30 degrees), the
+// current target kept unless another beats it by a fifth; with no stick, the current target while
+// it is within 5 m, else the nearest within 4 m, and the camera's line only when nobody is close.
+// A thug down or getting up is a target only when nobody upright is in range.
+export function pickMeleeTarget(heroP, camFwd, enemies, maxDist = 14, stick = null, current = null) {
+  const pool = [];
+  for (const e of enemies) {
+    if (!isActive(e)) continue;
+    const dx = e.body.p.x - heroP.x, dy = e.body.p.y - heroP.y, dz = e.body.p.z - heroP.z;
+    const d = Math.hypot(dx, dy, dz);
+    if (d > maxDist) continue;
+    pool.push({ e, d, h: Math.hypot(dx, dz), dx, dz, low: e.state === 'down' || e.state === 'getup' });
+  }
+  const up = pool.filter((q) => !q.low);
+  const cands = up.length ? up : pool;
+  if (!cands.length) return null;
+  const sl = stick ? Math.hypot(stick.x, stick.z) : 0;
+  if (sl > 0.3) {
+    let best = null, bs = Infinity;
+    for (const q of cands) {
+      const cos = (q.dx * stick.x + q.dz * stick.z) / (sl * Math.max(0.1, q.h));
+      const ang = Math.acos(Math.max(-1, Math.min(1, cos))) * 180 / Math.PI;
+      if (ang > 50 || (q.h > TUNE.lungeBand && ang > 30)) continue;
+      const s = (ang / 50 + q.d / 8) * (q.e === current ? 0.8 : 1);
+      if (s < bs) { bs = s; best = q.e; }
+    }
+    if (best) return best;
+  }
+  const cur = current && cands.find((q) => q.e === current);
+  if (cur && cur.d <= 5) return current;
+  let near = null;
+  for (const q of cands) if (q.d <= TUNE.lungeBand && (!near || q.d < near.d)) near = q;
+  if (near) return near.e;
+  return pickTarget(heroP, camFwd, cands.map((q) => q.e), maxDist);
+}
+
 // How long an attack winds up (spec 1.2): light 0.6 s, heavy 0.9 s; guns keep their own.
 export function windupFor(A) {
   if (A.ranged) return A.windup;
@@ -252,6 +289,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
             // Off-screen shooters take longer, so the spider-sense gives more warning (PUB).
             e.strikeAt = (gun ? A.windup : windupFor(A)) + (gun && ctx.onScreen?.(e) === false ? TUNE.offscreenDelay : 0);
             e.red = false;
+            e.dodged = false;
             setState(e, 'windup');
             e.hitThisAttack = false;
             onEvent({ type: 'enemyWindup', e, at: e.strikeAt, ranged: gun, unblockable: !!A.unblockable });
@@ -276,7 +314,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
               const reach = e.disarmed ? 1.9 : A.reach;
               // Fists cannot reach a hero in the air (spec 1.1, the air is safe); whips can.
               const up = airSafe(hp.y, groundUnder(hp)) && e.arch !== 'whip';
-              if (!up && dist < reach + 0.4 && Math.abs(hp.y - p.y) < 2.4 && !heroInvuln()) {
+              if (!up && !e.dodged && dist < reach + 0.4 && Math.abs(hp.y - p.y) < 2.4 && !heroInvuln()) {
                 heroHit({ dmg: A.dmg * (DIFFICULTY_DMG[difficulty] ?? 1), dir: { x: ux, z: uz }, from: e, unblockable: !!A.unblockable });
               } else onEvent({ type: 'enemyMiss', e });
             }

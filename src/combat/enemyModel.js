@@ -133,7 +133,8 @@ export function outfitMaterial(look) {
   #if NUM_DIR_LIGHTS > 0
   rim *= smoothstep(0.0, 0.3, dot(normal, directionalLights[0].direction));
   #endif
-  outgoingLight = c + vec3(1.0, 0.9, 0.8) * rim * 0.3 + uHurt * vec3(0.9, 0.2, 0.15);
+  // A hit flashes the body white for a moment (the classic impact flash), not a pink wash.
+  outgoingLight = mix(c + vec3(1.0, 0.9, 0.8) * rim * 0.3, vec3(1.0, 0.97, 0.92), uHurt * 0.8);
 }
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
@@ -141,7 +142,7 @@ export function outfitMaterial(look) {
     shader.uniforms.uHurt = mat.userData.hurt;
   };
   mat.userData.hurt = { value: 0 };
-  mat.customProgramCacheKey = () => 'outfit-v2';
+  mat.customProgramCacheKey = () => 'outfit-v3';
   return mat;
 }
 

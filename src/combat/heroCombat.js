@@ -1,5 +1,5 @@
 import { applyDv } from '../physics/ledger.js';
-import { pickTarget, isActive, ARCHETYPES } from './enemies.js';
+import { pickTarget, pickMeleeTarget, isActive, ARCHETYPES } from './enemies.js';
 import { TUNE } from './tuning.js';
 import { MOVES, chooseMove, clipFor, canChain, createBuffer, clipTiming, clipTimeAt } from './moves.js';
 import { planWarp } from './warp.js';
@@ -36,7 +36,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     iframes: 0, outOfCombat: 9, attackHeldT: 0, webHeldT: 0, punchN: 0,
     timeScale: 1, slowT: 0, slowKind: 'plain', finisherHoldT: 0, defeated: false, lastWord: 0,
     webAmmo: TUNE.webCap, webRefillT: 0,
-    move: null, step: 0, airStep: 0, lastKey: '', sameRun: 0, mash: 0, lastMoveAt: -9, lastMoveEnd: -9, airKeepT: 0, clock: 0,
+    move: null, step: 0, airStep: 0, lastKey: '', sameRun: 0, mash: 0, lastMoveAt: -9, lastMoveEnd: -9, airKeepT: 0, clock: 0, hclock: 0, stick: { x: 0, z: 0 }, camFwd: { x: 0, y: 0, z: 1 },
     heroStop: 0, heroStopAll: 0, faceYaw: null,
     dmgMul: 1, // skills raise this (Plan 4)
     special: null, strikeMul: 1, comboKeep: TUNE.comboReset, armor: 0, resilient: false, resilientUsed: false, focusMul: 1, brutalMul: 1,
@@ -136,6 +136,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   }
 
   function nextMove() {
+    // A string flows between thugs: the stick pushed at another one moves the next hit to him.
+    if (Math.hypot(c.stick.x, c.stick.z) > 0.3) c.target = pickMeleeTarget(P(), c.camFwd, enemies.list, COMBAT.strikeRange, c.stick, c.target) ?? c.target;
     const tgt = c.target;
     const near = tgt ? toward(tgt) : null;
     const mv = tgt ? chooseMove({ d: near.d, dy: near.dy, step: c.step, airStep: c.airStep, grounded: grounded(), webbed: false, holdT: 0 }) : { key: grounded() ? 'jab' : 'air1' };
@@ -199,7 +201,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (!M.finisher && !M.air && m.key !== 'launcher' && m.hitDone && c.attackHeldT >= TUNE.launchHold && grounded() && alive && !tgt.boss && !tgt.A?.heavy && toward(tgt).d < 2.8) {
       c.attackHeldT = -99; startMove('launcher'); return;
     }
-    if (!M.finisher && canChain(M, m.t) && buffer.take('attack', c.clock)) {
+    if (!M.finisher && canChain(M, m.t) && buffer.take('attack', c.hclock)) {
       if (m.key === 'launcher' && m.hitDone && m.t - M.impact <= TUNE.followWindow + 0.15 && alive) {
         // Follow him up: legs push off the ground after the launched enemy.
         const v = V();
@@ -210,6 +212,10 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
         return;
       }
       if (nextMove()) return;
+    }
+    if (!M.finisher && !M.air && m.hitDone && m.t > M.impact + 0.08 && alive) {
+      const sl = Math.hypot(c.stick.x, c.stick.z), u = toward(tgt);
+      if (sl > 0.5 && (c.stick.x * u.x + c.stick.z * u.z) / sl < -0.17) { c.state = 'free'; c.move = null; c.lastMoveEnd = c.clock; return; }
     }
     if (m.t >= M.time) { c.state = 'free'; c.move = null; c.lastMoveEnd = c.clock; }
   }
@@ -236,7 +242,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       }
     } else if (m.t - m.arrivedAt > 0.3) { c.state = 'free'; c.move = null; }
     // A buffered press after the rebound chains into the next strike or air hit.
-    if (m.arrived && m.t - m.arrivedAt > 0.15 && buffer.take('attack', c.clock)) nextMove();
+    if (m.arrived && m.t - m.arrivedAt > 0.15 && buffer.take('attack', c.hclock)) nextMove();
   }
 
   // Pre-step: read the combat inputs, start moves, and steer the hero's intent while a move runs.
@@ -246,6 +252,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     // Frozen in a hitstop: nothing of the hero's advances (the world still does).
     const live = c.heroStop > 0 ? 0 : dt;
     c.clock += dt;
+    c.hclock += live; // the input buffer runs in hero time, so a hitstop never eats a press
     c.t += live;
     c.comboT += live;
     if (c.comboT > c.comboKeep) c.combo = 0;
@@ -256,22 +263,23 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (c.outOfCombat > COMBAT.regenDelay) { c.hp = Math.min(c.maxHp, c.hp + COMBAT.regenRate * dt); c.resilientUsed = false; }
     // Web cartridges refill one at a time.
     if (c.webAmmo < TUNE.webCap) { c.webRefillT += dt; if (c.webRefillT >= TUNE.webRefill) { c.webRefillT = 0; c.webAmmo++; } } else c.webRefillT = 0;
-    // Keep a target while it is valid and near; else pick the one the stick or camera points at.
+    // The target (fix spec A1): kept while valid and near, re-picked whenever the hero is free
+    // (and at every chain point, in nextMove) from the stick, then nearness, then the camera.
+    c.stick.x = intent.moveX; c.stick.z = intent.moveZ; c.camFwd = camFwd;
     if (!c.target || !isActive(c.target) || toward(c.target).d > COMBAT.strikeRange + 4) c.target = null;
-    const pick = pickTarget(P(), camFwd, enemies.list, COMBAT.strikeRange, { x: intent.moveX, z: intent.moveZ });
-    if (pick && (!c.target || c.state === 'free')) c.target = pick;
+    if (c.state === 'free' || !c.target) c.target = pickMeleeTarget(P(), camFwd, enemies.list, COMBAT.strikeRange, c.stick, c.target) ?? c.target;
     const tgt = c.target;
     const near = tgt ? toward(tgt) : null;
 
     if (c.defeated) { intent.moveX = intent.moveZ = 0; return; }
     if (intent.attackPressed) {
-      buffer.press('attack', c.clock);
+      buffer.press('attack', c.hclock);
       // The next attack ends a perfect dodge's slow motion early.
       if (c.slowKind === 'perfect' && c.slowT > TUNE.perfectRamp) c.slowT = TUNE.perfectRamp;
     }
     // A dodge needs a fight nearby, or an attack on its way (a shot or a dive from far off).
     const close = engaged.some((e) => toward(e).d < 15 || (e.state === 'windup' && toward(e).d < 45));
-    if (intent.divePressed && close && (hero.state === 'ground' || hero.state === 'air')) buffer.press('dodge', c.clock);
+    if (intent.divePressed && close && ['ground', 'air', 'wall', 'perch'].includes(hero.state)) buffer.press('dodge', c.hclock);
     groundAt = ctx.groundAt ?? null;
     finisherSlowmo = ctx.finisherSlowmo !== false;
     groundHere = ctx.groundBelow;
@@ -285,7 +293,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
 
     // The dodge cancels anything but a finisher (PUB).
-    if (fight && c.state !== 'dodge' && !c.move?.M.finisher && buffer.take('dodge', c.clock)) { startDodge(intent, engaged); return; }
+    if (fight && (c.state !== 'dodge' || c.t > 0.3) && !c.move?.M.finisher && buffer.take('dodge', c.hclock)) { startDodge(intent, engaged); return; }
 
     // Moves in progress -------------------------------------------------------------------------
     if (c.state === 'move') { runMove(intent, live); return; }
@@ -304,13 +312,13 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
     if (c.state === 'dodge') {
       if (c.t < TUNE.dodgeTime * 0.7) intent.moveX = intent.moveZ = 0;
-      if (c.t > TUNE.dodgeTime) c.state = 'free';
-      return;
+      if (c.t > TUNE.dodgeTime || (c.t > 0.25 && buffer.peek('attack', c.hclock))) c.state = 'free';
+      else return;
     }
     if (c.state === 'hurt') {
       intent.moveX = intent.moveZ = 0;
-      if (c.t > 0.32) c.state = 'free';
-      return;
+      if (c.t > 0.32 || (c.t > 0.2 && buffer.peek('attack', c.hclock))) c.state = 'free';
+      else return;
     }
 
     // Starting moves ------------------------------------------------------------------------------
@@ -337,11 +345,11 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     const ground = ctx.groundBelow;
     const height = P().y - ground;
     const below = !grounded() && !hero.swing.active && height > 2.5 && enemies.active.some((e) => { const u = toward(e); return u.d < 8 && u.dy < -1.5; });
-    if (below && (c.webHeldT >= TUNE.launchHold || (buffer.peek('attack', c.clock) && (!tgt || near.dy < -1.5)))) {
+    if (below && (c.webHeldT >= TUNE.launchHold || (buffer.peek('attack', c.hclock) && (!tgt || near.dy < -1.5)))) {
       buffer.clear(); c.webHeldT = -99;
       c.state = 'slam'; c.t = 0; onEvent({ type: 'slamStart' }); return;
     }
-    if (buffer.take('attack', c.clock)) {
+    if (buffer.take('attack', c.hclock)) {
       // Back after a pause: the string starts over.
       if (c.clock - c.lastMoveEnd > 0.6) { c.step = 0; if (grounded()) c.airStep = 0; }
       if (tgt) {
@@ -454,8 +462,15 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     const ref = threat ?? engaged.reduce((a, b) => (toward(a).d < toward(b).d ? a : b));
     const u = toward(ref);
     const m = Math.hypot(intent.moveX, intent.moveZ);
-    let dx = -u.z, dz = u.x;
-    if (m > 0.2) { dx = intent.moveX / m; dz = intent.moveZ / m; } else if (Math.random() < 0.5) { dx = -dx; dz = -dz; }
+    // No stick: back and to one side, away from the attacker (fix spec A3). With the stick, where
+    // it points, except that a dodge into the attacker turns sideways on the stick's side.
+    const sgn = Math.random() < 0.5 ? 1 : -1;
+    let dx = (-u.x - u.z * sgn) * Math.SQRT1_2, dz = (-u.z + u.x * sgn) * Math.SQRT1_2;
+    if (m > 0.2) {
+      dx = intent.moveX / m; dz = intent.moveZ / m;
+      if (dx * u.x + dz * u.z > Math.SQRT1_2) { const s = dx * u.z - dz * u.x > 0 ? 1 : -1; dx = u.z * s; dz = -u.x * s; }
+    }
+    if (hero.state === 'wall' || hero.state === 'perch') { hero.state = 'air'; hero.airTime = 0; }
     // A move in progress is dropped (every move but a finisher cancels into a dodge).
     c.move = null; c.airKeepT = 0;
     const air = !grounded();
@@ -476,9 +491,10 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       applyDv(hero.body, 'surface', dx * sp - v.x, G * TUNE.dodgeTime / 2 - Math.max(0, v.y), dz * sp - v.z);
       hero.state = 'air'; hero.airTime = 0;
     }
-    // Dodging a telegraphed blow clears that blow: covered until it has landed (at most 0.5 s),
-    // however early in the windup the dodge came.
-    c.state = 'dodge'; c.t = 0; c.iframes = threat ? Math.max(COMBAT.iframes, Math.min(0.5, soon + 0.08)) : COMBAT.iframes;
+    // Dodging a telegraphed blow clears that blow: covered until it has landed (at most 1 s),
+    // however early in the windup the dodge came, and that swing can no longer hit at all.
+    c.state = 'dodge'; c.t = 0; c.iframes = threat ? Math.max(COMBAT.iframes, Math.min(1.0, soon + 0.1)) : COMBAT.iframes;
+    if (threat) threat.dodged = true;
     enemies.tokens?.holdAll(TUNE.dodgeHold);
     const perfect = !!threat && soon <= COMBAT.perfectWindow + 1 / 60;
     // Which side relative to where the hero faces (the poser picks the flip).

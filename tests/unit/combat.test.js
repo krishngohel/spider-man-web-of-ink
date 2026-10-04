@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { pickTarget, canAttack, hitDamage, isActive, windupFor, ARCHETYPES, MAX_ATTACKERS } from '../../src/combat/enemies.js';
+import { pickTarget, pickMeleeTarget, canAttack, hitDamage, isActive, windupFor, ARCHETYPES, MAX_ATTACKERS } from '../../src/combat/enemies.js';
 import { GADGETS } from '../../src/combat/gadgets.js';
 
 const E = (id, x, z, state = 'engage', arch = 'brawler') => ({ id, arch, A: ARCHETYPES[arch], state, alive: true, body: { p: { x, y: 0.9, z } }, facing: 0, shieldBroken: false });
@@ -10,6 +10,29 @@ describe('combat rules', () => {
     const ahead = E(1, 0, 6), side = E(2, 4, 0);
     expect(pickTarget(hero, { x: 0, y: 0, z: 1 }, [ahead, side]).id).toBe(1);
     expect(pickTarget(hero, { x: 1, y: 0, z: 0 }, [ahead, side]).id).toBe(2);
+  });
+  it('a melee press takes the thug at hand, not one down the camera line', () => {
+    const hero = { x: 0, y: 0.9, z: 0 };
+    const ahead = E(1, 0, 5), side = E(2, 2, 0), behind = E(3, 0, -1.2);
+    const fwd = { x: 0, y: 0, z: 1 };
+    expect(pickMeleeTarget(hero, fwd, [ahead, side, behind]).id).toBe(3);
+    expect(pickMeleeTarget(hero, fwd, [ahead, side]).id).toBe(2);
+    // Nobody within 4 m: the camera's line decides.
+    expect(pickMeleeTarget(hero, fwd, [E(4, 0, 7), E(5, 7, 0)]).id).toBe(4);
+  });
+  it('the stick picks along its cone and keeps the current target unless another is clearly better', () => {
+    const hero = { x: 0, y: 0.9, z: 0 };
+    const a = E(1, 0.4, 2.6), b = E(2, -0.3, 2.4), side = E(3, 1.5, 0);
+    expect(pickMeleeTarget(hero, null, [a, b, side], 14, { x: 0, z: 1 }).id).toBe(2);
+    expect(pickMeleeTarget(hero, null, [a, b, side], 14, { x: 0, z: 1 }, a).id).toBe(1);
+    expect(pickMeleeTarget(hero, null, [a, b, side], 14, { x: 1, z: 0 }).id).toBe(3);
+    // A far thug off to the side of the stick is no web-strike target.
+    expect(pickMeleeTarget(hero, { x: 0, y: 0, z: 1 }, [E(4, 4, 6), E(5, 0.5, 2)], 14, { x: 0, z: 1 }).id).toBe(5);
+  });
+  it('a downed thug is a target only when nobody upright is in range', () => {
+    const hero = { x: 0, y: 0.9, z: 0 };
+    expect(pickMeleeTarget(hero, { x: 0, y: 0, z: 1 }, [E(1, 0, 1, 'down'), E(2, 0, 3)]).id).toBe(2);
+    expect(pickMeleeTarget(hero, { x: 0, y: 0, z: 1 }, [E(1, 0, 1, 'down')]).id).toBe(1);
   });
   it('never targets someone out of the fight, or out of range', () => {
     const hero = { x: 0, y: 0.9, z: 0 };

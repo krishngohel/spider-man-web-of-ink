@@ -25,13 +25,13 @@ describe('moves', () => {
   it('a webbed target is thrown', () => {
     expect(chooseMove({ ...base, webbed: true }).key).toBe('throw');
   });
-  it('keeps a press for 0.15 s', () => {
+  it('keeps a press for 0.3 s', () => {
     const b = createBuffer();
     b.press('attack', 1.0);
-    expect(b.take('attack', 1.1)).toBe(true);
-    expect(b.take('attack', 1.1)).toBe(false);
+    expect(b.take('attack', 1.25)).toBe(true);
+    expect(b.take('attack', 1.25)).toBe(false);
     b.press('attack', 2.0);
-    expect(b.take('attack', 2.2)).toBe(false);
+    expect(b.take('attack', 2.35)).toBe(false);
   });
   it('chains from 55% of a move', () => {
     expect(canChain(MOVES.jab, MOVES.jab.time * 0.5)).toBe(false);
