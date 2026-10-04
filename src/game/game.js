@@ -989,6 +989,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       traceSkip--;
     }
     const Tr = performance.now();
+    streetGroup.userData.updateCars?.(camera.position, dt);
     ink.render(scene, camera, time);
     const renderMs = performance.now() - Tr;
     prof('render', Tr);

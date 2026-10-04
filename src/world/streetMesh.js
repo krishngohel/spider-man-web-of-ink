@@ -55,6 +55,14 @@ function carGeometry() {
   // Body colour comes from the instance colour; glass, wheels and lights are baked dark/light.
   return merge(carParts());
 }
+// The same car from far off: two boxes and four wheels (about 120 triangles, no shadow).
+function farCarGeometry() {
+  return merge([
+    [box(1.8, 0.7, 4.3, 0, 0.72, 0), 0xffffff],
+    [box(1.5, 0.5, 2.1, 0, 1.3, -0.2), 0x2f4e6e],
+    ...[[-0.86, 1.35], [0.86, 1.35], [-0.86, -1.35], [0.86, -1.35]].map(([x, z]) => [cyl(0.36, 0.36, 0.24, x, 0.37, z, 6).rotateZ(Math.PI / 2), 0x1d1d22]),
+  ]);
+}
 function treeGeometry() {
   const crown = new THREE.SphereGeometry(1.9, 14, 10);
   crown.scale(1, 1.15, 1); crown.translate(0, 5.6, 0);
@@ -95,7 +103,36 @@ export function buildStreetMeshes(props, scene, quality) {
   };
   add(lampGeometry(), props.lamps, (l) => { p.set(l.x, 0, l.z); q.setFromAxisAngle(up, l.facing > 0 ? Math.PI / 2 : -Math.PI / 2); s.set(1, 1, 1); });
   add(trafficGeometry(), props.lights, (l) => { p.set(l.x, 0, l.z); q.setFromAxisAngle(up, Math.PI / 2); s.set(1, 1, 1); });
-  add(carGeometry(), props.cars, (c) => { p.set(c.x, 0, c.z); q.setFromAxisAngle(up, c.yaw); s.set(1, 1, 1); }, (c) => c.color, true);
+  // Parked cars in two levels of detail: full sedans with shadows near the camera, plain boxes past
+  // CAR_NEAR (a city of sedans with shadows cost over 2 ms of GPU), re-sorted a few times a second.
+  if (props.cars.length) {
+    const N = props.cars.length, CAR_NEAR = 90;
+    const nearCars = new THREE.InstancedMesh(carGeometry(), mat, N), farCars = new THREE.InstancedMesh(farCarGeometry(), mat, N);
+    nearCars.castShadow = quality.shadows; farCars.castShadow = false;
+    nearCars.receiveShadow = farCars.receiveShadow = quality.shadows;
+    nearCars.frustumCulled = farCars.frustumCulled = false;
+    // Each set is packed at the front of its mesh and drawn with count = its size (a zero-scaled
+    // instance still runs every vertex, shadow pass included, so hiding by scale saved nothing).
+    const cols = props.cars.map((c) => new THREE.Color(c.color));
+    let lodT = 0;
+    group.userData.updateCars = (cam, dt) => {
+      lodT -= dt;
+      if (lodT > 0) return;
+      lodT = 0.4;
+      let nn = 0, nf = 0;
+      props.cars.forEach((c, i) => {
+        p.set(c.x, 0, c.z); q.setFromAxisAngle(up, c.yaw); s.set(1, 1, 1); m4.compose(p, q, s);
+        if (Math.hypot(c.x - cam.x, c.z - cam.z) < CAR_NEAR) { nearCars.setMatrixAt(nn, m4); nearCars.setColorAt(nn, cols[i]); nn++; }
+        else { farCars.setMatrixAt(nf, m4); farCars.setColorAt(nf, cols[i]); nf++; }
+      });
+      nearCars.count = nn; farCars.count = nf;
+      nearCars.instanceMatrix.needsUpdate = true; farCars.instanceMatrix.needsUpdate = true;
+      if (nearCars.instanceColor) nearCars.instanceColor.needsUpdate = true;
+      if (farCars.instanceColor) farCars.instanceColor.needsUpdate = true;
+    };
+    group.userData.updateCars({ x: 1e9, z: 1e9 }, 1);
+    group.add(nearCars, farCars);
+  }
   add(treeGeometry(), props.trees, (t) => { p.set(t.x, 0, t.z); q.setFromAxisAngle(up, t.x * 0.37); s.setScalar(t.s); }, null, true);
   add(hydrantGeometry(), props.hydrants, (h) => { p.set(h.x, 0, h.z); q.identity(); s.set(1, 1, 1); });
   // Night: bulbs light up and throw a comic cone of light (additive, no real light: cheap).
