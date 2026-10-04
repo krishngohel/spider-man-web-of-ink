@@ -75,7 +75,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     const u = toward(e);
     const r = enemies.hit(e, { dmg: dmg * c.dmgMul * (e.A?.heavy ? c.heavyMul : 1), dir: { x: u.x, z: u.z }, push, lift, kind, from: P(), noInterrupt: c.sameRun >= TUNE.sameMoveLimit });
     if (r.ignored) return r;
-    if (r.blocked) { word('CLANG!', e); onEvent({ type: 'blocked' }); if (e.arch === 'shield') hint('SHIELD UP: FLIP OVER HIM OR YANK IT AWAY'); return r; }
+    if (r.blocked) { word('CLANG!', e); onEvent({ type: 'blocked' }); if (e.arch === 'shield') hint('SHIELD UP: JUMP AT HIM TO VAULT OVER, OR YANK THE SHIELD AWAY'); return r; }
     c.combo++; c.comboT = 0;
     // Variety pays: four different moves in the last six fill focus half as fast again; the same
     // string over and over fills it at half speed.

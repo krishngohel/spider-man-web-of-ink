@@ -134,7 +134,7 @@ export function outfitMaterial(look) {
   rim *= smoothstep(0.0, 0.3, dot(normal, directionalLights[0].direction));
   #endif
   // A hit flashes the body white for a moment (the classic impact flash), not a pink wash.
-  outgoingLight = mix(c + vec3(1.0, 0.9, 0.8) * rim * 0.3, vec3(1.0, 0.97, 0.92), uHurt * 0.8);
+  outgoingLight = mix(c + vec3(1.0, 0.9, 0.8) * rim * 0.3, vec3(1.0, 0.97, 0.92), uHurt * 0.55);
   // The tell (fix spec D11): winding up, his whole edge glows, white, then red in the dodge window.
   // Knocked out: the colour drains, so a body on the floor never reads as a thug still in it.
   if (uTell < -0.5) outgoingLight = mix(outgoingLight, vec3(dot(outgoingLight, vec3(0.3, 0.59, 0.11))), 0.7);

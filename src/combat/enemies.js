@@ -281,7 +281,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       e.t += dt;
       e.cooldown -= dt;
       e.lastHitT += dt;
-      e.model.hurt.value = Math.max(0, e.model.hurt.value - dt * 6);
+      e.model.hurt.value = Math.max(0, e.model.hurt.value - dt * 9);
       e.poiseT = Math.max(0, (e.poiseT ?? 0) - dt); e.hitWin = (e.hitWin ?? 0) - dt; e.webAgo = (e.webAgo ?? 99) + dt;
       const dx = hp.x - p.x, dz = hp.z - p.z, dist = Math.hypot(dx, dz) || 1;
       const ux = dx / dist, uz = dz / dist;
@@ -519,7 +519,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     while (df > Math.PI) df -= Math.PI * 2;
     while (df < -Math.PI) df += Math.PI * 2;
     e.facing += df * k;
-    e.model.hurt.value = Math.max(0, e.model.hurt.value - dt * 6);
+    e.model.hurt.value = Math.max(0, e.model.hurt.value - dt * 9);
     if (e.state === 'engage') e.model.animator.play('Jog_Fwd_Loop');
     e.model.root.position.set(p.x, p.y, p.z);
     e.model.root.rotation.set(0, e.facing, 0);

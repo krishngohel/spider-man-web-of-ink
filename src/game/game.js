@@ -849,7 +849,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (input.pressed('photo') && !session.active) takePhoto();
       content.update(gdt, { active: !session.active && !(storyOn && director.quiet) && !storyUi.cardOpen && !storyUi.comicOpen });
       if (!storyOn) storyUi.update(gdt); // radio lines and stamps from free roam
-      hud.setTipQuiet(storyUi.tipsShown || storyUi.talking);
+      // One voice at a time: the traversal tip steps aside for story tips, dialogue and fights.
+      hud.setTipQuiet(storyUi.tipsShown || storyUi.talking || combat.enemies.engaged.length > 0);
       // The pad's D-pad down moves the radio on (spec F4).
       {
         const pad = [...(navigator.getGamepads?.() ?? [])].find((q) => q && q.connected) ?? null;
