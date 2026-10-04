@@ -43,6 +43,7 @@ export const DEFAULTS = {
   // the flight carries a fifth more speed (at least perfectBoost) and lifts perfectUp.
   perfectMin: 30, perfectMax: 58,
   perfectBoost: 5, perfectMul: 0.2, perfectUp: 5,
+  wallPush: 7, wallPushRange: 9, // the push off the anchor's building (m/s^2 at the wall, gone by 9 m)
   diveCarry: 4,            // a dive just before a swing carries this much more speed into it (m/s)
   zipBoostSpeed: 22, zipBoostUp: 6, zipBoosts: 2, // Q with nothing to zip to: a dash, twice per airtime
   swingJumpFwd: 6,

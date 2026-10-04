@@ -422,6 +422,14 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     hero.airTime += dt;
     airForces(intent, dt, 0.85);
     const p = body.p, v = body.v;
+    // Insomniac's cheat: a gentle push away from the building the web is stuck to, stronger the
+    // closer it is, so a swing runs down the middle of the street instead of hugging the facade.
+    const piv = swing.rope.pivots[0], bx = piv?.box;
+    if (bx?.min && p.y < bx.max[1]) {
+      const cx = Math.max(bx.min[0], Math.min(bx.max[0], p.x)), cz = Math.max(bx.min[2], Math.min(bx.max[2], p.z));
+      const dx = p.x - cx, dz = p.z - cz, d = Math.hypot(dx, dz);
+      if (d > 0.3 && d < tune.wallPushRange) { const k = tune.wallPush * (1 - d / tune.wallPushRange) * dt; applyDv(body, 'assist', (dx / d) * k, 0, (dz / d) * k); }
+    }
     // Hands off the stick: the swing settles along the street it is nearly following (the city's
     // grid runs along x and z), so a run down an avenue does not drift into one side.
     if (Math.hypot(intent.moveX, intent.moveZ) < 0.2) {
