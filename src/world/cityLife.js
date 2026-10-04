@@ -4,6 +4,7 @@ import { createRng } from '../core/rng.js';
 import { LAND } from './city.js';
 import { comicToon } from '../render/comicShade.js';
 import { CAR_COLORS } from './streetProps.js';
+import { carParts } from './carShape.js';
 
 // City life (spec section 5): pedestrians on the sidewalks, traffic on the avenues and streets,
 // pigeons on the roofs and helicopters overhead. All of it lives in a bubble around the player
@@ -328,8 +329,7 @@ function mergeSimple(list) {
   return out;
 }
 
-// The same car as the parked ones (body tinted per instance), built here so traffic has no import
-// cycle with the street meshes.
+// The same car as the parked ones (body tinted per instance, the shape from carShape.js).
 function carGeometry() {
   const parts = [];
   const add = (g, col) => {
@@ -340,13 +340,7 @@ function carGeometry() {
     ng.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
     parts.push(ng);
   };
-  const box = (w, h, d, x, y, z) => { const g = new THREE.BoxGeometry(w, h, d); g.translate(x, y, z); return g; };
-  add(box(1.8, 0.75, 4.3, 0, 0.72, 0), 0xffffff);
-  add(box(1.6, 0.62, 2.2, 0, 1.4, -0.2), 0xffffff);
-  add(box(1.62, 0.44, 2.0, 0, 1.43, -0.2), 0x2f4e6e);
-  for (const [x, z] of [[-0.92, 1.35], [0.92, 1.35], [-0.92, -1.35], [0.92, -1.35]]) add(new THREE.CylinderGeometry(0.36, 0.36, 0.3, 10).rotateZ(Math.PI / 2).translate(x, 0.38, z), 0x1d1d22);
-  add(box(1.5, 0.18, 0.06, 0, 0.82, 2.16), 0xfff3c4);
-  add(box(1.5, 0.16, 0.06, 0, 0.82, -2.16), 0xd8392b);
+  for (const [g, col] of carParts()) add(g, col);
   const out = new THREE.BufferGeometry();
   for (const k of ['position', 'normal', 'color']) {
     const arr = new Float32Array(parts.reduce((s, p) => s + p.attributes[k].array.length, 0));

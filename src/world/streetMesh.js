@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { AUX_DECL, AUX_WRITE_FLAT, AUX_WRITE_NONE } from '../render/gbuffer.js';
 import { comicToon } from '../render/comicShade.js';
 import { PALETTE } from '../render/palette.js';
+import { carParts } from './carShape.js';
 
 // Draws the street furniture as a handful of instanced meshes (one draw call each): lamp posts,
 // traffic lights, parked cars with per-car colours, street trees, hydrants. Stylised and chunky so
@@ -52,17 +53,7 @@ function trafficGeometry() {
 }
 function carGeometry() {
   // Body colour comes from the instance colour; glass, wheels and lights are baked dark/light.
-  return merge([
-    [box(1.8, 0.75, 4.3, 0, 0.72, 0), 0xffffff],
-    [box(1.6, 0.62, 2.2, 0, 1.4, -0.2), 0xffffff],
-    [box(1.62, 0.44, 2.0, 0, 1.43, -0.2), 0x2f4e6e],
-    [cyl(0.36, 0.36, 0.3, -0.92, 0.38, 1.35, 10).rotateZ(Math.PI / 2), 0x1d1d22],
-    [cyl(0.36, 0.36, 0.3, 0.92, 0.38, 1.35, 10).rotateZ(Math.PI / 2), 0x1d1d22],
-    [cyl(0.36, 0.36, 0.3, -0.92, 0.38, -1.35, 10).rotateZ(Math.PI / 2), 0x1d1d22],
-    [cyl(0.36, 0.36, 0.3, 0.92, 0.38, -1.35, 10).rotateZ(Math.PI / 2), 0x1d1d22],
-    [box(1.5, 0.18, 0.06, 0, 0.82, 2.16), 0xfff3c4],
-    [box(1.5, 0.16, 0.06, 0, 0.82, -2.16), 0xd8392b],
-  ]);
+  return merge(carParts());
 }
 function treeGeometry() {
   const crown = new THREE.SphereGeometry(1.9, 14, 10);
