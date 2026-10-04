@@ -205,8 +205,9 @@ export function createPoser(heroModel) {
       if (mantleT > 0) { mantleT -= dt; if (st !== 'air') mantleT = 0; }
       if (kickT > 0) { kickT -= dt; if (st === 'ground') kickT = 0; }
       if (slamT > 0) { slamT -= dt; if (st === 'ground') slamT = 0; }
-      // Standing still on a rooftop for a while: drop into a perch crouch, Spider-Man style.
-      idleT = st === 'ground' && hs < 0.3 && hero.body.p.y > 6 ? idleT + dt : 0;
+      // How long he has stood still (the idle clip runs; he no longer squats just for standing on a
+      // roof: like Insomniac's Spider-Man he stands easy, and perches only off a zip or a launch).
+      idleT = st === 'ground' && hs < 0.3 ? idleT + dt : 0;
 
       // Orientation and target pose for this state -------------------------------------------
       let wantProc = 1;
@@ -226,7 +227,7 @@ export function createPoser(heroModel) {
           handTarget.set(0, 0, 0.45).applyQuaternion(orient.quaternion).add(root.position);
           handTarget.y = root.position.y - 0.9 + 0.1;
           webWorld.copy(handTarget); webHand.side = 'r'; pin = webHand;
-        } else if (perchT > 0 || idleT > 2.5) {
+        } else if (perchT > 0) {
           target.set(POSES.perch);
         } else {
           wantProc = 0;

@@ -93,6 +93,7 @@ function suitMaterial(suit) {
     uBlack: { value: new THREE.Color(suit.black) },
     uLens: { value: new THREE.Color(suit.lens) },
     uStyle: { value: suit.style ?? 0 },
+    uSuitPat: { value: suit.pattern ?? 0 },
     uBodyScale: { value: new THREE.Vector3(1, 1, 1) },
   };
   mat.userData.suit = uniforms;
@@ -107,6 +108,7 @@ function suitMaterial(suit) {
       .replace('#include <common>', `#include <common>
 uniform vec3 uRed, uBlue, uBlack, uLens;
 uniform float uStyle;   // 0 classic, 1 symbiote, 2 iron, 3 noir, 4 2099, 5 stealth glow, 6 negative
+uniform float uSuitPat; // style 0 layouts: 0 Amazing 2 (classic), 1 Amazing 2012, 2 hoodie, 3 homemade, 4 wrestler, 5 punk stripes
 float gGlow = 0.0;      // glowing lines (stealth suits), painted after lighting
 ${COMIC_SHADE}
 varying vec3 vBind, vBindN;
@@ -219,7 +221,7 @@ vec3 paintSuit(vec3 p) {
     // The Amazing boots come up to just under the knee.
     float bootTop = amazing ? 0.5 - 0.07 * smoothstep(0.6, 1.0, sin(a)) : 0.43 - 0.06 * smoothstep(0.6, 1.0, sin(a));
     red = p.y < bootTop;
-    if (amazing) {
+    if (amazing && uSuitPat < 1.5) {
       // A red stripe down the outside of each leg into the boot, and the belt's two curved points
       // over the front of the hips: the shapes that read as the Amazing suit from across a street.
       float ox = (p.x - sign(p.x) * 0.114) * sign(p.x), oz = p.z + 0.02;
@@ -236,10 +238,26 @@ vec3 paintSuit(vec3 p) {
   float ridge = amazing ? max(lineAA(f.x, lw + 2.4), lineAA(f.y, lw + 2.4)) - lines : 0.0;
   vec3 col = red ? uRed : uBlue;
   if (uStyle < 0.5) {
-    // The printed honeycomb under everything, the cells a touch lighter than their walls.
-    float hc = honeycomb(p, normalize(vBindN));
-    col *= 1.06 - 0.2 * hc;
-    if (red) { col = mix(col, col * 1.3 + 0.06, ridge * 0.55); col = mix(col, uBlack, lines); }
+    // Each suit of the family has its own layout over the same body (not just new colours).
+    bool webbed = red, mask = p.y > 1.53;
+    vec3 lineCol = uBlack;
+    if (uSuitPat > 0.5 && uSuitPat < 1.5) lineCol = vec3(0.62, 0.65, 0.72);          // 2012: raised silver webbing
+    else if (uSuitPat > 1.5 && uSuitPat < 2.5) {                                        // hoodie over the suit
+      if (!mask && p.y > 0.9 && ax < 0.47) { col = uBlue; webbed = false; }
+      else if (!mask) { col = uRed; webbed = true; }
+    } else if (uSuitPat > 2.5 && uSuitPat < 3.5) {                                      // homemade: plain cloth, a webbed mask
+      webbed = mask;
+    } else if (uSuitPat > 3.5 && uSuitPat < 4.5) {                                      // wrestler: dark body, red mask, gloves, boots
+      if (!mask && ax < 0.45 && p.y > 0.45) col = uBlue;
+      else col = uRed;
+      webbed = mask;
+    } else if (uSuitPat > 4.5) {                                                        // punk: torn stripes
+      if (!mask) col = fract((p.y + p.x * 0.35) / 0.09) < 0.5 ? uRed : uBlue;
+      webbed = mask;
+    }
+    // The printed honeycomb under everything (the film suits), the cells a touch lighter than their walls.
+    if (uSuitPat < 1.5) { float hc = honeycomb(p, normalize(vBindN)); col *= 1.06 - 0.2 * hc; }
+    if (webbed) { col = mix(col, col * 1.3 + 0.06, ridge * 0.55); col = mix(col, lineCol, lines); }
   }
   else if (uStyle < 1.5) col = uRed;                                                    // symbiote: one colour
   else if (uStyle < 2.5) { col = mix(col, col * 0.55, lines * 0.7); }                    // iron: panel seams
@@ -266,7 +284,7 @@ vec3 paintSuit(vec3 p) {
     if (p.z > 0.04) {
       float big = (uStyle > 0.5 && uStyle < 1.5) || uStyle > 6.5 ? 1.9 : uStyle > 3.5 && uStyle < 4.5 ? 1.6 : 1.25;
       float d = amazing ? spiderLong(vec2(p.x, p.y - 1.315), 1.3) : spider(vec2(p.x, p.y - 1.33), big);
-      vec3 ec = uStyle > 3.5 && uStyle < 4.5 ? uRed : uStyle > 5.5 && uStyle < 6.5 ? uBlue : uBlack;
+      vec3 ec = uStyle > 3.5 && uStyle < 4.5 ? uRed : uStyle > 5.5 && uStyle < 6.5 ? uBlue : uStyle < 0.5 && uSuitPat > 1.5 && uSuitPat < 2.5 ? uRed : uBlack;
       col = mix(col, ec, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
       if (uStyle > 4.5 && uStyle < 5.5) gGlow = max(gGlow, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
     } else if (p.z < -0.04) {
@@ -323,9 +341,10 @@ vec3 paintSuit(vec3 p) {
   #endif
   c += vec3(1.0, 0.95, 0.85) * rim * 0.34;
   #if NUM_DIR_LIGHTS > 0
-  if (uStyle < 0.5) {
+  if (uStyle < 0.5 && uSuitPat < 1.5) {
+    // The film suits' sheen: a small crisp highlight, not a wet patch.
     vec3 hv = normalize(directionalLights[0].direction + normalize(vViewPosition));
-    c += vec3(1.0, 0.96, 0.92) * smoothstep(0.93, 0.965, dot(normal, hv)) * 0.2;
+    c += vec3(1.0, 0.96, 0.92) * smoothstep(0.975, 0.99, dot(normal, hv)) * 0.12;
   }
   #endif
   outgoingLight = c;
@@ -338,7 +357,7 @@ ${SHADOW_ALPHA}
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, uLens * (0.92 + 0.08 * clamp(vBind.y * 6.0 - 9.9, 0.0, 1.0)) * (1.0 - 0.09 * gLensHex), gLens);
 	if (gLens > 0.5) gl_FragColor.a = 0.0;`);
   };
-  mat.customProgramCacheKey = () => 'suit-v9';
+  mat.customProgramCacheKey = () => 'suit-v10';
   return mat;
 }
 
@@ -346,6 +365,7 @@ export function setSuit(hero, suit) {
   const u = hero.suitMat.userData.suit;
   u.uRed.value.set(suit.red); u.uBlue.value.set(suit.blue); u.uBlack.value.set(suit.black); u.uLens.value.set(suit.lens);
   u.uStyle.value = suit.style ?? 0;
+  u.uSuitPat.value = suit.pattern ?? 0;
 }
 
 export const COM_HEIGHT = 0.9; // the physics body's position is this far above the feet

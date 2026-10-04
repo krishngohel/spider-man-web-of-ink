@@ -108,7 +108,9 @@ export function skillEffects(skills) {
 // Suits -------------------------------------------------------------------------------------------
 // style: 0 classic web, 1 symbiote, 2 iron, 3 noir, 4 2099, 5 stealth glow, 6 negative.
 // story: a story step that must be done first (the Black Suit comes from the symbiote, not a shop).
-const SU = (id, name, style, red, blue, black, lens, level, cost, power = null, story = null) => ({ id, name, style, red, blue, black, lens, level, cost, power, story });
+// pattern: the layout within style 0 (0 Amazing 2, 1 Amazing 2012, 2 hoodie, 3 homemade, 4 wrestler, 5 punk).
+const PATTERN = { amazing: 1, scarlet: 2, homemade: 3, wrestler: 4, punk: 5 };
+const SU = (id, name, style, red, blue, black, lens, level, cost, power = null, story = null) => ({ id, name, style, pattern: PATTERN[id] ?? 0, red, blue, black, lens, level, cost, power, story });
 export const SUITS = [
   SU('classic', 'Classic', 0, 0xbb121e, 0x192e7e, 0x0e0d16, 0xf4f6fb, 1, {}, 'webBlossom'),
   SU('amazing', 'Amazing', 0, 0xa3141e, 0x14235e, 0x14141c, 0xf2b33d, 2, { crime: 2 }),
