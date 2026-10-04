@@ -84,10 +84,10 @@ export function bakeSmoothNormals(geo) {
 export const HULL_UNIFORMS = { uHullRes: { value: new THREE.Vector2(1920, 1080) } };
 
 // Inverted-hull ink outline (spec G6, as Hi-Fi Rush draws its characters): the back faces pushed
-// out along the skinned smooth normal by a width in screen pixels, about 3 px close and 1.2 px at
+// out along the skinned smooth normal by a width in screen pixels, about 2.2 px close and 0.9 px at
 // 40 m, so a far figure keeps a thin clean line instead of a black blob. LAYER_FX (colour pass).
 // Skinned, so its aux texel is flagged as a character and the ink pass draws no creases there.
-export function addHullOutline(mesh, { px = 3, far = 1.2, color = PALETTE.ink } = {}) {
+export function addHullOutline(mesh, { px = 2.2, far = 0.9, color = PALETTE.ink } = {}) {
   bakeSmoothNormals(mesh.geometry);
   // The body it outlines tells the ink pass it is outlined (no creases drawn on it).
   for (const m of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) {

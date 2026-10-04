@@ -83,19 +83,24 @@ void main() {
   // round it. Line weight tapers with distance: about 2.5 px close, 1 px far.
   float dc = viewDepth(uvE);
   float ic = 1.0 / dc;
-  vec2 texel = uTexel * mix(1.7, 0.85, smoothstep(6.0, 60.0, dc));
+  // Characters (flag at or above 0.9): a hulled one is outlined by its hull alone, the rest get a
+  // thin silhouette and no swell, so a figure at fighting distance stays its colours, not an ink blob.
+  float flag0 = texture2D(tAux, uvE).a;
+  bool chr = flag0 > 0.9;
+  vec2 texel = uTexel * (chr ? 0.8 : mix(1.35, 0.8, smoothstep(6.0, 60.0, dc)));
   float lap = 0.0;
   for (int i = -1; i <= 1; i++)
     for (int j = -1; j <= 1; j++) lap += 1.0 / viewDepth(uvE + vec2(float(i), float(j)) * texel);
   lap -= 9.0 * ic;
   float depthEdge = smoothstep(0.12, 0.3, -lap / ic);
   // Brush weight: near silhouettes also test a ring twice as wide, so outlines swell.
-  if (dc < 35.0) {
+  if (dc < 25.0 && !chr) {
     vec2 t2 = texel * 2.0;
     float m = max(max(ic - 1.0 / viewDepth(uvE + vec2(t2.x, 0.0)), ic - 1.0 / viewDepth(uvE - vec2(t2.x, 0.0))),
                   max(ic - 1.0 / viewDepth(uvE + vec2(0.0, t2.y)), ic - 1.0 / viewDepth(uvE - vec2(0.0, t2.y))));
-    depthEdge = max(depthEdge, smoothstep(0.25, 0.5, m / ic) * (1.0 - smoothstep(20.0, 35.0, dc)));
+    depthEdge = max(depthEdge, smoothstep(0.25, 0.5, m / ic) * (1.0 - smoothstep(12.0, 25.0, dc)));
   }
+  if (flag0 > 0.97) depthEdge = 0.0;
   // Creases (a thinner pen line) and object edges (where two things touch at the same depth: a car
   // on the road, a box on a roof) from the aux target, on a cross of four neighbours.
   vec4 a0 = texture2D(tAux, uvE);
@@ -105,8 +110,8 @@ void main() {
   offs[0] = vec2(texel.x, 0.0); offs[1] = vec2(-texel.x, 0.0); offs[2] = vec2(0.0, texel.y); offs[3] = vec2(0.0, -texel.y);
   for (int k = 0; k < 4; k++) {
     vec4 an = texture2D(tAux, uvE + offs[k]);
-    // No creases on characters: their hull outline draws them (flag 1).
-    if (an.a < 0.97 && a0.a < 0.97) crease = max(crease, 1.0 - dot(n0, octDec(an.xy)));
+    // No creases on characters (they read as clutter on a small figure).
+    if (an.a < 0.9 && a0.a < 0.9) crease = max(crease, 1.0 - dot(n0, octDec(an.xy)));
     float dn = viewDepth(uvE + offs[k]);
     bool behind = dn > dc * 1.002 || (abs(dn - dc) <= dc * 0.002 && an.b < a0.b);
     if (abs(an.b - a0.b) > 0.004 && behind && an.a < 0.9 && a0.a < 0.9) idEdge = 1.0;
@@ -150,7 +155,10 @@ void main() {
     col = mix(col, col * 0.72, sm * step(0.001, rs));
   }
 
-  col = mix(col, uInk, edge);
+  // Lines take a deep shade of what they sit on rather than flat black, more so with distance,
+  // so far buildings and small figures keep their colour under the linework.
+  vec3 inkCol = mix(uInk, col * 0.3, chr ? 0.45 : mix(0.2, 0.65, smoothstep(15.0, 120.0, dc)));
+  col = mix(col, inkCol, edge);
   if (uFlash > 0.0) col = mix(col, (L > 0.08 && edge < 0.5) ? uPaper : uInk, uFlash);
 
   // Fog over everything drawn so far, lines and patterns included: linear in distance like the old

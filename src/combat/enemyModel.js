@@ -125,12 +125,15 @@ export function outfitMaterial(look) {
       .replace('#include <common>', `#include <common>\n${OUTFIT_FRAG}\n${COMIC_SHADE}`)
       .replace('#include <color_fragment>', '#include <color_fragment>\n\tdiffuseColor.rgb = paintOutfit(vBind);')
       .replace('#include <opaque_fragment>', `{
-  vec3 c = comicShade(diffuseColor.rgb, outgoingLight);
+  // Lifted shadows, like the hero's: a thug's outfit colour must read on dark asphalt at fighting
+  // distance, not sink into a black shape.
+  vec3 c = comicShade(diffuseColor.rgb, outgoingLight, vec3(0.7, 0.62, 0.78), vec3(0.9, 0.88, 0.94), vec3(1.08, 1.03, 0.97));
+  gShadow *= 0.55;
   float rim = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
   #if NUM_DIR_LIGHTS > 0
   rim *= smoothstep(0.0, 0.3, dot(normal, directionalLights[0].direction));
   #endif
-  outgoingLight = c + vec3(1.0, 0.9, 0.8) * rim * 0.16 + uHurt * vec3(0.9, 0.2, 0.15);
+  outgoingLight = c + vec3(1.0, 0.9, 0.8) * rim * 0.3 + uHurt * vec3(0.9, 0.2, 0.15);
 }
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
