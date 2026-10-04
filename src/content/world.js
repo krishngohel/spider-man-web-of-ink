@@ -466,6 +466,7 @@ export function createContentWorld(g) {
 
   return {
     catalog: cat,
+    get crimeOn() { return !!crime; },
     update(dt, { active }) {
       time += dt;
       // Only what is near is drawn (a few hundred small meshes add up to draw calls).

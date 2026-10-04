@@ -271,7 +271,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   });
   const slots = createSlots(uiRoot, { onPick: (slot, fresh) => enterStory(slot, fresh), onBack: () => menus.showTitle() });
   const storyUi = createStoryUi(uiRoot, { getSettings: () => settings, onSound: (k) => sfx.event({ type: k }), canAdvanceRadio: () => mode === 'play' && !session?.active });
-  combat.setQuiet(() => storyUi.comicOpen || storyUi.cardOpen);
+  // Street gangs wait while a comic or card is up, and while a crime runs (one fight at a time: a
+  // crime used to overwrite a running gang's slot and orphan it).
+  combat.setQuiet(() => storyUi.comicOpen || storyUi.cardOpen || !!content?.crimeOn);
   let padRadioWas = false;
   // Characters (spec 13): the roster unlocks in solo free roam after the story; ?roster opens it.
   const rosterOpen = () => params.has('roster') || save.story.done.includes('act4.epilogue') || !!save.story.choices?.completedOnce;
@@ -1067,7 +1069,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     crimeWaypoint: (w) => { crimeWp = w; if (w) { if (!waypoint || waypoint.auto) waypoint = { ...w, auto: true }; } else if (waypoint?.auto) waypoint = null; },
     holding: () => input.down('hang'),
     pressedHang: () => input.pressed('hang'),
-    busy: () => (storyOn && director.quiet) || session.active || !settings.crimes,
+    busy: () => (storyOn && director.quiet) || session.active || !settings.crimes || !!combat.encounter,
     puzzle: (kind) => { mode = 'comic'; input.setEnabled(false); if (locked()) document.exitPointerLock(); return puzzles.play(kind).then((ok) => { mode = 'play'; resetIntent(); input.setEnabled(true); return ok; }); },
   });
   const tracker = createTracker(uiRoot, { data: () => content.tracker(), onBack: () => menus.showPause() });
