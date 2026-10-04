@@ -8,12 +8,13 @@ import { tune } from './constants.js';
 const DEG = Math.PI / 180;
 export const FANS = {
   off: { el: [38, 50, 62, 72], az: 5, spread: 22, aim: 1.6 },
-  normal: { el: [30, 40, 50, 60, 70, 78], az: 7, spread: 48, aim: 1.2 },
-  high: { el: [26, 34, 42, 50, 58, 66, 74, 80], az: 11, spread: 75, aim: 0.9 },
+  // Shallow rays too (12 to 24 degrees): over low-rise blocks a 30 degree ray clears the roofs.
+  normal: { el: [12, 18, 24, 30, 40, 50, 60, 70, 78], az: 7, spread: 48, aim: 1.2 },
+  high: { el: [12, 18, 26, 34, 42, 50, 58, 66, 74, 80], az: 11, spread: 75, aim: 0.9 },
 };
 const SHOULDER = 0.6;
 const FAN_RAY = { ground: false };
-const MIN_RISE = 5;
+const MIN_RISE = 3; // low-rise blocks: an anchor 3 m up still makes a swing (with the line shortened over the street)
 
 // Where a swing from this anchor would take the hero over the next `T` seconds, with the same
 // physics as the real thing (gravity, drag, the SHAKE line) at a coarser step. Returns when it

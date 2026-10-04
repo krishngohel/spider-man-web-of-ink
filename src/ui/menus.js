@@ -77,6 +77,7 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       el('h2', {}, C.title),
       el('h3', {}, C.sections.move),
       choice(C.gravity[0], C.gravity[1], ['comic', 'real'], 'gravity', C.gravityValues),
+      choice(C.swingAssist[0], C.swingAssist[1], ['off', 'normal', 'high'], 'swingAssist', C.swingAssistValues),
       choice(C.toggle[0], C.toggle[1], [false, true], 'swingToggle', C.toggleValues),
       choice(C.difficulty[0], C.difficulty[1], ['friendly', 'amazing', 'spectacular'], 'difficulty', C.difficultyValues),
       toggle(C.crimes[0], 'crimes', C.crimes[1]),

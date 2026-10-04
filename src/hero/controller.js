@@ -3,7 +3,7 @@ import { createBody, applyDv, placeBody } from '../physics/ledger.js';
 import { applyGravity, applyDrag, applyGlide, dragK } from '../physics/aero.js';
 import { createRope } from '../physics/rope.js';
 import { createSwing, releaseBoost, swingJump, airControl } from '../physics/swing.js';
-import { findAimPoint, findZipPoint } from '../physics/anchors.js';
+import { findAimPoint, findZipPoint, findAnchor } from '../physics/anchors.js';
 
 // The hero's movement, free of Three.js. One call to step() is one fixed physics step. States:
 //   ground  running, parkour (swing held), jumping, point launch after a zip
@@ -185,7 +185,17 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   // quiet: a miss says nothing (on the ground the same button is a parkour run).
   function shootWeb(intent, hang = false, quiet = false) {
     const cam = { x: intent.camPos.x, y: intent.camPos.y, z: intent.camPos.z, fx: intent.camFwd.x, fy: intent.camFwd.y, fz: intent.camFwd.z };
-    const hit = findAimPoint(world, body, cam, { wide: !hang });
+    let hit = findAimPoint(world, body, cam, { wide: !hang });
+    // Insomniac's rule (swing assist on, the default): the swing button always finds something
+    // above and ahead when there are buildings. The crosshair still wins when it is on a good
+    // anchor (well above the hero); otherwise the anchor finder picks the best point along the
+    // stick or the camera's heading, scored by flying the arc. Assist off: only where you aim.
+    // In the air only: on the ground the same button is the parkour run.
+    if (!hang && hero.state !== 'ground' && hero.assist !== 'off' && (hero.assist === 'high' || !hit || hit.y - body.p.y < 4)) {
+      const d = wantedHeading(intent);
+      const auto = findAnchor(world, body, { dirX: d.x, dirZ: d.z, assist: hero.assist, g: g() });
+      if (auto) hit = { ...auto, auto: true };
+    }
     if (!hit) { if (!quiet) emit('miss'); return false; }
     const t = tune.webTravel + hit.dist / tune.webSpeed;
     hero.pendingWeb = { anchor: hit, t, travel: t, hang };

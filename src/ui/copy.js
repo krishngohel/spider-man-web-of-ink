@@ -145,6 +145,8 @@ export const COPY = {
     title: 'SETTINGS',
     gravity: ['Gravity', 'Comic is twice real gravity: snappier arcs. Real is 9.81 m/s squared.'],
     gravityValues: { comic: 'Comic (2g)', real: 'Real (1g)' },
+    swingAssist: ['Swing assist', 'On: the swing always finds a building above and ahead, and the crosshair still picks when it is on one. Off: webs only go where you aim, and can miss.'],
+    swingAssistValues: { off: 'Off (aimed webs)', normal: 'On', high: 'Strong' },
     assist: ['Swing assist', 'Only changes which real anchor the web aims for. It never moves you.'],
     assistValues: { off: 'Off', normal: 'Normal', high: 'High' },
     toggle: ['Swing button', 'Hold to stay on the web, or press once to grab and again to let go.'],

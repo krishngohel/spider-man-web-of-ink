@@ -88,9 +88,20 @@ describe('swinging', () => {
     expect(h.swing.R.y).toBeCloseTo(62, 0);
     expect(h.swing.R.z).toBeCloseTo(30, 0);
   });
-  it('a miss is a miss: aiming at open sky fires nothing', () => {
+  it('swing assist (the default) catches a building even when the crosshair is on open sky', () => {
     const w = city();
     const h = createHero(w);
+    h.place(0, 40, 0, 0, 0, 20);
+    const i = emptyIntent();
+    i.camPos = { x: 0, y: 41, z: -5 }; i.camFwd = { x: 0, y: 0.3, z: 0.954 };
+    i.swing = true; i.swingPressed = true;
+    let caught = false;
+    run(h, i, 0.6, () => { if (h.pendingWeb || h.swing.active) caught = true; });
+    expect(caught).toBe(true);
+  });
+  it('with swing assist off a miss is a miss: aiming at open sky fires nothing', () => {
+    const w = city();
+    const h = createHero(w, { assist: 'off' });
     h.place(0, 40, 0, 0, 0, 20);
     const i = emptyIntent();
     i.camPos = { x: 0, y: 41, z: -5 }; i.camFwd = { x: 0, y: 0.3, z: 0.954 };
