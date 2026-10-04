@@ -52,7 +52,7 @@ import { createModes } from '../net/modes.js';
 import { createSocial } from '../net/social.js';
 import { createLobby } from '../ui/lobby.js';
 import { unlockedSave } from '../progress/unlocked.js';
-import { autoBuild } from '../progress/progression.js';
+import { autoBuild, SUITS } from '../progress/progression.js';
 import { newGamePlus } from '../story/gauntlet.js';
 import { ARCHETYPES, isActive } from '../combat/enemies.js';
 import { DEFAULTS } from '../physics/constants.js';
@@ -207,6 +207,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // The save (slot 1 until the story's slot screen arrives): found stations, districts, position.
   const saveSlot = lastSlot(window.localStorage) ?? 1;
   const save = loadSlot(window.localStorage, saveSlot) ?? newSave(saveSlot);
+  // Dev: ?suits unlocks every suit in this save, story suits included (to look them all over).
+  if (params.has('suits')) save.progress.suits = SUITS.map((q) => q.id);
   let saveT = 0;
   const persist = () => {
     const p = hero.body.p;

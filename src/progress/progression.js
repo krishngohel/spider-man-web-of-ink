@@ -110,7 +110,7 @@ export function skillEffects(skills) {
 // story: a story step that must be done first (the Black Suit comes from the symbiote, not a shop).
 const SU = (id, name, style, red, blue, black, lens, level, cost, power = null, story = null) => ({ id, name, style, red, blue, black, lens, level, cost, power, story });
 export const SUITS = [
-  SU('classic', 'Classic', 0, 0xcc1622, 0x1b3591, 0x0e0d16, 0xf4f6fb, 1, {}, 'webBlossom'),
+  SU('classic', 'Classic', 0, 0xbb121e, 0x192e7e, 0x0e0d16, 0xf4f6fb, 1, {}, 'webBlossom'),
   SU('amazing', 'Amazing', 0, 0xa3141e, 0x14235e, 0x14141c, 0xf2b33d, 2, { crime: 2 }),
   SU('scarlet', 'Scarlet Hoodie', 0, 0xb81e2a, 0x9aa0a8, 0x0e0d16, 0xf4f6fb, 4, { crime: 3, backpack: 2 }),
   SU('blackSuit', 'Black Suit', 1, 0x0e0d16, 0x0e0d16, 0xf4f6fb, 0xf4f6fb, 1, {}, 'battleFocus', 'act3.blackSuit'),

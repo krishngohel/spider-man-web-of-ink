@@ -113,13 +113,20 @@ varying vec3 vBind, vBindN;
 const float TAU = 6.2831853;
 float gLens = 0.0;
 // A line at every whole number of f, about px pixels wide, antialiased.
-float lineAA(float f, float px) {
+float line1(float f, float w, float px) {
   float d = abs(f - floor(f + 0.5));
+  return 1.0 - smoothstep(w * px * 0.5, w * (px * 0.5 + 1.0), d);
+}
+float lineAA(float f, float px) {
   float w = fwidth(f);
-  // Lines packed closer than a few pixels apart (the hero small on screen) fade out, the way an
-  // artist drops the web pattern on a distant figure instead of filling it in black.
+  // Lines packed closer than a few pixels apart (the hero small on screen) thin out the way an
+  // artist simplifies a distant figure: every other line, then every fourth, never a black fill and
+  // never a blank suit.
   float spacing = 1.0 / max(w, 1e-4);
-  return (1.0 - smoothstep(w * px * 0.5, w * (px * 0.5 + 1.0), d)) * smoothstep(3.0, 9.0, spacing);
+  float l1 = line1(f, w, px) * smoothstep(6.0, 10.0, spacing);
+  float l2 = line1(f * 0.5, w * 0.5, px) * smoothstep(3.0, 5.0, spacing);
+  float l4 = line1(f * 0.25, w * 0.25, px) * smoothstep(1.5, 2.5, spacing);
+  return max(l1, max(l2, l4));
 }
 float sdSeg(vec2 p, vec2 a, vec2 b) {
   vec2 pa = p - a, ba = b - a;
@@ -212,6 +219,15 @@ vec3 paintSuit(vec3 p) {
     // The Amazing boots come up to just under the knee.
     float bootTop = amazing ? 0.5 - 0.07 * smoothstep(0.6, 1.0, sin(a)) : 0.43 - 0.06 * smoothstep(0.6, 1.0, sin(a));
     red = p.y < bootTop;
+    if (amazing) {
+      // A red stripe down the outside of each leg into the boot, and the belt's two curved points
+      // over the front of the hips: the shapes that read as the Amazing suit from across a street.
+      float ox = (p.x - sign(p.x) * 0.114) * sign(p.x), oz = p.z + 0.02;
+      float side = atan(oz, ox);
+      if (abs(side) < mix(0.26, 0.36, smoothstep(0.9, 0.5, p.y))) red = true;
+      float hip = abs(ax - 0.125);
+      if (p.z > -0.01 && hip < 0.065 && p.y > 0.93 - 0.085 * (1.0 - hip / 0.065) * (1.0 - hip / 0.065)) red = true;
+    }
     f = vec2(p.y / 0.065, (a / TAU + 0.5) * 8.0);
   }
   // Amazing webbing is thicker and raised: a black cord with a thin light ridge either side.
@@ -246,10 +262,10 @@ vec3 paintSuit(vec3 p) {
     }
   }
   // Chest spider (black, front) and back spider (red with a black outline, bigger).
-  if (p.y > 1.04 && p.y < 1.56 && ax < (amazing ? 0.2 : 0.16)) {
+  if (p.y > 1.04 && p.y < 1.56 && ax < (amazing ? 0.24 : 0.16)) {
     if (p.z > 0.04) {
       float big = (uStyle > 0.5 && uStyle < 1.5) || uStyle > 6.5 ? 1.9 : uStyle > 3.5 && uStyle < 4.5 ? 1.6 : 1.25;
-      float d = amazing ? spiderLong(vec2(p.x, p.y - 1.325), 1.05) : spider(vec2(p.x, p.y - 1.33), big);
+      float d = amazing ? spiderLong(vec2(p.x, p.y - 1.315), 1.3) : spider(vec2(p.x, p.y - 1.33), big);
       vec3 ec = uStyle > 3.5 && uStyle < 4.5 ? uRed : uStyle > 5.5 && uStyle < 6.5 ? uBlue : uBlack;
       col = mix(col, ec, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
       if (uStyle > 4.5 && uStyle < 5.5) gGlow = max(gGlow, 1.0 - smoothstep(0.0, fwidth(d) * 1.5, d));
@@ -273,12 +289,12 @@ vec3 paintSuit(vec3 p) {
     vec3 d = (p - vec3(0.0, 1.69, 0.0)) / vec3(0.091, 0.124, 0.104);
     float yaw = atan(d.x, d.z), pitch = asin(clamp(d.y / max(length(d), 1e-4), -1.0, 1.0));
     // Local frame in metres along the mask: u runs outward from the nose, v up.
-    vec2 q = vec2(abs(yaw) * 0.097 - 0.054, pitch * 0.124 - 0.029);
+    vec2 q = vec2(abs(yaw) * 0.097 - 0.058, pitch * 0.124 - 0.028);
     float a = 0.42;
     q = mat2(cos(a), -sin(a), sin(a), cos(a)) * q; // into the tilted lens frame (outer end up)
     vec2 lq = q;
     // Teardrop: full and round at the outer end, narrowing toward the nose.
-    vec2 r = vec2(0.047, 0.032);
+    vec2 r = vec2(0.054, 0.037);
     float k = clamp(-q.x / r.x, 0.0, 1.0);
     q.y /= 1.0 - 0.4 * k * k;
     // Flatter along the top, the outer corner squared off a little: the film lens, not a comic oval.
@@ -306,6 +322,12 @@ vec3 paintSuit(vec3 p) {
   rim *= smoothstep(0.0, 0.3, dot(normal, directionalLights[0].direction));
   #endif
   c += vec3(1.0, 0.95, 0.85) * rim * 0.34;
+  #if NUM_DIR_LIGHTS > 0
+  if (uStyle < 0.5) {
+    vec3 hv = normalize(directionalLights[0].direction + normalize(vViewPosition));
+    c += vec3(1.0, 0.96, 0.92) * smoothstep(0.93, 0.965, dot(normal, hv)) * 0.2;
+  }
+  #endif
   outgoingLight = c;
 }
 #include <opaque_fragment>`)
@@ -316,7 +338,7 @@ ${SHADOW_ALPHA}
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, uLens * (0.92 + 0.08 * clamp(vBind.y * 6.0 - 9.9, 0.0, 1.0)) * (1.0 - 0.09 * gLensHex), gLens);
 	if (gLens > 0.5) gl_FragColor.a = 0.0;`);
   };
-  mat.customProgramCacheKey = () => 'suit-v8';
+  mat.customProgramCacheKey = () => 'suit-v9';
   return mat;
 }
 

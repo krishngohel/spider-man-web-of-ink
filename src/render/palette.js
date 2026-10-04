@@ -3,8 +3,8 @@
 export const PALETTE = {
   ink: 0x12101c,
   paper: 0xf5ecd4,
-  suitRed: 0xcc1622,
-  suitBlue: 0x1b3591,
+  suitRed: 0xbb121e,
+  suitBlue: 0x192e7e,
   suitBlack: 0x0e0d16,
   lens: 0xf4f6fb,
   web: 0xf2f2f4,
