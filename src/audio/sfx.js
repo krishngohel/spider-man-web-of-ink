@@ -102,24 +102,33 @@ export function createSfx(getVolume) {
         case 'hang': burst({ freq: 300, freq2: 520, q: 3, dur: 0.12, gain: 0.16 }); break;
         case 'wallStick': burst({ freq: 700, freq2: 250, q: 1.5, dur: 0.08, gain: 0.18 }); break;
         case 'perch': tone({ freq: 160, freq2: 70, dur: 0.12, gain: 0.25 }); break;
-        case 'punch':
-          burst({ freq: e.heavy ? 280 : 420, freq2: 120, q: 0.9, dur: e.heavy ? 0.16 : 0.09, gain: e.heavy ? 0.55 : 0.4, type: 'lowpass' });
-          tone({ freq: e.heavy ? 110 : 160, freq2: 60, dur: 0.1, gain: e.heavy ? 0.4 : 0.22 });
+        case 'punch': {
+          // The body of the blow, a bright crack on top (the snap you feel), each a little
+          // different in pitch, and a sub thump under the heavies (fix spec C10).
+          const r = 0.92 + Math.random() * 0.16;
+          burst({ freq: (e.heavy ? 280 : 420) * r, freq2: 120, q: 0.9, dur: e.heavy ? 0.16 : 0.09, gain: e.heavy ? 0.55 : 0.4, type: 'lowpass' });
+          burst({ freq: 3200 * r, freq2: 2200 * r, q: 1.3, dur: 0.022, gain: e.heavy ? 0.34 : 0.28 });
+          tone({ freq: (e.heavy ? 110 : 160) * r, freq2: 60, dur: 0.1, gain: e.heavy ? 0.4 : 0.22 });
+          if (e.heavy) tone({ freq: 62, freq2: 42, dur: 0.2, gain: 0.38 });
           break;
+        }
+        // Every swing whooshes, so a string has rhythm even before it connects.
+        case 'moveStart': burst({ freq: 600 * (0.9 + Math.random() * 0.2), freq2: 1800, q: 0.8, dur: 0.12, gain: 0.14 }); break;
         case 'whiff': burst({ freq: 1800, freq2: 700, q: 0.8, dur: 0.12, gain: 0.12 }); break;
         case 'hurt':
           tone({ freq: 200, freq2: 80, dur: 0.2, gain: 0.35 });
           burst({ freq: 600, freq2: 200, q: 0.8, dur: 0.15, gain: 0.3, type: 'lowpass' });
           break;
         case 'sense':
-          tone({ freq: 1320, freq2: 1760, dur: 0.12, gain: 0.07, type: 'triangle' });
-          tone({ freq: 1980, freq2: 1500, dur: 0.14, gain: 0.05, type: 'sine' });
+          // Loud enough to hear over the punches (fix spec D11: it was a fifth as loud).
+          tone({ freq: 1320, freq2: 1760, dur: 0.12, gain: 0.22, type: 'triangle' });
+          tone({ freq: 1980, freq2: 1500, dur: 0.14, gain: 0.15, type: 'sine' });
           break;
         case 'webEmpty': tone({ freq: 900, freq2: 700, dur: 0.04, gain: 0.08, type: 'square' }); break;
         case 'webThrow': burst({ freq: 400, freq2: 1800, q: 0.9, dur: 0.25, gain: 0.35 }); break;
         case 'senseRed':
           // The perfect-dodge window: a sharp double tick; heavies get a low sting under it.
-          tone({ freq: 2640, freq2: 2400, dur: 0.05, gain: 0.08, type: 'square' });
+          tone({ freq: 2640, freq2: 2400, dur: 0.05, gain: 0.24, type: 'square' });
           if (e.heavy) tone({ freq: 180, freq2: 120, dur: 0.16, gain: 0.18, type: 'sawtooth' });
           break;
         case 'shot': burst({ freq: 2400, freq2: 300, q: 0.7, dur: 0.07, gain: 0.3 }); tone({ freq: 220, freq2: 80, dur: 0.06, gain: 0.18, type: 'square' }); break;

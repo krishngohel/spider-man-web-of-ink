@@ -3,9 +3,14 @@
 export const TUNE = {
   // Enemy rules
   tokenRepick: 0.25, tokenFar: 6, tokenCloser: 2,          // PUB rule (job stealing), EST numbers
-  rangedSlots: { friendly: 1, amazing: 1, spectacular: 2, ultimate: 3 },
+  rangedSlots: { friendly: 1, amazing: 2, spectacular: 2, ultimate: 3 },     // fix spec B6 (amazing was 1)
+  // Melee slots (fix spec B6, toward Arkham: two fists at once on Amazing, the second windup at
+  // least meleeGap after the first so one dodge can clear both) and the poise rule (B5).
+  meleeSlots: { friendly: 1, amazing: 2, spectacular: 2, ultimate: 3 }, meleeGap: 0.35,
+  poiseHits: 3, poiseWindow: 1.5, poiseTime: 1.0, circleDist: 3,
+  cooldown: [0.15, 0.5],                                    // after a swing (fix spec B6, was 0.4 to 1.0)
   offscreenDelay: 0.6,                                      // PUB rule, EST value
-  dodgeHold: 1.0,                                           // PUB rule (idle timer), EST value
+  dodgeHold: 0.5,                                           // PUB rule (idle timer), fix spec B6 (was 1.0)
   sameMoveLimit: 3,                                         // PUB (beat to the punch)
   airSafe: 1.5,                                             // PUB/COMM
   // Telegraphs (EST)
@@ -26,10 +31,11 @@ export const TUNE = {
   strikeSpeed: 30, strikeStop: 1.2, rebound: 2.5,
   // Webs as crowd control (spec 1.6): shots to cocoon a thug (COMM), cartridge capacity and refill
   // (EST), the throw of a webbed enemy, and a webbed rocket sent back.
-  webShots: 6, webCap: 6, webRefill: 1.5, throwSpeed: 16, throwLift: 5, throwReach: 6, rocketBack: 34,
+  webShots: 3, webCap: 6, webRefill: 1.5, throwSpeed: 16, throwLift: 5, throwReach: 6, rocketBack: 34,
   // Hitstop in seconds (REF Capcom 67 to 167 ms, Smash hitlag), on the attacker and victim only
-  stop: { light: 0.05, ender: 0.08, launcher: 0.08, counter: 0.1, finisher: 0.14 }, stopCap: 0.15,
-  shake: 0.04, shakeHero: 0.4,
+  // Fix spec C9 (EST, was light 0.05 / ender 0.08 / cap 0.15): long enough to feel the contact.
+  stop: { light: 0.07, round: 0.08, ender: 0.12, launcher: 0.1, counter: 0.12, finisher: 0.16 }, stopCap: 0.18,
+  shake: 0.07, shakeHero: 0.6,
   // Camera
-  camKick: 0.06, fovPunch: 2,
+  camKick: 0.06, fovPunch: -1.5,                            // the field of view punches in (fix spec C9)
 };

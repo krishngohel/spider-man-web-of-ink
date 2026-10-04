@@ -31,11 +31,11 @@ function setup({ z = 1.2 } = {}) {
 }
 
 describe('hitstop', () => {
-  it('sizes the freeze by the blow and caps it at 150 ms', () => {
-    expect(stopFor('light')).toBe(0.05);
-    expect(stopFor('finisher')).toBe(0.14);
-    expect(stopFor('unknown')).toBe(0.05);
-    for (const k of Object.keys(TUNE.stop)) expect(stopFor(k)).toBeLessThanOrEqual(0.15);
+  it('sizes the freeze by the blow and caps it at 180 ms', () => {
+    expect(stopFor('light')).toBe(0.07);
+    expect(stopFor('finisher')).toBe(0.16);
+    expect(stopFor('unknown')).toBe(0.07);
+    for (const k of Object.keys(TUNE.stop)) expect(stopFor(k)).toBeLessThanOrEqual(0.18);
   });
   it('shakes and settles', () => {
     expect(shake(0, 0.1).x).toBe(0);

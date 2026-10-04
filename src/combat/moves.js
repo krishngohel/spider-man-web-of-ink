@@ -9,10 +9,10 @@ import { CLIP_DATA } from './clipData.js';
 
 const L = TUNE.lightTime, I = TUNE.lightImpact;
 export const MOVES = {
-  jab: { clips: ['Punch_Jab'], alt: 'Punch_Jab', time: L, impact: I, push: 2.5, lift: 0, dmg: 1, stop: 'light' },
-  cross: { clips: ['Punch_Cross'], alt: 'Punch_Cross', time: L, impact: I, push: 3, lift: 0, dmg: 1, stop: 'light' },
-  round: { clips: ['Martelo_2', 'Kick_Round'], alt: 'Melee_Hook', time: L, impact: I + 0.02, push: 3.5, lift: 0, dmg: 1.15, stop: 'light', kick: true },
-  ender: { clips: ['Armada', 'Kick_Spin'], alt: 'Melee_Hook', time: TUNE.enderTime, impact: 0.2, push: TUNE.enderPush * 2.4, lift: 2, dmg: 1.6, stop: 'ender', kick: true, knock: true },
+  jab: { clips: ['Punch_Jab'], alt: 'Punch_Jab', time: L, impact: I, push: 3, lift: 0, dmg: 1, stop: 'light' },
+  cross: { clips: ['Punch_Cross'], alt: 'Punch_Cross', time: L, impact: I, push: 3.5, lift: 0, dmg: 1, stop: 'light' },
+  round: { clips: ['Martelo_2', 'Kick_Round'], alt: 'Melee_Hook', time: L, impact: I + 0.02, push: 4, lift: 0, dmg: 1.15, stop: 'round', kick: true },
+  ender: { clips: ['Armada', 'Kick_Spin'], alt: 'Melee_Hook', time: TUNE.enderTime, impact: 0.2, push: TUNE.enderPush * 3, lift: 2, dmg: 1.6, stop: 'ender', kick: true, knock: true },
   launcher: { clips: ['Flip_Kick', 'Kick_Front'], alt: 'Melee_Hook', time: 0.42, impact: 0.14, push: 0.5, lift: 11, dmg: 0.8, stop: 'launcher', kick: true },
   air1: { clips: ['Kick_Front'], alt: 'Punch_Jab', time: TUNE.airHitTime, impact: 0.1, push: 1.2, lift: 0, dmg: 1, stop: 'light', air: true, kick: true },
   air2: { clips: ['Knee_Strike'], alt: 'Punch_Cross', time: TUNE.airHitTime, impact: 0.1, push: 1.2, lift: 0, dmg: 1, stop: 'light', air: true, kick: true },

@@ -68,7 +68,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
 
   function landHit(e, { dmg, push, lift, kind = 'melee', heavy = false, stop = 'light' }) {
     const u = toward(e);
-    const r = enemies.hit(e, { dmg: dmg * c.dmgMul, dir: { x: u.x, z: u.z }, push, lift, kind, from: P() });
+    const r = enemies.hit(e, { dmg: dmg * c.dmgMul, dir: { x: u.x, z: u.z }, push, lift, kind, from: P(), noInterrupt: c.sameRun >= TUNE.sameMoveLimit });
     if (r.blocked) { word('CLANG!', e); onEvent({ type: 'blocked' }); if (e.arch === 'shield') hint('SHIELD UP: FLIP OVER HIM OR YANK IT AWAY'); return r; }
     c.combo++; c.comboT = 0;
     c.focus = Math.min(3, c.focus + COMBAT.focusPerHit * c.focusMul);
@@ -78,7 +78,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     c.heroStop = Math.max(c.heroStop, s); c.heroStopAll = c.heroStop;
     enemies.freeze?.(e, s);
     if (last) slowmo(0.45);
-    if (c.combo % 2 === 0 || heavy) word(kind === 'kick' ? KICKS[c.combo % KICKS.length] : WORDS[(c.punchN + c.combo) % WORDS.length], e, heavy ? 'hit' : 'small');
+    if (heavy) word(kind === 'kick' ? KICKS[c.combo % KICKS.length] : WORDS[(c.punchN + c.combo) % WORDS.length], e, heavy ? 'hit' : 'small');
     onEvent({ type: 'heroHit', e, heavy, kind, stop: s });
     return r;
   }

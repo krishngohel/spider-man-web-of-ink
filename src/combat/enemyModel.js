@@ -18,8 +18,8 @@ export const FACTIONS = {
     { jacket: 0x3f8f5a, pants: 0x4a4a52, shoes: 0xd8392b, skin: 0.15, head: 2, hat: 0x1a1a1a, accent: 0xf2c230 },
   ] },
   kingpin: { name: 'Fisk muscle', looks: [
-    { jacket: 0x25272f, pants: 0x25272f, shoes: 0x111111, skin: 0.3, head: 5, hat: 0x111111, accent: 0xf4f4f4, shades: 1 },
-    { jacket: 0x33363f, pants: 0x25272f, shoes: 0x111111, skin: 0.65, head: 0, hat: 0x1a1210, accent: 0xf4f4f4, shades: 1 },
+    { jacket: 0x3a4258, pants: 0x2e3346, shoes: 0x111111, skin: 0.3, head: 5, hat: 0x111111, accent: 0xf4f4f4, shades: 1 },
+    { jacket: 0x4a4f62, pants: 0x2e3346, shoes: 0x111111, skin: 0.65, head: 0, hat: 0x1a1210, accent: 0xf4f4f4, shades: 1 },
   ] },
   maggia: { name: 'Maggia', looks: [
     { jacket: 0x5a4636, pants: 0x3a2e26, shoes: 0x1a1210, skin: 0.25, head: 4, hat: 0x2a2018, accent: 0xc8a050 },
@@ -135,14 +135,23 @@ export function outfitMaterial(look) {
   #endif
   // A hit flashes the body white for a moment (the classic impact flash), not a pink wash.
   outgoingLight = mix(c + vec3(1.0, 0.9, 0.8) * rim * 0.3, vec3(1.0, 0.97, 0.92), uHurt * 0.8);
+  // The tell (fix spec D11): winding up, his whole edge glows, white, then red in the dodge window.
+  // Knocked out: the colour drains, so a body on the floor never reads as a thug still in it.
+  if (uTell < -0.5) outgoingLight = mix(outgoingLight, vec3(dot(outgoingLight, vec3(0.3, 0.59, 0.11))), 0.7);
+  if (uTell > 0.5) {
+    float edge = pow(1.0 - clamp(dot(normal, normalize(vViewPosition)), 0.0, 1.0), 3.0);
+    outgoingLight += (uTell > 1.5 ? vec3(1.0, 0.22, 0.12) : vec3(0.95, 0.95, 1.0)) * edge * 0.6;
+  }
 }
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
-    shader.fragmentShader = 'uniform float uHurt;\n' + shader.fragmentShader;
+    shader.fragmentShader = 'uniform float uHurt, uTell;\n' + shader.fragmentShader;
     shader.uniforms.uHurt = mat.userData.hurt;
+    shader.uniforms.uTell = mat.userData.tell;
   };
   mat.userData.hurt = { value: 0 };
-  mat.customProgramCacheKey = () => 'outfit-v3';
+  mat.userData.tell = { value: 0 };
+  mat.customProgramCacheKey = () => 'outfit-v4';
   return mat;
 }
 
@@ -205,5 +214,5 @@ export function buildEnemyModel(assets, faction, lookIndex, arch) {
     bone.add(prop);
   }
   const animator = createAnimator(model, assets.clips);
-  return { root, model, animator, hurt: mat.userData.hurt, mat };
+  return { root, model, animator, hurt: mat.userData.hurt, tell: mat.userData.tell, mat };
 }

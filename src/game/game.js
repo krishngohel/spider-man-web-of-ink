@@ -593,6 +593,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   let gdt = 0;
   // Combat feedback: words, sounds, shakes, impact frames, the HUD.
   let impactTimer = 0, impactLong = false;
+  // Hit feel on the camera (fix spec C9): the field of view punches in and springs back in about
+  // 0.12 s, and the camera kicks a few centimetres along the blow for three frames.
+  let fovKick = 0, camKickT = 0;
+  const camKickV = new THREE.Vector3();
   function combatEvent(e) {
     const at = e.at ?? (e.e ? e.e.body.p : null);
     switch (e.type) {
@@ -601,9 +605,15 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         sfx.event({ type: 'punch', heavy: e.heavy });
         // Hit feel (spec 1.8): a camera kick, a punch of the field of view, and on the big ones
         // (enders, launchers, spikes) a one-frame impact panel.
-        if (settings.cameraShake) rig.shake = Math.max(rig.shake, e.heavy ? 0.45 : 0.18);
-        rig.fov += TUNE.fovPunch * (e.heavy ? 1.6 : 1);
-        if (e.heavy && e.e) fx.burst(e.e.body.p.x, e.e.body.p.y + 0.6, e.e.body.p.z);
+        fovKick = TUNE.fovPunch * (e.heavy ? 2 : 1);
+        if (e.e) {
+          const q = e.e.body.p, hp = hero.body.p, dx = q.x - hp.x, dz = q.z - hp.z, l = Math.hypot(dx, dz) || 1;
+          if (settings.cameraShake) { camKickV.set(dx / l, 0.25, dz / l).multiplyScalar(TUNE.camKick * (e.heavy ? 1.8 : 1)); camKickT = 0.05; }
+          if (settings.cameraShake && e.heavy) rig.shake = Math.max(rig.shake, 0.2);
+          // A spark where the blow lands (between the two, at chest height); the big burst on heavies.
+          const cx = hp.x + (dx / l) * Math.max(0.4, l - 0.35), cz = hp.z + (dz / l) * Math.max(0.4, l - 0.35);
+          if (e.heavy) fx.burst(cx, q.y + 0.45, cz); else fx.spark(cx, q.y + 0.45, cz);
+        }
         if (e.heavy && (e.stop ?? 0) >= 0.08 && settings.impactFrames !== 'off') {
           const s = screenOf(e.e.body.p.x, e.e.body.p.y, e.e.body.p.z);
           if (!impactLong) { ink.setImpact(1, true, s.x / innerWidth, 1 - s.y / innerHeight); clearTimeout(impactTimer); impactTimer = setTimeout(() => ink.setImpact(0), 50); }
@@ -628,6 +638,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       case 'encounterStart': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangSpotted); waypoint = { x: e.encounter.x, z: e.encounter.z, auto: true }; } break;
       case 'encounterDone': if (e.encounter.kind !== 'story') { hud.caption(COPY.combat.gangBusted); if (waypoint?.auto) waypoint = null; } break;
       case 'thwip': if (e.combat) sfx.event({ type: 'thwip' }); break;
+      case 'moveStart': sfx.event({ type: 'moveStart' }); break;
       default: break;
     }
     progress.onCombatEvent(e);
@@ -911,13 +922,15 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       const want = flying && Math.hypot(v.x, v.z) > 6 && dt > 0 && settings.cameraShake ? Math.max(-0.12, Math.min(0.12, (turn / dt) * 0.06)) : 0;
       camRoll += (want - camRoll) * Math.min(1, dt * 3);
       camera.rotateZ(camRoll);
+      if (camKickT > 0) { camera.position.addScaledVector(camKickV, camKickT / 0.05); camKickT -= dt; }
       if (rig.shake > 0.001) {
         const a = rig.shake * 0.06;
         camera.rotateX((Math.random() - 0.5) * a); camera.rotateY((Math.random() - 0.5) * a);
         rig.shake *= Math.exp(-dt * 7);
       }
     }
-    if (!camOverride && Math.abs(camera.fov - rig.fov) > 0.01) { camera.fov = rig.fov; camera.updateProjectionMatrix(); }
+    fovKick *= Math.exp(-dt * 25);
+    if (!camOverride && Math.abs(camera.fov - (rig.fov + fovKick)) > 0.01) { camera.fov = rig.fov + fovKick; camera.updateProjectionMatrix(); }
     if (waypoint && mode === 'play') {
       wpV.set(waypoint.x, Math.max(2, hero.body.p.y * 0.5), waypoint.z).project(camera);
       const behind = wpV.z > 1;

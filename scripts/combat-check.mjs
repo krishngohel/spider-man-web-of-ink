@@ -1,6 +1,7 @@
 // Combat pilot with real inputs: a street gang on Midtown asphalt, the pilot aims at the nearest
 // enemy, clicks to attack and dodges (C) when an attack winds up close. It must win without going
-// down. Usage: node scripts/combat-check.mjs [url] [film.png]  (a film path saves a contact sheet)
+// down. Usage: node scripts/combat-check.mjs [url] [film.png]  (a film path saves a contact sheet;
+// MASH=1 never dodges, to measure what a button-masher takes)
 import { chromium } from 'playwright-core';
 import sharp from 'sharp';
 import { launchArgs, sleep } from './lib.mjs';
@@ -39,7 +40,7 @@ while (Date.now() - t0 < 60000) {
   // attack is nearly due.
   const due = (e) => e.state === 'windup' && Math.hypot(e.x - h.p.x, e.z - h.p.z) < (e.ranged ? 40 : 3.6) ? e.at - e.t : 9;
   const soon = Math.min(9, ...live.map(due));
-  if (soon <= 0.14 || (soon < 0.3 && Math.random() < 0.7)) { await p.keyboard.press('KeyC'); dodges++; if (soon <= 0.14) perfects++; await sleep(140); continue; }
+  if (!process.env.MASH && (soon <= 0.14 || (soon < 0.3 && Math.random() < 0.7))) { await p.keyboard.press('KeyC'); dodges++; if (soon <= 0.14) perfects++; await sleep(140); continue; }
   const d = Math.hypot(near.x - h.p.x, near.z - h.p.z);
   if (near.arch === 'shield' && d < 3 && Math.random() < 0.3) { await p.keyboard.press('Space'); await sleep(120); }
   await p.mouse.down(); await sleep(40); await p.mouse.up();

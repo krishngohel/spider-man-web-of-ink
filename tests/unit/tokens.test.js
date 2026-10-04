@@ -15,7 +15,8 @@ describe('enemy tokens', () => {
     expect(pickMeleeHolder([a, b], H, null, dist)).toBe(b);
   });
   it('gives ranged slots by difficulty', () => {
-    expect(rangedSlots('amazing')).toBe(1);
+    expect(rangedSlots('friendly')).toBe(1);
+    expect(rangedSlots('amazing')).toBe(2);
     expect(rangedSlots('ultimate')).toBe(3);
   });
   it('makes the air safe above 1.5 m', () => {
@@ -30,9 +31,20 @@ describe('enemy tokens', () => {
     expect(beatsToPunch({ heroImpactIn: 0.05, enemyImpactIn: 0.2, heavy: true })).toBe(false);
     expect(beatsToPunch({ heroImpactIn: 0.05, enemyImpactIn: 0.2, boss: true })).toBe(false);
   });
-  it('one melee attacker at a time, and a dodge holds everyone for 1 s', () => {
+  it('two fists on Amazing, but never winding up within 0.35 s of each other', () => {
+    const t = createTokens(), a = E(1, 1, 0), b = E(2, 2, 0), c = E(3, 3, 0);
+    const ctx = { difficulty: 'amazing', groundBelow: 0.9, dist };
+    t.update(0.3, [a, b, c], H, ctx);
+    expect(t.isHolder(a) && t.isHolder(b) && !t.isHolder(c)).toBe(true);
+    expect(t.mayMelee(a)).toBe(true);
+    expect(t.mayMelee(b)).toBe(false);
+    t.update(0.36, [a, b, c], H, ctx);
+    expect(t.mayMelee(b)).toBe(true);
+    expect(t.mayMelee(c)).toBe(false);
+  });
+  it('one melee attacker at a time on Friendly, and a dodge holds everyone', () => {
     const t = createTokens(), a = E(1, 1, 0), b = E(2, 2, 0);
-    const ctx = { difficulty: 'spectacular', groundBelow: 0.9, dist };
+    const ctx = { difficulty: 'friendly', groundBelow: 0.9, dist };
     t.update(0.3, [a, b], H, ctx);
     expect(t.mayMelee(a)).toBe(true);
     expect(t.mayMelee(b)).toBe(false);
@@ -59,12 +71,12 @@ describe('enemy tokens', () => {
   });
   it('ranged slots fill up and free when the shooter stops', () => {
     const t = createTokens(), g1 = E(1, 9, 0, { A: { ranged: true } }), g2 = E(2, 10, 0, { A: { ranged: true } });
-    t.update(0.1, [g1, g2], H, { difficulty: 'amazing', groundBelow: 0.9, dist });
+    t.update(0.1, [g1, g2], H, { difficulty: 'friendly', groundBelow: 0.9, dist });
     expect(t.mayRanged(g1)).toBe(true);
     g1.state = 'windup';
     expect(t.mayRanged(g2)).toBe(false);
     g1.state = 'recover';
-    t.update(0.1, [g1, g2], H, { difficulty: 'amazing', groundBelow: 0.9, dist });
+    t.update(0.1, [g1, g2], H, { difficulty: 'friendly', groundBelow: 0.9, dist });
     expect(t.mayRanged(g2)).toBe(true);
   });
 });

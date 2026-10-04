@@ -13,15 +13,19 @@ import { shake } from './hitstop.js';
 // wind up visibly: a slow, readable anticipation pose while the spider-sense is white, then a fast
 // snap through the last 120 ms (red, the perfect-dodge window), landing at a fixed moment.
 
+const recoilAxis = new THREE.Vector3();
+
+// Health raised about a third by the fix spec (B6): a fight lasts long enough for the poise and
+// two-attacker rules to matter.
 export const ARCHETYPES = {
-  brawler: { hp: 55, speed: 4.2, reach: 1.9, windup: 0.5, recover: 0.6, dmg: 8, ranged: false, mass: 80, clip: 'Punch_Cross' },
-  brute: { hp: 120, speed: 3.2, reach: 2.4, windup: 0.85, recover: 1.0, dmg: 18, ranged: false, mass: 160, clip: 'Melee_Hook', unblockable: true, heavy: true },
-  shield: { hp: 60, speed: 3.6, reach: 2.0, windup: 0.6, recover: 0.7, dmg: 10, ranged: false, mass: 95, clip: 'Shield_Dash', shield: true },
-  gunner: { hp: 35, speed: 4.0, reach: 26, windup: 0.9, recover: 1.1, dmg: 6, ranged: true, keep: [9, 17], mass: 75, clip: 'Spell_Simple_Shoot', shot: 'bullet' },
+  brawler: { hp: 75, speed: 4.2, reach: 1.9, windup: 0.5, recover: 0.6, dmg: 12, ranged: false, mass: 80, clip: 'Punch_Cross' },
+  brute: { hp: 160, speed: 3.2, reach: 2.4, windup: 0.85, recover: 1.0, dmg: 18, ranged: false, mass: 160, clip: 'Melee_Hook', unblockable: true, heavy: true },
+  shield: { hp: 80, speed: 3.6, reach: 2.0, windup: 0.6, recover: 0.7, dmg: 10, ranged: false, mass: 95, clip: 'Shield_Dash', shield: true },
+  gunner: { hp: 45, speed: 4.0, reach: 26, windup: 0.9, recover: 1.1, dmg: 6, ranged: true, keep: [9, 17], mass: 75, clip: 'Spell_Simple_Shoot', shot: 'bullet' },
   rocket: { hp: 45, speed: 3.4, reach: 34, windup: 1.3, recover: 2.2, dmg: 12, ranged: true, keep: [14, 24], mass: 85, clip: 'OverhandThrow', shot: 'rocket' },
   sniper: { hp: 30, speed: 3.6, reach: 60, windup: 1.6, recover: 2.0, dmg: 14, ranged: true, keep: [24, 40], mass: 75, clip: 'Spell_Simple_Shoot', shot: 'bullet' },
   jetpack: { hp: 45, speed: 5.0, reach: 22, windup: 1.0, recover: 1.2, dmg: 7, ranged: true, keep: [8, 14], mass: 85, clip: 'Spell_Simple_Shoot', shot: 'bullet', flies: true },
-  whip: { hp: 50, speed: 4.0, reach: 3.6, windup: 0.55, recover: 0.7, dmg: 9, ranged: false, mass: 80, clip: 'Sword_Regular_A' },
+  whip: { hp: 65, speed: 4.0, reach: 3.6, windup: 0.55, recover: 0.7, dmg: 9, ranged: false, mass: 80, clip: 'Sword_Regular_A' },
 };
 
 // Attack slots: at most this many enemies winding up or striking at once, by difficulty.
@@ -91,7 +95,8 @@ export function windupFor(A) {
   return A.heavy ? TUNE.windupHeavy : TUNE.windupLight;
 }
 
-export const isActive = (e) => e.alive && !['out', 'webbed', 'pinned', 'away'].includes(e.state);
+// Knocked out but still flying (a knockout launches him): out of the fight already.
+export const isActive = (e) => e.alive && !(e.hp <= 0) && !['out', 'webbed', 'pinned', 'away'].includes(e.state);
 
 // May this enemy start an attack now? The director hands out at most `max` attack slots.
 export function canAttack(enemies, max) {
@@ -147,6 +152,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
 
   function setState(e, s) {
     e.state = s; e.t = 0;
+    if (e.model.tell) e.model.tell.value = s === 'windup' ? 1 : s === 'out' ? -1 : 0; // -1: knocked out, greyed
     const a = e.model.animator;
     switch (s) {
       case 'idle': a.play('Idle_Loop'); break;
@@ -182,14 +188,16 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       api.onPuppetHit?.(e, { dmg: 10, dir: { x: 0, z: 1 }, push: 3, lift: 0, kind: 'melee', ...args });
       return { dealt: args.dmg ?? 10, blocked: false };
     }
-    const { dmg = 10, dir = { x: 0, z: 1 }, push = 3, lift = 0, kind = 'melee', from = null } = args;
-    if (!e.alive || e.state === 'out' || e.state === 'pinned') return { dealt: 0, blocked: false };
+    const { dmg = 10, dir = { x: 0, z: 1 }, kind = 'melee', from = null, noInterrupt = false } = args;
+    let push = args.push ?? 3, lift = args.lift ?? 0;
+    if (!e.alive || e.state === 'out' || e.state === 'pinned' || (e.hp <= 0 && kind !== 'slam')) return { dealt: 0, blocked: false };
     const front = from ? ((from.x - e.body.p.x) * Math.sin(e.facing) + (from.z - e.body.p.z) * Math.cos(e.facing)) > 0 : true;
     if (kind === 'web') {
       e.web = Math.min(1, e.web + dmg);
       e.alerted = true;
       if (e.web >= 1 && e.state !== 'webbed') { setState(e, 'webbed'); onEvent({ type: 'enemyWebbed', e }); return { dealt: 0, webbed: true }; }
-      if (e.state !== 'air' && e.state !== 'down') setState(e, 'stagger');
+      // A web always breaks a windup (the ranged answer to a thug you cannot reach, fix spec B7).
+      if (e.state !== 'air' && e.state !== 'down' && e.state !== 'getup') setState(e, 'stagger');
       return { dealt: 0, blocked: false };
     }
     const dealt = hitDamage(e, dmg, front);
@@ -198,13 +206,30 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     e.alerted = true;
     e.lastHitT = 0;
     e.model.hurt.value = 1;
+    // A knockout sends him flying (fix spec C8).
+    if (e.hp <= 0 && !e.A.heavy) { push *= 1.6; lift = Math.max(lift, 3); }
     const k = e.A.heavy && kind !== 'slam' ? 0.35 : 1;
     applyDv(e.body, 'surface', dir.x * push * k - e.body.v.x * 0.5, lift * k, dir.z * push * k - e.body.v.z * 0.5);
+    // The recoil: his body snaps back away from the blow and settles over 0.2 s.
+    e.recoil = { x: dir.x, z: dir.z, t: 0.2, a: Math.min(0.32, 0.16 + push * 0.012) };
+    // Poise (fix spec B5): the third light hit inside 1.5 s still flinches him, then he shrugs off
+    // light hits for a second; enders, launchers, throws, slams and webs still knock him about.
+    // The mash rule holds on contact too: four plain hits in a row no longer break his windup.
+    const light = kind !== 'slam' && push <= 6 && lift * k <= 2;
+    if (light) {
+      if (!(e.hitWin > 0)) { e.hitN = 0; e.hitWin = TUNE.poiseWindow; }
+      e.hitN++;
+    }
+    const poised = light && (e.poiseT > 0 || (noInterrupt && e.state === 'windup'));
+    if (light && e.hitN >= TUNE.poiseHits) { e.poiseT = TUNE.poiseTime; e.hitN = 0; e.hitWin = 0; }
     if (lift * k > 2) { setState(e, 'air'); e.onGround = false; }
     else if (e.hp <= 0) { setState(e, 'out'); onEvent({ type: 'enemyOut', e }); }
     else if (kind === 'slam' || push > 9) setState(e, 'down');
     // Brutes keep swinging through light hits (super armour while winding up).
     else if (e.A.heavy && (e.state === 'windup' || e.state === 'strike') && push < 6) { /* no flinch */ }
+    // On the floor or getting up: a light hit lands, it does not stand him up into a flinch.
+    else if (e.state === 'down' || e.state === 'getup') { /* stays down */ }
+    else if (poised) onEvent({ type: 'enemyPoise', e });
     else if (e.state !== 'air') setState(e, 'stagger');
     return { dealt, blocked: false };
   }
@@ -256,6 +281,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       e.cooldown -= dt;
       e.lastHitT += dt;
       e.model.hurt.value = Math.max(0, e.model.hurt.value - dt * 6);
+      e.poiseT = Math.max(0, (e.poiseT ?? 0) - dt); e.hitWin = (e.hitWin ?? 0) - dt;
       const dx = hp.x - p.x, dz = hp.z - p.z, dist = Math.hypot(dx, dz) || 1;
       const ux = dx / dist, uz = dz / dist;
       let wantVx = 0, wantVz = 0, face = null;
@@ -277,10 +303,13 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           if (A.ranged && !e.disarmed) {
             const [near, far] = A.keep;
             if (dist < near) want = -1; else if (dist > far) want = 1;
-          } else want = dist > A.reach * 0.85 ? 1 : dist < A.reach * 0.5 ? -0.5 : 0;
+          } else if (tokensOf(T).isHolder(e) || A.heavy) want = dist > A.reach * 0.85 ? 1 : dist < A.reach * 0.5 ? -0.5 : 0;
+          // Not his turn: circle at 3 m, ready to step in (fix spec B6), not crowding the fight.
+          else want = dist > TUNE.circleDist + 0.4 ? 1 : dist < TUNE.circleDist - 0.5 ? -0.6 : 0;
           // Circle the hero a little so they do not stack in a line.
+          const circling = want === 0 && !(A.ranged && !e.disarmed);
           const sx = -uz * e.strafe, sz = ux * e.strafe;
-          wantVx = (ux * want + sx * 0.35) * A.speed; wantVz = (uz * want + sz * 0.35) * A.speed;
+          wantVx = (ux * want + sx * (circling ? 0.5 : 0.35)) * A.speed; wantVz = (uz * want + sz * (circling ? 0.5 : 0.35)) * A.speed;
           if (Math.random() < dt * 0.3) e.strafe = -e.strafe;
           const inRange = A.ranged && !e.disarmed ? dist < A.reach && lineOfSight(e, hero) : dist < A.reach * 1.05 && Math.abs(hp.y - p.y) < 2.2;
           const gun = A.ranged && !e.disarmed;
@@ -303,6 +332,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           if (!e.red && e.strikeAt - e.t <= TUNE.redWindow) {
             // The snap: the rest of the swing in 0.18 s.
             e.red = true;
+            if (e.model.tell) e.model.tell.value = 2;
             const act = e.windAction;
             if (act) act.timeScale = (act.getClip().duration * 0.6) / 0.18;
           }
@@ -327,7 +357,8 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           if (e.t > A.recover) {
             // Guns fire a burst every 3 to 4 s each (spec 1.2); fists wait for the token anyway.
             const [lo, hi] = TUNE.rifleEvery;
-            e.cooldown = A.ranged && !e.disarmed ? Math.max(0.3, lo + Math.random() * (hi - lo) - A.windup - A.recover) : 0.4 + Math.random() * 0.6;
+            const [c0, c1] = TUNE.cooldown;
+            e.cooldown = A.ranged && !e.disarmed ? Math.max(0.3, lo + Math.random() * (hi - lo) - A.windup - A.recover) : c0 + Math.random() * (c1 - c0);
             setState(e, 'engage');
           }
           break;
@@ -358,13 +389,17 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       // Movement: ground friction toward the wanted velocity (feet on the ground), gravity, the
       // jetpack's thrust holding height, collisions.
       const groundy = e.onGround && !['air', 'webbed', 'out', 'pinned', 'down'].includes(e.state);
-      if (groundy || (A.flies && isActive(e) && e.state !== 'air')) {
+      if (e.state === 'stagger' && e.onGround && e.t < 0.25) {
+        // Knocked back by the blow: an exponential slide (about half a metre from a jab).
+        const k = Math.min(1, 6 * dt);
+        applyDv(b, 'surface', -v.x * k, 0, -v.z * k);
+      } else if (groundy || (A.flies && isActive(e) && e.state !== 'air')) {
         const ax = (wantVx - v.x), az = (wantVz - v.z), lim = 30 * dt, l = Math.hypot(ax, az);
         const k = l > lim ? lim / l : 1;
         applyDv(b, 'surface', ax * k, 0, az * k);
       } else if (e.onGround) {
-        // Lying or webbed on the ground: friction stops the slide.
-        const k = Math.min(1, 8 * dt);
+        // Lying or webbed on the ground: friction stops the slide (a knockdown slides metres).
+        const k = Math.min(1, (e.state === 'down' || e.state === 'out' ? 3.5 : 8) * dt);
         applyDv(b, 'surface', -v.x * k, 0, -v.z * k);
       }
       if (e.state !== 'pinned') {
@@ -428,6 +463,14 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
         // Flat against the wall, webbed in place.
         r.rotation.set(0, Math.atan2(e.pin.nx, e.pin.nz), 0);
       } else r.rotation.set(0, e.facing, 0);
+      if (e.recoil && e.recoil.t > 0) {
+        // Snapped back from the feet, easing upright over 0.2 s.
+        const rc = e.recoil, a = rc.a * (rc.t / 0.2) * (rc.t / 0.2);
+        rc.t -= dt;
+        recoilAxis.set(rc.z, 0, -rc.x);
+        r.rotateOnWorldAxis(recoilAxis, a);
+        r.position.x += rc.x * 0.9 * Math.sin(a); r.position.z += rc.z * 0.9 * Math.sin(a);
+      }
       e.model.animator.update(dt);
       // Out of the fight for a while: fade away and free the slot.
       if (e.outT > 25) { e.alive = false; remove(e); }
@@ -495,7 +538,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     // Open for a beat (a perfect dodge's web to the face).
     stun(e, s) { if (e.boss || e.puppet || e.isPlayer || !isActive(e)) return; e.stunT = s; setState(e, 'stunned'); onEvent({ type: 'enemyStunned', e }); },
     // Beaten to the punch: the swing never comes.
-    interrupt(e) { if (e.boss || e.state !== 'windup') return; setState(e, 'stagger'); e.cooldown = 0.8 + Math.random() * 0.6; onEvent({ type: 'enemyMiss', e }); },
+    interrupt(e) { if (e.boss || e.state !== 'windup' || e.poiseT > 0) return; setState(e, 'stagger'); e.cooldown = 0.8 + Math.random() * 0.6; onEvent({ type: 'enemyMiss', e }); },
     // The guard nearest the hero open to a takedown, and which kind.
     takedownTarget(heroCtl) {
       let best = null, bd = Infinity;

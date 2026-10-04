@@ -6,10 +6,10 @@ import { isActive } from '../combat/enemies.js';
 import { TUNE } from '../combat/tuning.js';
 
 // The fight on the HUD: health and focus in a comic panel, the combo count, the spider-sense
-// (squiggles over Spidey's head, white while an attack winds up and red for the last 120 ms, the
-// perfect-dodge window; a ring round the attacker for a heavy one, yellow then red; an arc at the
-// screen edge pointing at an attacker out of view), the locked target with its health, the gadget
-// in hand, and the gadget wheel.
+// (squiggles over Spidey's head and a mark over every attacker's head, white while an attack winds
+// up and red for the last 120 ms, the perfect-dodge window; a ring round the attacker for a heavy
+// one; an arc at the screen edge only for an attacker out of view), the locked target (yellow, so
+// red only ever means danger) with its health, the gadget in hand, and the gadget wheel.
 
 export function createCombatHud(root, opts) {
   const hpFill = el('i'), hpBar = el('div', { class: 'cb-hp' }, [hpFill]);
@@ -24,6 +24,8 @@ export function createCombatHud(root, opts) {
   const arcs = Array.from({ length: 4 }, () => { const a = el('div', { class: 'cb-arc' }); sense.append(a); return { el: a, t: 0 }; });
   const squig = el('div', { class: 'cb-squig' });
   const rings = Array.from({ length: 3 }, () => { const r = el('div', { class: 'cb-ring' }); return { el: r, t: 0, e: null }; });
+  // The attacker's mark (fix spec D11): who is about to hit you, over his own head.
+  const tells = Array.from({ length: 5 }, () => ({ el: el('div', { class: 'cb-tell' }, '!'), e: null }));
   const target = el('div', { class: 'cb-target hidden' }, [el('i'), el('div', { class: 'cb-thp' }, [el('i')])]);
   const gadget = el('div', { class: 'cb-gadget' }, [el('b'), el('span')]);
   const wheel = el('div', { class: 'cb-wheel hidden' });
@@ -35,7 +37,7 @@ export function createCombatHud(root, opts) {
     return { g, el: s, a };
   });
   const flash = el('div', { class: 'cb-flash' });
-  const box = el('div', { class: 'cb hidden' }, [panel, combo, sense, squig, ...rings.map((r) => r.el), target, gadget, flash, wheel]);
+  const box = el('div', { class: 'cb hidden' }, [panel, combo, sense, squig, ...rings.map((r) => r.el), ...tells.map((q) => q.el), target, gadget, flash, wheel]);
   root.append(box);
   let squigT = 0, flashT = 0, shownCombo = 0, wheelOpen = false, wheelPick = null, wheelVec = { x: 0, y: 0 };
   const v = new THREE.Vector3();
@@ -53,6 +55,8 @@ export function createCombatHud(root, opts) {
       const a = arcs[arcNext]; arcNext = (arcNext + 1) % arcs.length;
       a.t = 0.9; a.e = e; a.red = false; a.ranged = !!ranged;
       a.el.classList.remove('red');
+      const tl = tells.find((q) => q.e === e) ?? tells.find((q) => !q.e || q.e.state !== 'windup') ?? tells[0];
+      tl.e = e; tl.el.classList.remove('red');
     },
     // The last 120 ms: dodge now.
     red(e, heavy) {
@@ -60,6 +64,7 @@ export function createCombatHud(root, opts) {
       squigT = Math.max(squigT, 0.3);
       if (heavy) { const r = rings.find((q) => q.e === e); if (r) r.el.classList.add('red'); }
       for (const a of arcs) if (a.e === e) a.el.classList.add('red');
+      for (const q of tells) if (q.e === e) q.el.classList.add('red');
     },
     hurt() { flashT = 0.35; },
     ko() {},
@@ -108,12 +113,22 @@ export function createCombatHud(root, opts) {
         r.el.style.left = `${(v.x * 0.5 + 0.5) * 100}%`; r.el.style.top = `${(-v.y * 0.5 + 0.5) * 100}%`;
         r.el.style.width = r.el.style.height = `${Math.min(260, 900 / d)}px`;
       }
+      for (const q of tells) {
+        const live = q.e && q.e.alive && q.e.state === 'windup';
+        if (!live) { q.el.style.opacity = '0'; continue; }
+        v.set(q.e.body.p.x, q.e.body.p.y + 1.35, q.e.body.p.z).project(camera);
+        if (v.z > 1) { q.el.style.opacity = '0'; continue; }
+        q.el.style.opacity = '1';
+        q.el.style.left = `${(v.x * 0.5 + 0.5) * 100}%`; q.el.style.top = `${(-v.y * 0.5 + 0.5) * 100}%`;
+      }
       flashT -= dt; flash.style.opacity = String(Math.max(0, flashT / 0.35) * 0.55);
       // Sense arcs: an inked wedge at the screen edge in the attacker's direction.
       for (const a of arcs) {
         a.t -= dt;
         if (a.t <= 0 || !a.e) { a.el.style.opacity = '0'; continue; }
         v.set(a.e.body.p.x, a.e.body.p.y, a.e.body.p.z).project(camera);
+        // On screen his own mark shows him: the edge arc is only for attackers out of view.
+        if (v.z < 1 && Math.abs(v.x) < 0.92 && Math.abs(v.y) < 0.92) { a.el.style.opacity = '0'; continue; }
         let x = v.x, y = v.y;
         if (v.z > 1) { x = -x; y = -y; }
         const ang = Math.atan2(-y, x);
