@@ -322,15 +322,18 @@ export function createPoser(heroModel) {
           const lean = smoothstep(12, 32, speed) * smoothstep(-0.9, -0.2, vel.y / Math.max(1, speed)) * 0.85;
           // Dropping steeply: tip forward over the drop, belly toward the ground, like a skydiver.
           // (Tips early: an upright body drifting down read as a puppet hanging on strings.)
-          const fallTilt = Math.max(0.5, smoothstep(-1, -14, b.v.y)) * (1 - lean);
-          u.set(0, 1, 0).lerp(tmp2.copy(vel).normalize(), lean);
+          // The last moment of a fall: right the body and bring the feet under to land on them.
+          const brace = !trick && b.v.y < -3 ? smoothstep(0.5, 0.18, hero.toGround ?? 9) : 0;
+          const fallTilt = Math.max(0.5, smoothstep(-1, -14, b.v.y)) * (1 - lean) * (1 - brace);
+          u.set(0, 1, 0).lerp(tmp2.copy(vel).normalize(), lean * (1 - brace));
           u.lerp(tmp2.copy(tmp), fallTilt * 0.7).normalize();
           basis(u, lean + fallTilt > 0.3 ? DOWN : tmp, qBase);
           // Pose: rising slow and loose; soaring when fast; spread when dropping.
           lerpPose(POSES.air, POSES.soar, smoothstep(0.1, 0.5, lean), blendA);
           lerpPose(blendA, POSES.spread, smoothstep(-3, -14, b.v.y) * (1 - lean), target);
           // Falling toward the next web: the web arm comes forward, ready.
-          if (b.v.y < -2 && !trick) { lerpPose(target, choose('ready'), smoothstep(-2, -10, b.v.y) * 0.6, blendB); target.set(blendB); }
+          if (b.v.y < -2 && !trick) { lerpPose(target, choose('ready'), smoothstep(-2, -10, b.v.y) * 0.6 * (1 - brace), blendB); target.set(blendB); }
+          if (brace > 0) { lerpPose(target, POSES.brace, brace, blendB); target.set(blendB); }
           if (trick) {
             const s = Math.sin(Math.PI * Math.min(1, trick.t / trick.def.dur));
             lerpPose(target, POSES.tuck, s * trick.def.tuck, blendA);

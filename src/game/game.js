@@ -990,6 +990,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         `${combat.heroCombat.c.move?.key ?? ''}|${heroModel.animator?.currentName ?? ''}`];
       // Hands, feet and head in the body's own frame (animation pops show up here, not in the root).
       const B = heroModel.bones;
+      heroModel.root.updateMatrixWorld(true); // read this frame's pose, not last frame's matrices
       traceInv.copy(heroModel.orient.quaternion).invert();
       heroModel.orient.getWorldPosition(traceRoot);
       for (const bn of [B?.handL, B?.handR, B?.footL, B?.footR, B?.head]) {

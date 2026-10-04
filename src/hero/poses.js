@@ -162,6 +162,14 @@ export const POSES = {
     hr: [-0.2, -0.28, 0.2], er: [-0.5, -0.8, -0.5], gr: 'open',
     fl: [0.18, -0.56, -0.36], kl: [0.2, -0.3, 1], fr: [-0.16, -0.6, -0.3], kr: [-0.2, -0.3, 1], toe: [1, 1],
   }),
+  // About to land: righted, feet coming under the hips with the knees bent, arms out and low for
+  // balance (the moment before a superhero landing).
+  brace: pose({
+    spine: [0.2, 0, 0], head: [0.15, 0],
+    hl: [0.3, -0.3, 0.05], el: [0.5, -0.6, -0.6], gl: 'open',
+    hr: [-0.3, -0.3, 0.05], er: [-0.5, -0.6, -0.6], gr: 'open',
+    fl: [0.14, -0.6, 0.16], kl: [0.2, 0, 1], fr: [-0.12, -0.66, 0.04], kr: [-0.2, 0, 1], toe: [0.3, 0.3],
+  }),
   // Streamlined dive: arms swept back along the body, legs straight and together.
   dive: pose({
     spine: [-0.1, 0, 0], head: [-0.5, 0],

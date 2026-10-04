@@ -48,6 +48,12 @@ export function createAnimator(root, clips) {
   const mixer = new THREE.AnimationMixer(root);
   const actions = new Map();
   let current = null;
+  // Eased crossfades: three's crossFadeFrom ramps the weights linearly, so a limb starts and stops
+  // moving between clips at full speed (a pop at both ends). Here the incoming clip's weight follows
+  // a smoothstep and the outgoing ones share what is left, so the weights always sum to one.
+  let fadeIn = null;
+  const fadingOut = new Map();
+  const ease = (x) => x * x * (3 - 2 * x);
   const action = (name) => {
     if (!actions.has(name)) {
       const clip = clips.get(name);
@@ -66,8 +72,18 @@ export function createAnimator(root, clips) {
       next.clampWhenFinished = once;
       next.timeScale = timeScale;
       next.enabled = true;
-      next.setEffectiveWeight(1);
-      if (current && current !== next) next.crossFadeFrom(current, fade, false);
+      fadingOut.delete(next);
+      if (current && current !== next && fade > 0) {
+        fadingOut.set(current, { w0: current.getEffectiveWeight(), t: 0, dur: fade });
+        next.setEffectiveWeight(0);
+        fadeIn = { action: next, t: 0, dur: fade };
+      } else {
+        next.setEffectiveWeight(1);
+        fadeIn = null;
+        for (const a of fadingOut.keys()) a.stop();
+        fadingOut.clear();
+        if (current && current !== next) current.stop();
+      }
       next.play();
       current = next;
       return next;
@@ -76,7 +92,26 @@ export function createAnimator(root, clips) {
     has(name) { return clips.has(name); },
     duration(name) { return clips.get(name)?.duration ?? 1; },
     get currentName() { return current?.getClip().name ?? null; },
-    update(dt) { mixer.update(dt); },
+    update(dt) {
+      let wIn = 1;
+      if (fadeIn) {
+        fadeIn.t += dt;
+        wIn = ease(Math.min(1, fadeIn.t / fadeIn.dur));
+        fadeIn.action.setEffectiveWeight(wIn);
+        if (fadeIn.t >= fadeIn.dur) fadeIn = null;
+      }
+      if (fadingOut.size) {
+        let sum = 0;
+        for (const [a, f] of fadingOut) {
+          f.t += dt;
+          f.w = f.w0 * (1 - ease(Math.min(1, f.t / f.dur)));
+          if (f.t >= f.dur || wIn >= 1) { a.stop(); fadingOut.delete(a); } else sum += f.w;
+        }
+        // The outgoing clips share whatever the incoming one has not taken (no sag toward the bind pose).
+        for (const [a, f] of fadingOut) a.setEffectiveWeight(sum > 1e-5 ? (f.w / sum) * (1 - wIn) : 0);
+      }
+      mixer.update(dt);
+    },
   };
 }
 

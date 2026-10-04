@@ -368,6 +368,14 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   // Air ------------------------------------------------------------------------------------
   function airStep(intent, dt) {
     hero.airTime += dt;
+    // Seconds until the feet meet the ground, falling (the poser brings the legs under before a
+    // landing instead of touching down belly first). Checked a few times a second.
+    hero.toGroundT = (hero.toGroundT ?? 0) - dt;
+    if (hero.toGroundT <= 0) {
+      hero.toGroundT = 1 / 20;
+      const gap = body.p.y - 0.9 - world.groundHeight(body.p.x, body.p.y, body.p.z), fall = Math.max(0, -body.v.y);
+      hero.toGround = fall > 1 ? (Math.sqrt(fall * fall + 2 * g() * Math.max(0, gap)) - fall) / g() : 9;
+    } else if (hero.toGround < 9) hero.toGround -= dt;
     airForces(intent, dt);
     // Holding jump just after take-off carries the jump higher (a tap is still a jump at once).
     if (intent.jump && hero.time < hero.jumpHoldUntil && body.v.y > 0) applyDv(body, 'assist', 0, g() * tune.jumpHoldLift * dt, 0);
