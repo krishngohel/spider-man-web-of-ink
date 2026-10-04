@@ -207,8 +207,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // The save (slot 1 until the story's slot screen arrives): found stations, districts, position.
   const saveSlot = lastSlot(window.localStorage) ?? 1;
   const save = loadSlot(window.localStorage, saveSlot) ?? newSave(saveSlot);
-  // Dev: ?suits unlocks every suit in this save, story suits included (to look them all over).
-  if (params.has('suits')) save.progress.suits = SUITS.map((q) => q.id);
+  // Dev: ?suits unlocks every suit in whichever save is loaded (a story slot or free swing loads its
+  // own over this one), story suits included, to look them all over.
+  const unlockSuitsIfAsked = () => { if (params.has('suits') && save.progress) save.progress.suits = SUITS.map((q) => q.id); };
+  unlockSuitsIfAsked();
   let saveT = 0;
   const persist = () => {
     const p = hero.body.p;
@@ -1076,6 +1078,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   function loadInto(next) {
     for (const k of Object.keys(save)) delete save[k];
     Object.assign(save, next);
+    unlockSuitsIfAsked();
     progress.useSave(save);
     content.reload();
   }
