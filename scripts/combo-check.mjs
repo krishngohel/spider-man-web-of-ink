@@ -1,6 +1,6 @@
 // The combo moves with real inputs: a counter after a dodge, a web pull on a webbed thug out of
-// reach, a sweep after a pause in the string, a back kick while steering away from a thug, and
-// the web blast.
+// reach, a sweep after a pause in the string, a back kick while steering away from a thug, the
+// web blast, and a street prop thrown with the yank key.
 // Usage: node scripts/combo-check.mjs [url]
 import { chromium } from 'playwright-core';
 import { launchArgs, sleep } from './lib.mjs';
@@ -95,6 +95,19 @@ const click = async (button = 'left') => { await p.mouse.down({ button }); await
   await sleep(200);
   const st = await state();
   results.push(['web blast on a combo of 10', st.combo < 3]);
+}
+// 6. Street throw: a gang brings loose bins and crates; the yank key throws the nearest at the target.
+{
+  await fresh([[0, -197]]);
+  const before = await p.evaluate(() => window.__game.combat().props.list.length);
+  const s = await state(); await look(s.enemies[0].x, s.enemies[0].z);
+  await sleep(150);
+  await p.keyboard.press('KeyE');
+  await sleep(120);
+  const flying = await p.evaluate(() => window.__game.combat().props.list.some((q) => q.state === 'flying'));
+  await sleep(1000);
+  const after = await p.evaluate(() => window.__game.combat().props.list.length);
+  results.push([`street throw (${before} props round the gang)`, before > 0 && (flying || after < before)]);
 }
 await b.close();
 let fail = 0;

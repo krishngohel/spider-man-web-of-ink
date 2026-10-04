@@ -13,6 +13,8 @@ const KINDS = {
   crate: { size: [1.2, 1.0, 1.2], color: 0x9a6a3a, dmg: 48 },
   ac: { size: [1.6, 1.1, 1.2], color: 0xb8bcc2, dmg: 55 },
   debris: { size: [1.4, 0.8, 1.0], color: 0x8a8580, dmg: 45 },
+  bin: { size: [0.75, 1.05, 0.75], color: 0x3f6a4a, dmg: 40 },
+  box: { size: [0.9, 0.7, 0.9], color: 0xb08850, dmg: 36 },
 };
 
 export function createProps({ scene, world }) {
@@ -97,6 +99,17 @@ export function createProps({ scene, world }) {
   void _v;
   return {
     list, add, remove, tryYank, lift, drop, throwAt, step,
+    // A street throw (Insomniac's L1 + R1): the nearest loose thing within r metres of the hero
+    // flies at the target.
+    yankNearest(heroP, target, r = 9) {
+      let best = null, bd = r;
+      for (const p of list) { if (p.state !== 'rest') continue; const d = Math.hypot(p.p.x - heroP.x, p.p.z - heroP.z); if (d < bd) { bd = d; best = p; } }
+      if (!best || !target) return null;
+      const tp = target.body.p, d = Math.hypot(tp.x - best.p.x, tp.z - best.p.z);
+      launch(best, { x: tp.x, y: tp.y + 0.4, z: tp.z }, Math.max(0.35, Math.min(0.9, d / 24)), 'hero');
+      best.target = target;
+      return best;
+    },
     nearest(x, z, state = 'rest') { let b = null, bd = Infinity; for (const p of list) { if (p.state !== state) continue; const d = Math.hypot(p.p.x - x, p.p.z - z); if (d < bd) { bd = d; b = p; } } return b; },
     clear() { while (list.length) remove(list[0]); },
   };

@@ -41,7 +41,8 @@ export function createTokens() {
       sinceStart += dt;
       slots = rangedSlots(difficulty);
       const ms = meleeSlots(difficulty);
-      if (airSafe(heroP.y, groundBelow)) holders = [];
+      // The air is safe from fists, not from whips (the anti-air enemy, as in Insomniac's games).
+      if (airSafe(heroP.y, groundBelow)) holders = list.filter((e) => e.arch === 'whip' && meleeOK(e)).slice(0, ms);
       else if (repick <= 0 || holders.length < ms || holders.some((h) => !meleeOK(h))) {
         const cands = list.filter(meleeOK), prev = holders;
         const first = pickMeleeHolder(cands, heroP, prev[0] ?? null, dist);

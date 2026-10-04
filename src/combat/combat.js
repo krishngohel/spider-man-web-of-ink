@@ -7,6 +7,7 @@ import { createRng } from '../core/rng.js';
 import { LAND } from '../world/city.js';
 import { TUNE } from './tuning.js';
 import { G } from '../physics/constants.js';
+import { createProps } from '../story/props.js';
 
 // The combat director: owns the enemies, projectiles, gadgets and the hero's combat state, turns
 // their events into feedback (spider-sense, words, sounds, shakes, impact frames), and runs the
@@ -26,7 +27,9 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   const emit = (e) => events.push(e);
   const enemies = createEnemies({ scene, world, assets, onEvent: emit });
   const projectiles = createProjectiles(scene, world);
-  const heroCombat = createHeroCombat({ hero, enemies, projectiles, onEvent: emit, clips: assets.clips });
+  // Loose things round street fights (bins, boxes, crates) for the yank-and-throw.
+  const props = createProps({ scene, world });
+  const heroCombat = createHeroCombat({ hero, enemies, projectiles, onEvent: emit, clips: assets.clips, props });
   const gadgets = createGadgets({ scene, enemies, projectiles, hero, world, onEvent: emit });
   const strikeLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3()]), new THREE.LineBasicMaterial({ color: 0xf2f2f4 }));
   strikeLine.visible = false;
@@ -58,6 +61,24 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       if (!w.red && e.strikeAt - e.t <= TUNE.redWindow) { w.red = true; emit({ type: 'enemyRed', e, heavy: w.heavy, ranged: w.ranged }); }
     }
     gadgets.step(dt);
+    props.step(dt, {
+      hero, heroInvuln: () => true, hitHero: () => {},
+      // A thrown prop floors its target and anyone right next to him.
+      hitBoss: (target, p) => {
+        const at = target.body.p;
+        for (const e of enemies.active) {
+          if (e.boss) continue;
+          const d = Math.hypot(e.body.p.x - at.x, e.body.p.z - at.z);
+          if (e !== target && d > 2.2) continue;
+          const l = Math.hypot(p.v.x, p.v.z) || 1;
+          enemies.hit(e, { dmg: e === target ? p.K.dmg * 0.7 : p.K.dmg * 0.35, dir: { x: p.v.x / l, z: p.v.z / l }, push: 10, lift: 3, kind: 'slam' });
+        }
+        heroCombat.c.focus = Math.min(3, heroCombat.c.focus + 0.35);
+        emit({ type: 'word', text: 'KRASH!', at: { ...at }, kind: 'big' });
+        emit({ type: 'heroHit', e: target, heavy: true, kind: 'prop', stop: 0.1 });
+      },
+      onBreak: (p) => emit({ type: 'propBreak', at: { ...p.p } }),
+    });
     // Gunners aim with a laser while they wind up.
     for (const e of enemies.list) {
       const aiming = e.alive && e.state === 'windup' && e.A.ranged && !e.disarmed;
@@ -184,6 +205,16 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       return enemies.spawn({ x: x + Math.cos(a) * 3, z: z + Math.sin(a) * 3, faction: fac, arch, look: i, level, alert });
     });
     encounter = { x, z, list, district, faction: fac, kind };
+    // A few loose things round a street fight to throw (story fights bring their own).
+    if (kind !== 'story') {
+      props.clear();
+      const kinds = ['bin', 'box', 'crate', 'bin'];
+      for (let i = 0; i < 4; i++) {
+        const a = rng.range(0, Math.PI * 2), r = rng.range(4.5, 8);
+        const px = x + Math.cos(a) * r, pz = z + Math.sin(a) * r;
+        if (world.groundHeight(px, 3, pz) < 1.5) props.add({ x: px, y: 0, z: pz, kind: kinds[i] });
+      }
+    }
     emit({ type: 'encounterStart', encounter });
     return encounter;
   }
@@ -207,6 +238,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
     get encounter() { return encounter; },
     clearEncounter() { encounter = null; },
     setOccupation(f) { occupation = f; },
-    clear() { enemies.clear(); projectiles.clear(); gadgets.clear(); encounter = null; },
+    props,
+    clear() { enemies.clear(); projectiles.clear(); gadgets.clear(); props.clear(); encounter = null; },
   };
 }

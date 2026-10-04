@@ -39,6 +39,7 @@ export const TUNE = {
   // Camera
   // Combo moves (EST): the counter window after a dodge, the pause between string hits that means a
   // sweep, how long after a web hit a press means a web pull, the web blast's combo cost and reach.
+  webHold: 6,                                               // seconds a ground cocoon holds mid-fight (pass P2.1)
   counterWindow: 0.45, pauseFrom: 0.3, pauseTo: 0.9, pullWindow: 1.5, blastCombo: 10, blastRadius: 7,
   camKick: 0.06, fovPunch: -1.5,                            // the field of view punches in (fix spec C9)
 };

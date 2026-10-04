@@ -194,7 +194,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     const front = from ? ((from.x - e.body.p.x) * Math.sin(e.facing) + (from.z - e.body.p.z) * Math.cos(e.facing)) > 0 : true;
     if (kind === 'web') {
       e.webAgo = 0; // a web pull can yank him in for a moment after
-      e.web = Math.min(1, e.web + dmg);
+      e.web = Math.min(1, e.web + dmg / (e.A.heavy ? 2 : e.A.shield ? 1.34 : 1));
       e.alerted = true;
       if (e.web >= 1 && e.state !== 'webbed') { setState(e, 'webbed'); onEvent({ type: 'enemyWebbed', e }); return { dealt: 0, webbed: true }; }
       // A web always breaks a windup (the ranged answer to a thug you cannot reach, fix spec B7).
@@ -312,7 +312,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           const sx = -uz * e.strafe, sz = ux * e.strafe;
           wantVx = (ux * want + sx * (circling ? 0.5 : 0.35)) * A.speed; wantVz = (uz * want + sz * (circling ? 0.5 : 0.35)) * A.speed;
           if (Math.random() < dt * 0.3) e.strafe = -e.strafe;
-          const inRange = A.ranged && !e.disarmed ? dist < A.reach && lineOfSight(e, hero) : dist < A.reach * 1.05 && Math.abs(hp.y - p.y) < 2.2;
+          const inRange = A.ranged && !e.disarmed ? dist < A.reach && lineOfSight(e, hero) : dist < A.reach * 1.05 && Math.abs(hp.y - p.y) < (e.arch === 'whip' ? 4.5 : 2.2);
           const gun = A.ranged && !e.disarmed;
           const ts = tokensOf(T);
           if (inRange && e.cooldown <= 0 && (gun ? ts.mayRanged(e) : ts.mayMelee(e))) {
@@ -382,7 +382,17 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
         case 'getup':
           if (e.t > 0.8) setState(e, 'engage');
           break;
-        case 'out': case 'webbed': case 'pinned':
+        case 'webbed':
+          // A cocoon on the ground holds about six seconds while the fight goes on (stuck to a wall,
+          // pinned, it holds for good; with everyone else down, the police collect him).
+          e.outT += dt;
+          if (e.outT > TUNE.webHold && !(e.thrownT > 0) && list.some((o) => o !== e && isActive(o) && !o.boss)) {
+            e.web = 0; e.outT = 0; e.alerted = true;
+            setState(e, 'stagger');
+            onEvent({ type: 'enemyBrokeFree', e });
+          }
+          break;
+        case 'out': case 'pinned':
           e.outT += dt;
           break;
         default: break;

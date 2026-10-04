@@ -162,6 +162,7 @@ export function createCombatHud(root, opts) {
         if (c.focus >= 1 && fresh('finisher', 3)) list.push([key('finisher'), 'FINISHER']);
         if (t2 && t2.webAgo < TUNE.pullWindow && near > 2.6 && near < 12 && !t2.A?.heavy && fresh('pull')) list.push([key('attack'), 'WEB PULL']);
         if (combat.enemies.list.some((e) => e.alive && e.state === 'webbed' && Math.hypot(e.body.p.x - opts.hero.body.p.x, e.body.p.z - opts.hero.body.p.z) < TUNE.throwReach) && fresh('throw')) list.push([key('hang'), 'THROW HIM']);
+        if (t2 && !t2.boss && !(t2.A?.ranged && !t2.disarmed) && combat.props?.list.some((q) => q.state === 'rest' && Math.hypot(q.p.x - opts.hero.body.p.x, q.p.z - opts.hero.body.p.z) < 9) && fresh('propThrow')) list.push([key('hang'), 'THROW IT']);
         if (onGround && t2 && near < 2.8 && !t2.A?.heavy && !t2.boss && fresh('launcher')) list.push([`HOLD ${key('attack')}`, 'LAUNCH']);
         if (onGround && (c.step ?? 0) >= 2 && fresh('sweep')) list.push([`${key('attack')}, PAUSE, ${key('attack')}`, 'SWEEP']);
         const want = list.slice(0, 2).map(([k, n]) => `${k}|${n}`).join(';');

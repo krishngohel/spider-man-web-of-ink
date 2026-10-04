@@ -29,7 +29,7 @@ export const COMBAT_BASE = { ...COMBAT };
 const WORDS = ['POW!', 'THWACK!', 'BAM!', 'WHAM!', 'KRAK!', 'SMACK!'];
 const KICKS = ['WHAP!', 'KRAK!', 'THOOM!', 'WHUD!'];
 
-export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {}, clips = new Map() }) {
+export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {}, clips = new Map(), props = null }) {
   const c = {
     hp: COMBAT.hp, maxHp: COMBAT.hp, focus: 0,
     state: 'free', t: 0, combo: 0, comboT: 9, target: null,
@@ -461,6 +461,18 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
         word('THROWN!', wb);
         c.used.throw = (c.used.throw ?? 0) + 1;
         onEvent({ type: 'webThrow', e: wb });
+        return;
+      }
+    }
+    // Throw (the hang key with a loose prop in reach): it flies at the target and floors him and
+    // whoever stands next to him. A gunner is disarmed first, as before.
+    if (intent.yankPressed && tgt && !tgt.boss && props && !hero.swing.active && near.d < 20 && !(tgt.A?.ranged && !tgt.disarmed)) {
+      const thrown = props.yankNearest(P(), tgt);
+      if (thrown) {
+        intent.hangPressed = false;
+        c.used.propThrow = (c.used.propThrow ?? 0) + 1;
+        word('YANK!', null, 'small');
+        onEvent({ type: 'thwip', x: thrown.p.x, y: thrown.p.y, z: thrown.p.z, combat: true });
         return;
       }
     }
