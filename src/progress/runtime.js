@@ -3,6 +3,8 @@ import { COMBAT, COMBAT_BASE } from '../combat/heroCombat.js';
 import { TUNE } from '../combat/tuning.js';
 import { GADGETS } from '../combat/gadgets.js';
 import { skillEffects, suitById, grantXp, XP, levelFor, POWERS } from './progression.js';
+import { STEALTH } from '../combat/stealth.js';
+const STEALTH_BASE = { ...STEALTH };
 import { setSuit } from '../hero/model.js';
 import { applyDv } from '../physics/ledger.js';
 
@@ -41,6 +43,15 @@ export function createProgressRuntime({ save: firstSave, heroModel, combat, hero
     gm.droneTime = fx.gadgets.droneTime ?? 0;
     gm.blastRange = fx.gadgets.blastRange ?? 0;
     combat.gadgets.setLevels(Object.fromEntries(GADGETS.map((g) => [g.id, p.gadgets[g.id] ?? (g.id === 'webBomb' ? 1 : 0)])));
+    gm.focusOnGadget = fx.gadgets.focusOnGadget ?? 0;
+    // Mods and the stealth skills.
+    c.webMul = mods.has('webBlaster') ? 2 : 1;
+    c.webRangeBonus = mods.has('steadyAim') ? 12 : 0;
+    c.heavyMul = mods.has('heavyHitter') ? 2 : 1;
+    c.senseEarly = mods.has('senseFirst');
+    c.stealthFx = fx.stealth;
+    STEALTH.rise = STEALTH_BASE.rise * (1 - (fx.stealth.notice ?? 0)); // Light Feet
+    hero.cornerPlus = !!fx.flags.cornerPlus;
     R.flags = fx.flags;
     R.mods = mods;
     // The suit (and the Noir suit's black-and-white world): Peter's suits only.

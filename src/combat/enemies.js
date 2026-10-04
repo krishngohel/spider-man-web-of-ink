@@ -317,7 +317,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           const ts = tokensOf(T);
           if (inRange && e.cooldown <= 0 && (gun ? ts.mayRanged(e) : ts.mayMelee(e))) {
             // Off-screen shooters take longer, so the spider-sense gives more warning (PUB).
-            e.strikeAt = (gun ? A.windup : windupFor(A)) + (gun && ctx.onScreen?.(e) === false ? TUNE.offscreenDelay : 0);
+            e.strikeAt = (gun ? A.windup : windupFor(A)) + (gun && ctx.onScreen?.(e) === false ? TUNE.offscreenDelay : 0) + (ctx.senseEarly ? 0.12 : 0);
             e.red = false;
             e.dodged = false;
             e.atBody = T.body;
@@ -528,11 +528,13 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
 
   // A silent takedown: webbed up where they stand (out of the fight). Guards who can see the
   // victim grow suspicious.
-  function takedown(e, kind) {
+  function takedown(e, kind, { silent = false } = {}) {
     setState(e, 'webbed');
     e.web = 1;
     if (kind === 'hang') applyDv(e.body, 'rope', 0, 7, 0);
     onEvent({ type: 'takedown', e, kind });
+    // Perch Takedown+: nobody notices.
+    if (silent) return;
     for (const o of list) {
       if (o === e || !o.stealth || o.alerted || !o.alive) continue;
       const dx = e.body.p.x - o.body.p.x, dz = e.body.p.z - o.body.p.z, d = Math.hypot(dx, dz);

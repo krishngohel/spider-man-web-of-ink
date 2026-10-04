@@ -440,7 +440,8 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (swing.rope.pivots.length > wraps && !swing.rope.pivot.roof && hero.time - hero.lastCorner > CORNER_GAP) {
       const sh = Math.hypot(v.x, v.z);
       if (sh > 8) {
-        const boost = Math.min(CORNER_BOOST, Math.max(0, tune.cruiseSpeed + 6 - sh));
+        // Corner Whip+ (a skill) pushes harder round the corner.
+        const boost = Math.min(CORNER_BOOST * (hero.cornerPlus ? 1.6 : 1), Math.max(0, tune.cruiseSpeed + 6 - sh));
         if (boost > 0) applyDv(body, 'assist', (v.x / sh) * boost, 0, (v.z / sh) * boost);
         hero.lastCorner = hero.time;
         emit('corner', { boost });

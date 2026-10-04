@@ -22,6 +22,7 @@ export const COMBAT = {
   iframes: TUNE.dodgeIframes, perfectWindow: TUNE.redWindow, slowmo: TUNE.perfectSlow,
   focusPerHit: 0.09, focusPerfect: 0.4, healAmount: 38,
   regenDelay: 4, regenRate: 14,
+  webShot: 0, senseRange: 0, // skills: extra web per shot (Sticky Webs), metres of spider-sense (Wider Sense)
 };
 
 export const COMBAT_BASE = { ...COMBAT };
@@ -38,6 +39,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     webAmmo: TUNE.webCap, webRefillT: 0,
     move: null, step: 0, airStep: 0, lastKey: '', sameRun: 0, mash: 0, lastMoveAt: -9, lastMoveEnd: -9, airKeepT: 0, clock: 0, hclock: 0, counterUntil: -9, counterTgt: null, recent: [], used: {}, attackAt: -9, webAt: -9, stick: { x: 0, z: 0 }, camFwd: { x: 0, y: 0, z: 1 },
     heroStop: 0, heroStopAll: 0, faceYaw: null,
+    // Mods and stealth skills (set by the progression runtime).
+    webMul: 1, webRangeBonus: 0, heavyMul: 1, senseEarly: false, stealthFx: {},
     dmgMul: 1, // skills raise this (Plan 4)
     special: null, strikeMul: 1, comboKeep: TUNE.comboReset, armor: 0, resilient: false, resilientUsed: false, focusMul: 1, brutalMul: 1,
   };
@@ -70,7 +73,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
 
   function landHit(e, { dmg, push, lift, kind = 'melee', heavy = false, stop = 'light' }) {
     const u = toward(e);
-    const r = enemies.hit(e, { dmg: dmg * c.dmgMul, dir: { x: u.x, z: u.z }, push, lift, kind, from: P(), noInterrupt: c.sameRun >= TUNE.sameMoveLimit });
+    const r = enemies.hit(e, { dmg: dmg * c.dmgMul * (e.A?.heavy ? c.heavyMul : 1), dir: { x: u.x, z: u.z }, push, lift, kind, from: P(), noInterrupt: c.sameRun >= TUNE.sameMoveLimit });
     if (r.ignored) return r;
     if (r.blocked) { word('CLANG!', e); onEvent({ type: 'blocked' }); if (e.arch === 'shield') hint('SHIELD UP: FLIP OVER HIM OR YANK IT AWAY'); return r; }
     c.combo++; c.comboT = 0;
@@ -136,6 +139,11 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     // Beat to the punch (PUB): a slower blow from the enemy we are hitting is cancelled, unless
     // it is heavy, a boss, or the player is mashing.
     if (tgt && !tgt.boss && tgt.state === 'windup' && toward(tgt).d < 4 && beatsToPunch({ heroImpactIn: M.impact, enemyImpactIn: tgt.strikeAt - tgt.t, sameMoveRun: c.sameRun, heavy: !!tgt.A.heavy })) enemies.interrupt?.(tgt);
+    if (key === 'strike' && tgt?.stealth && !tgt.alerted && c.stealthFx.strikeTakedown && isActive(tgt)) {
+      enemies.takedown(tgt, 'strike');
+      c.focus = Math.min(3, c.focus + 0.25 + (c.stealthFx.focusOnTakedown ?? 0));
+      word('THWIP!', tgt, 'small');
+    }
     if (key === 'strike') onEvent({ type: 'webStrike', e: tgt });
     if (key === 'launcher') onEvent({ type: 'uppercut' });
     if (M.travel && grounded()) { const v = V(); applyDv(hero.body, 'surface', 0, Math.max(0, 3 - v.y), 0); hero.state = 'air'; hero.airTime = 0; }
@@ -332,7 +340,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       if (c.slowKind === 'perfect' && c.slowT > TUNE.perfectRamp) c.slowT = TUNE.perfectRamp;
     }
     // A dodge needs a fight nearby, or an attack on its way (a shot or a dive from far off).
-    const close = engaged.some((e) => toward(e).d < 15 || (e.state === 'windup' && toward(e).d < 45));
+    const close = engaged.some((e) => toward(e).d < 15 + COMBAT.senseRange || (e.state === 'windup' && toward(e).d < 45 + COMBAT.senseRange));
     if (intent.divePressed && close && ['ground', 'air', 'wall'].includes(hero.state)) buffer.press('dodge', c.hclock);
     groundAt = ctx.groundAt ?? null;
     finisherSlowmo = ctx.finisherSlowmo !== false;
@@ -391,7 +399,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
         buffer.clear();
         const q = td.e.body.p, p = P();
         if (td.kind === 'perch') { const dx = q.x - p.x, dy = q.y - p.y, dz = q.z - p.z, d = Math.hypot(dx, dy, dz) || 1; applyDv(hero.body, 'rope', (dx / d) * 16 - V().x, (dy / d) * 16 - V().y, (dz / d) * 16 - V().z); }
-        enemies.takedown(td.e, td.kind);
+        enemies.takedown(td.e, td.kind, { silent: td.kind === 'perch' && !!c.stealthFx.silentPerch });
+        c.focus = Math.min(3, c.focus + (c.stealthFx.focusOnTakedown ?? 0));
         word(td.kind === 'hang' ? 'YOINK!' : td.kind === 'perch' ? 'THWIP!' : 'SHH!', td.e, 'small');
         c.focus = Math.min(3, c.focus + 0.25);
         return;
@@ -450,17 +459,17 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (intent.webPressed && c.webAmmo < 1 && !webAtBoss) { onEvent({ type: 'webEmpty' }); intent.webPressed = false; }
     if (intent.webPressed) {
       if (!webAtBoss) c.webAmmo--;
-      const t2 = pickTarget(P(), camFwd, enemies.list, COMBAT.webRange);
+      const t2 = pickTarget(P(), camFwd, enemies.list, COMBAT.webRange + c.webRangeBonus);
       const from = { x: P().x, y: P().y + 0.5, z: P().z };
       if (t2) {
         // Lead a moving target (a flyer at 20 m/s moves metres while the web is in the air).
         const q0 = t2.body.p, tv = t2.body.v, lead = Math.hypot(q0.x - from.x, q0.y - from.y, q0.z - from.z) / 75;
         const q = { x: q0.x + tv.x * lead, y: q0.y + tv.y * lead, z: q0.z + tv.z * lead };
-        projectiles.fire('web', from, { x: q.x, y: q.y + 0.3, z: q.z }, { owner: 'hero', dmg: 1 / TUNE.webShots });
+        projectiles.fire('web', from, { x: q.x, y: q.y + 0.3, z: q.z }, { owner: 'hero', dmg: (1 / TUNE.webShots + COMBAT.webShot) * c.webMul });
         onEvent({ type: 'thwip', x: q.x, y: q.y, z: q.z, combat: true });
       } else {
         const d = camFwd;
-        projectiles.fire('web', from, { x: from.x + d.x * 30, y: from.y + d.y * 30, z: from.z + d.z * 30 }, { owner: 'hero', dmg: 1 / TUNE.webShots });
+        projectiles.fire('web', from, { x: from.x + d.x * 30, y: from.y + d.y * 30, z: from.z + d.z * 30 }, { owner: 'hero', dmg: (1 / TUNE.webShots + COMBAT.webShot) * c.webMul });
         onEvent({ type: 'thwip', x: from.x + d.x * 30, y: from.y + d.y * 30, z: from.z + d.z * 30, combat: true });
       }
     }

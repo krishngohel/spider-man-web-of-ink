@@ -55,7 +55,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   function step(dt) {
     const s = getSettings();
     const targets = targetsFn ? targetsFn() : null;
-    enemies.step(dt, { hero, heroInvuln, difficulty: s.difficulty ?? 'amazing', gravity: s.gravity, heroHit, targets, onScreen });
+    enemies.step(dt, { hero, heroInvuln, difficulty: s.difficulty ?? 'amazing', gravity: s.gravity, heroHit, targets, onScreen, senseEarly: heroCombat.c.senseEarly });
     for (const [e, w] of winding) {
       if (!e.alive || e.state !== 'windup') { winding.delete(e); continue; }
       if (!w.red && e.strikeAt - e.t <= TUNE.redWindow) { w.red = true; emit({ type: 'enemyRed', e, heavy: w.heavy, ranged: w.ranged }); }
@@ -160,6 +160,7 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
       case 'strikeEnd': strikeLine.visible = false; break;
       default: break;
     }
+    if (['webBomb', 'electric', 'mine', 'suspension', 'concussive'].includes(e.type)) heroCombat.c.focus = Math.min(3, heroCombat.c.focus + (gadgets.mods.focusOnGadget ?? 0));
     feedback.event(e);
   }
 
