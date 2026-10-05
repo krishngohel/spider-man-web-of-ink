@@ -51,7 +51,7 @@ export function createProgressRuntime({ save: firstSave, heroModel, combat, hero
     c.senseEarly = mods.has('senseFirst');
     c.stealthFx = fx.stealth;
     STEALTH.rise = STEALTH_BASE.rise * (1 - (fx.stealth.notice ?? 0)); // Light Feet
-    hero.cornerPlus = !!fx.flags.cornerPlus;
+    hero.quickZip = !!fx.flags.quickZip; hero.wallDash = !!fx.flags.wallDash;
     R.flags = fx.flags;
     R.mods = mods;
     // The suit (and the Noir suit's black-and-white world): Peter's suits only.

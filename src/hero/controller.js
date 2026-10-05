@@ -467,8 +467,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (swing.rope.pivots.length > wraps && !swing.rope.pivot.roof && hero.time - hero.lastCorner > CORNER_GAP) {
       const sh = Math.hypot(v.x, v.z);
       if (sh > 8) {
-        // Corner Whip+ (a skill) pushes harder round the corner.
-        const boost = Math.min(CORNER_BOOST * (hero.cornerPlus ? 1.6 : 1), Math.max(0, tune.cruiseSpeed + 6 - sh));
+        const boost = Math.min(CORNER_BOOST, Math.max(0, tune.cruiseSpeed + 6 - sh));
         if (boost > 0) applyDv(body, 'assist', (v.x / sh) * boost, 0, (v.z / sh) * boost);
         hero.lastCorner = hero.time;
         emit('corner', { boost });
@@ -640,6 +639,8 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       emit('perch');
       land();
       hero.launchUntil = hero.time + tune.launchWindow;
+      // Quick Zip (skill): jump held through the zip launches straight off the perch.
+      if (hero.quickZip && intent.jump) { pointLaunch(intent); hero.state = 'air'; hero.airTime = 0; }
       return;
     }
     if (touch.wall && enterWall(touch)) { hero.launchUntil = hero.time + tune.launchWindow; return; }
@@ -666,6 +667,18 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       return;
     }
     if (intent.zipPressed && tryZip(intent)) { move(dt); return; }
+    // Wall Dash (skill): dive on a wall dashes along it the way the stick (or camera) points.
+    if (hero.wallDash && intent.divePressed && !hero.fightClose && hero.time - (hero.wallDashAt ?? -9) > 0.5) {
+      let sx = intent.moveX, sz = intent.moveZ;
+      if (Math.hypot(sx, sz) < 0.2) { sx = intent.camFwd.x; sz = intent.camFwd.z; }
+      const a = sx * nx + sz * nz, lx = sx - a * nx, lz = sz - a * nz, ll = Math.hypot(lx, lz);
+      if (ll > 0.1) {
+        const sp = tune.wallRunSpeed + 10;
+        push((lx / ll) * sp - v.x - nx * ADHESION, Math.max(0, 2 - v.y), (lz / ll) * sp - v.z - nz * ADHESION, 'wall dash');
+        hero.wallMomentum = true; hero.wallDashAt = hero.time;
+        emit('wallDash');
+      }
+    }
     if (intent.swingPressed && shootWeb(intent, false, true, false)) {
       // Fire from the wall: kick off it and let the web catch.
       push(nx * 3, 2 - Math.min(0, v.y), nz * 3, 'kick off for a web');

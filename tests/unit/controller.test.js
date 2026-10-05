@@ -542,6 +542,23 @@ describe('ledges, corners and launches', () => {
     expect(h.body.v.x).toBeGreaterThan(4);
   });
 
+  it('Wall Dash (skill): dive on a wall dashes along it', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(15 - tune.radius, 30, 60, 0, 0, 0, 'wall');
+    h.wall.nx = -1; h.wall.nz = 0;
+    run(h, emptyIntent(), 0.1);
+    const i = emptyIntent(); i.moveZ = 1; i.divePressed = true;
+    h.step(i, dt);
+    expect(h.body.v.z).toBeLessThan(1); // no skill, no dash
+    h.wallDash = true; h.wallDashAt = -9;
+    const j = emptyIntent(); j.moveZ = 1; j.divePressed = true;
+    h.step(j, dt);
+    expect(h.body.v.z).toBeGreaterThan(tune.wallRunSpeed + 5);
+    run(h, emptyIntent(), 0.3);
+    expect(h.state).toBe('wall');
+  });
+
   it('wall to wall: a wall jump across an alley sticks to the far wall and can jump again', () => {
     const w = createWorld();
     w.addBox({ min: [-20, 0, -30], max: [-4, 60, 30] });

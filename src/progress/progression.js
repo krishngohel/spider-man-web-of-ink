@@ -32,11 +32,13 @@ export const SKILLS = [
   S('wingTrim', 'webslinger', 'Web Wings Trim', 'Web wings glide further for every metre dropped.', 6, 'fastReel', { k: 'glideRatio', v: 1 }),
   S('wallSprint', 'webslinger', 'Wall Sprint', 'Run along walls faster.', 7, 'fastReel', { k: 'wallRunSpeed', v: 3 }),
   S('pointLaunch', 'webslinger', 'Point Launch+', 'Launch off perches and edges harder.', 8, 'perfectPlus', { k: 'launchSpeed', v: 4 }),
-  S('swingJump', 'webslinger', 'Swing-Jump+', 'Swing-jumps go higher.', 10, 'perfectPlus', { k: 'swingJumpUp', v: 2.5 }),
-  S('climber', 'webslinger', 'Quick Climber', 'Climb and rappel along a hanging web faster.', 11, 'airControl', { k: 'hangClimb', v: 2.5 }),
+  S('swingJump', 'webslinger', 'Quick Zip', 'Hold jump through a zip to a perch: you launch straight off it without stopping.', 10, 'perfectPlus', { flag: 'quickZip' }),
+  // Move skills (Insomniac's tree unlocks moves, not only numbers). The ids are older skills'
+  // (Quick Climber, Swing-Jump+, Corner Whip+) so a save that learned those gets the move.
+  S('climber', 'webslinger', 'Zip Boost+', 'One more air dash (zip with nothing to zip to) every time you leave the ground.', 11, 'airControl', { k: 'zipBoosts', v: 1 }),
   S('trickster', 'webslinger', 'Trickster', 'Air tricks earn XP and a little focus.', 12, 'airControl', { flag: 'trickXp' }),
   S('diver', 'webslinger', 'Dive Bomber', 'Dives reach a higher top speed.', 14, 'wingTrim', { k: 'diveTerminal', v: 10 }),
-  S('corners', 'webslinger', 'Corner Whip+', 'Whipping round a corner pushes harder.', 16, 'wallSprint', { flag: 'cornerPlus' }),
+  S('corners', 'webslinger', 'Wall Dash', 'On a wall, press dive to dash along it the way you steer.', 16, 'wallSprint', { flag: 'wallDash' }),
   S('releaseBoost', 'webslinger', 'Release Boost', 'Every release on the rise throws you further.', 18, 'pointLaunch', { k: 'releaseBoost', v: 1 }),
   S('master', 'webslinger', 'Web Master', 'The pump pushes toward an even higher speed.', 24, 'releaseBoost', { k: 'cruiseSpeed', v: 3 }),
   // Defender: combat.

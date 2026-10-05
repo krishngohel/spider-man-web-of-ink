@@ -343,6 +343,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
     // A dodge needs a fight nearby, or an attack on its way (a shot or a dive from far off).
     const close = engaged.some((e) => toward(e).d < 15 + COMBAT.senseRange || (e.state === 'windup' && toward(e).d < 45 + COMBAT.senseRange));
+    hero.fightClose = close; // dive is a dodge here, not a wall dash
     const sensed = engaged.some((e) => e.state === 'windup' && (!e.atBody || e.atBody === hero.body));
     if (intent.divePressed && close && (['ground', 'air', 'wall'].includes(hero.state) || (sensed && (hero.state === 'swing' || hero.state === 'hang')))) buffer.press('dodge', c.hclock);
     groundAt = ctx.groundAt ?? null;
