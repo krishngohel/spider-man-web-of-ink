@@ -272,6 +272,14 @@ export function createPoser(heroModel) {
         // Up along the line toward the pivot, facing the way we're travelling.
         const P = swinging ? hero.swing.P : hero.rope.pivot;
         tmp2.set(P.x - b.p.x, P.y - b.p.y, P.z - b.p.z).normalize();
+        if (swinging && speed > 4) {
+          // Not a weight on a string (Insomniac's swing): the body leads into the dive, chest first
+          // with the legs trailing, then lies back through the rise with the legs swinging ahead.
+          const a0 = hero.swing.angle(b.p, b.v);
+          const lean = 0.42 * smoothstep(-70, -35, a0) * (1 - smoothstep(-25, -5, a0)) - 0.55 * smoothstep(-5, 30, a0);
+          u.copy(vel).addScaledVector(tmp2, -vel.dot(tmp2));
+          if (u.lengthSq() > 1e-6) { u.normalize(); tmp2.multiplyScalar(Math.cos(lean)).addScaledVector(u, Math.sin(lean)).normalize(); }
+        }
         basis(tmp2, speed > 1 ? vel : tmp, qBase);
         if (zipping) target.set(POSES.zip);
         else {

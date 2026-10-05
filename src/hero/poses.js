@@ -82,12 +82,13 @@ export const POSES = {
     hr: [0, 0.48, 0.05], gr: 'grab',
     fl: [0.05, -0.84, -0.18], kl: [0, 0, 1], fr: [-0.02, -0.82, -0.24], kr: [0, 0, 1], toe: [0.9, 0.9],
   }),
-  // Dropping into the arc: legs swing forward a little, knees soften, free arm out for balance.
+  // Diving into the arc: body long and arched, legs together and trailing behind with the toes
+  // pointed, the free arm swept back (the body is leaned chest first by the poser).
   drop: pose({
-    spine: [0.05, -0.05, 0.05], head: [-0.05, 0.3],
-    hl: [0.38, -0.2, 0.1], el: [0.5, 0, -1], gl: 'open',
+    spine: [-0.18, -0.05, 0.08], head: [-0.4, 0.2],
+    hl: [0.18, -0.34, -0.26], el: [0.5, -0.4, -1], gl: 'open',
     hr: [0, 0.48, 0.05], gr: 'grab',
-    fl: [0.08, -0.72, 0.18], kl: [0, 0, 1], fr: [-0.06, -0.76, 0.1], kr: [0, 0, 1], toe: [0.7, 0.7],
+    fl: [0.05, -0.82, -0.26], kl: [0, -0.2, 1], fr: [-0.04, -0.8, -0.32], kr: [0, -0.2, 1], toe: [1.1, 1.1],
   }),
   // Bottom of the arc: knees pulled up to the chest, body crunched, free arm in.
   bottom: pose({
