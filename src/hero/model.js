@@ -3,7 +3,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import { toonGradient, addHullOutline } from '../render/toon.js';
 import { PALETTE } from '../render/palette.js';
-import { COMIC_SHADE, SHADOW_ALPHA, addShadeUniforms } from '../render/comicShade.js';
+import { COMIC_SHADE, SHADOW_ALPHA, addShadeUniforms, comicToon } from '../render/comicShade.js';
 
 // The hero: Quaternius's CC0 superhero body (T-pose, facing +z, 1.81 m) wearing a classic suit
 // painted by a shader from each fragment's bind-pose position: red head, chest, shoulders,
@@ -17,7 +17,13 @@ export async function loadHeroAssets(base = './assets/', onProgress = () => {}) 
   const [hero, a1, a2, heroF, hair] = await Promise.all(names.map((n) => loader.loadAsync(base + n).then((g) => { onProgress(++done / names.length); return g; })));
   const clips = new Map();
   for (const clip of [...a1.animations, ...a2.animations]) clips.set(clip.name, sanitizeClip(clip));
-  return { body: hero.scene, bodyF: heroF.scene, hair: hair.scene, clips };
+  // hero_m.glb carries a second skinned mesh, the fitted film suit (scripts/fit-suit.mjs). The hero
+  // keeps it; everyone else built on this body (thugs, the roster) gets a copy without it.
+  const bodyHero = hero.scene;
+  const body = SkeletonUtils.clone(hero.scene);
+  const sm = body.getObjectByName('SuitModel');
+  sm?.parent?.remove(sm);
+  return { body, bodyHero, bodyF: heroF.scene, hair: hair.scene, clips };
 }
 
 // The combat clips (kicks, flips, evades, reactions; scripts/retarget-mocap.mjs) load after the
@@ -116,7 +122,7 @@ export function createAnimator(root, clips) {
 }
 
 export const SUIT_CLASSIC = {
-  id: 'classic', name: 'Classic',
+  id: 'classic', name: 'Classic', model: 'tasm',
   red: PALETTE.suitRed, blue: PALETTE.suitBlue, black: PALETTE.suitBlack, lens: PALETTE.lens,
 };
 
@@ -396,7 +402,15 @@ ${SHADOW_ALPHA}
   return mat;
 }
 
+// A suit with a model (the fitted film suit) shows that mesh and hides the painted body.
+function showSuitModel(hero, on) {
+  const use = on && hero.suitMeshes?.length > 0;
+  for (const o of hero.suitMeshes ?? []) o.visible = use;
+  for (const o of hero.bodyMeshes ?? []) o.visible = !use;
+}
+
 export function setSuit(hero, suit) {
+  showSuitModel(hero, !!suit.model);
   const u = hero.suitMat.userData.suit;
   u.uRed.value.set(suit.red); u.uBlue.value.set(suit.blue); u.uBlack.value.set(suit.black); u.uLens.value.set(suit.lens);
   u.uStyle.value = suit.style ?? 0;
@@ -443,15 +457,27 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
   // root (at the centre of mass) -> orient (whole-body rotation about the centre of mass) -> model
   const orient = new THREE.Group();
   root.add(orient);
-  const model = SkeletonUtils.clone(female ? assets.bodyF : assets.body);
+  const model = SkeletonUtils.clone(female ? assets.bodyF : (assets.bodyHero ?? assets.body));
   model.position.y = -COM_HEIGHT;
   if (scale) model.scale.set(scale[0], scale[1], scale[2]);
   orient.add(model);
   const suitMat = suitMaterial(suit);
+  const suitMeshes = [], bodyMeshes = [];
+  const inSuitModel = (o) => { for (let n = o; n; n = n.parent) if (n.name === 'SuitModel') return true; return false; };
   if (female) suitMat.userData.suit.uBodyScale.value.set(...BODY_SCALE_F);
   const hulls = [];
   model.traverse((o) => {
     if (!o.isSkinnedMesh) return;
+    if (inSuitModel(o)) {
+      // The fitted film suit: its own texture under the comic toon shading, outlined like the body.
+      o.material = comicToon({ map: o.material.map ?? null, color: 0xffffff });
+      o.castShadow = true;
+      o.frustumCulled = false;
+      suitMeshes.push(o);
+      hulls.push(o);
+      return;
+    }
+    bodyMeshes.push(o);
     // The eye and brow meshes stay: smoothed onto the mask and painted by the suit shader, they fill
     // the body's eye holes as white lens.
     o.material = suitMat;
@@ -463,8 +489,9 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
   // The drawn outline (spec G6), added after the traversal so the hulls are not visited.
   const hullMeshes = hulls.map((o) => addHullOutline(o));
   const bone = (n) => model.getObjectByName(n);
+  showSuitModel({ suitMeshes, bodyMeshes }, !!suit.model);
   return {
-    root, orient, model, suitMat, hulls: hullMeshes,
+    root, orient, model, suitMat, hulls: hullMeshes, suitMeshes, bodyMeshes,
     animator: createAnimator(model, assets.clips),
     bones: {
       upperarmR: bone('upperarm_r'), lowerarmR: bone('lowerarm_r'), handR: bone('hand_r'),
