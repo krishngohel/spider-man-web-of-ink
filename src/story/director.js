@@ -407,7 +407,10 @@ export function createDirector(g) {
     },
     // Before combat reads the intent: a yank aimed at a loose crate throws it at the boss.
     preStep(intent, cam) {
-      if (!intent.yankPressed || !boss) return;
+      if (!boss) return;
+      // A boss's own melee target first (Electro's roof relays): the blow goes there.
+      if (intent.attackPressed && boss.attackAt?.(hero.body.p)) { intent.attackPressed = false; g.sfx.event({ type: 'punch', heavy: true }); return; }
+      if (!intent.yankPressed) return;
       // A boss's own yank targets first (Electro's relays), then loose crates.
       const own = boss.yankAt?.(cam, hero.body.p);
       if (own) { intent.yankPressed = false; intent.hangPressed = false; g.sfx.event({ type: 'thwip' }); return; }

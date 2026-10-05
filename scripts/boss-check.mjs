@@ -230,7 +230,10 @@ await run('act2.electro', 'pilot beats Electro on the power station', async ({ s
   if (s.charged && s.relays?.length) {
     const r = s.relays.reduce((x, q) => (Math.hypot(q.x - h.p.x, q.z - h.p.z) < Math.hypot(x.x - h.p.x, x.z - h.p.z) ? q : x));
     const d = Math.hypot(r.x - h.p.x, r.z - h.p.z);
-    if (d > 20) { await ev(([y]) => window.__game.setLook(y, 0.1), [Math.atan2(r.x - h.p.x, r.z - h.p.z)]); await key('KeyW', true); }
+    // Roof relays (phase 1) are smashed up close; the chimney relay (phase 2) is yanked.
+    const reach = s.phase === 1 ? 2.5 : 20;
+    if (d > reach) { await ev(([y]) => window.__game.setLook(y, 0.1), [Math.atan2(r.x - h.p.x, r.z - h.p.z)]); await key('KeyW', true); }
+    else if (s.phase === 1) { await key('KeyW', false); await click(); await sleep(120); }
     else { await key('KeyW', false); await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [r.x, r.y, r.z]); await sleep(40); await page.keyboard.press('KeyE'); await sleep(200); }
     // Keep moving under the bolts.
     if (s.perched) { await key('KeyD', Math.random() < 0.5); }
@@ -419,8 +422,11 @@ await run('act4.electroVulture', 'pilot beats Electro and the Vulture together',
   if (vEnt && Math.hypot(vEnt.x - h.p.x, vEnt.y - h.p.y, vEnt.z - h.p.z) < 13) { await key('KeyW', false); await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [vEnt.x, vEnt.y, vEnt.z]); await page.keyboard.press('KeyE'); await sleep(150); return; }
   if (el.charged && el.state !== 'out' && el.relays?.length) {
     const r = el.relays.reduce((x, q) => (Math.hypot(q.x - h.p.x, q.z - h.p.z) < Math.hypot(x.x - h.p.x, x.z - h.p.z) ? q : x));
-    if (Math.hypot(r.x - h.p.x, r.z - h.p.z) > 20) { await ev(([y]) => window.__game.setLook(y, 0.1), [Math.atan2(r.x - h.p.x, r.z - h.p.z)]); await key('KeyW', true); return; }
-    await key('KeyW', false); await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [r.x, r.y, r.z]); await sleep(40); await page.keyboard.press('KeyE'); await sleep(200); return;
+    const reach = el.phase === 1 ? 2.5 : 20;
+    if (Math.hypot(r.x - h.p.x, r.z - h.p.z) > reach) { await ev(([y]) => window.__game.setLook(y, 0.1), [Math.atan2(r.x - h.p.x, r.z - h.p.z)]); await key('KeyW', true); return; }
+    await key('KeyW', false);
+    if (el.phase === 1) { await click(); await sleep(120); return; }
+    await ev(([x, y, z]) => window.__game.aimAt(x, y, z), [r.x, r.y, r.z]); await sleep(40); await page.keyboard.press('KeyE'); await sleep(200); return;
   }
   const b = nearestBoss(c, h);
   if (b) await brawl(b, h, st); else await key('KeyW', false);

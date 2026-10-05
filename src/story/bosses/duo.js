@@ -29,6 +29,7 @@ export function createDuo(ctx, makers) {
     get phase() { return Math.min(...subs.map((s) => s.m.phase ?? 1)); },
     get state() { return Object.fromEntries(subs.map((s) => [s.id, s.m.state])); },
     update(dt) { for (const s of subs) s.m.update(dt); },
+    attackAt(heroP) { for (const s of subs) { const r = s.m.attackAt?.(heroP); if (r) return r; } return null; },
     yankAt(cam, heroP) { for (const s of subs) { const r = s.m.yankAt?.(cam, heroP); if (r) return r; } return null; },
     onEvent(ev) { for (const s of subs) s.m.onEvent?.(ev); },
     setPhase(n) { for (const s of subs) s.m.setPhase?.(n); },

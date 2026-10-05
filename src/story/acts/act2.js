@@ -28,7 +28,7 @@ export const ACT2 = [
     id: 'act2.gate', act: 'act2', type: 'fight', site: 'powerGate', text: 'Get past the Oscorp guards at the gate.',
     waves: [{ faction: 'oscorp', mix: ['brawler', 'shield', 'gunner', 'brawler'] }, { faction: 'oscorp', mix: ['brute', 'brawler', 'jetpack', 'brawler'] }],
   },
-  { id: 'act2.electro', act: 'act2', type: 'boss', boss: 'electro', site: 'powerRoof', text: 'Stop Electro. Yank a relay to drain him.', tutorial: ['relay'], env: { hour: 21.4, weather: 'overcast' } },
+  { id: 'act2.electro', act: 'act2', type: 'boss', boss: 'electro', site: 'powerRoof', text: 'Stop Electro. Smash a relay to drain him.', tutorial: ['relay'], env: { hour: 21.4, weather: 'overcast' } },
   {
     id: 'act2.electroEnd', act: 'act2', type: 'broadcast',
     lines: [

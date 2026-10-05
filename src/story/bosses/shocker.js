@@ -5,7 +5,8 @@ import { createBossActor } from '../bossActor.js';
 // a cone of force that shoves the hero, and a building between him and you takes it instead.
 // Phase 1: blasts from range and a ground quake up close; after three blasts the gauntlets vent
 // (a stun window). Phase 2 (60%): a blast brings debris down into the street; web yank a crate
-// into him. Phase 3 (30%): triple blasts, a faster vent cycle.
+// into him. Phase 3 (30%): triple blasts, a faster vent cycle. Any time: a perfect dodge through a
+// blast makes the gauntlets backfire (an opening that needs no crate).
 
 const L = (who, text) => ({ who, text });
 
@@ -56,9 +57,11 @@ export function createShocker(ctx) {
 
   a.floor = () => (phase === 1 ? 0.6 : phase === 2 ? 0.3 : 0);
   a.onYank = () => false; // a web strike: he is light enough to kick
+  let backfireCd = 0;
 
   function update(dt) {
     if (done) return;
+    backfireCd -= dt;
     const e = a.e, t = a.toHero(), f = a.hpFrac();
     if (phase === 1 && f <= 0.6 && !a.attacking()) { phase = 2; say(lines.p2); debris(); }
     if (phase === 2 && f <= 0.3 && !a.attacking()) { phase = 3; say(lines.p3); debris(); }
@@ -87,6 +90,12 @@ export function createShocker(ctx) {
     get phase() { return phase; },
     get state() { return { phase, hp: a.hpFrac(), blasts, state: a.e.state }; },
     update,
+    onEvent(ev) {
+      if (done || ev.type !== 'dodge' || !ev.perfect || backfireCd > 0 || a.e.state !== 'windup' || a.toHero().d < 5) return;
+      backfireCd = 6;
+      vent(2.6);
+      word('BACKFIRE!', a.body.p, 'big');
+    },
     setPhase(n) {
       if (n >= 2 && phase < 2) { phase = 2; a.e.hp = a.e.maxHp * 0.6; debris(); }
       if (n >= 3 && phase < 3) { phase = 3; a.e.hp = a.e.maxHp * 0.3; debris(); }

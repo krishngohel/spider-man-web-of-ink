@@ -112,7 +112,7 @@ export const STEPS = [
     id: 'act1.bank', act: 'act1', type: 'fight', site: 'exchangeFront', text: 'Stop the Maggia crew outside the bank.',
     waves: [{ faction: 'maggia', mix: ['brawler', 'brawler', 'gunner', 'whip'] }, { faction: 'maggia', mix: ['shield', 'brawler', 'rocket', 'gunner'] }],
   },
-  { id: 'act1.shocker', act: 'act1', type: 'boss', boss: 'shocker', site: 'exchangeFront', text: 'Shut down the Shocker.', tutorial: ['cover', 'yankProp'], env: { hour: 13, weather: 'overcast' } },
+  { id: 'act1.shocker', act: 'act1', type: 'boss', boss: 'shocker', site: 'exchangeFront', text: 'Shut down the Shocker.', tutorial: ['cover', 'backfire', 'yankProp'], env: { hour: 13, weather: 'overcast' } },
   {
     id: 'act1.shockerEnd', act: 'act1', type: 'broadcast',
     lines: [

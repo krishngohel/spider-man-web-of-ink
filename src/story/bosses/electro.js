@@ -6,7 +6,8 @@ import { LAYER_FX } from '../../render/layers.js';
 
 // Electro on the Harbor power station roof (spec 10, Act 2). Fully charged he is untouchable:
 // blows shock you back and webs fizzle (an electric web does nothing to him). Three relay boxes
-// on the roof feed him: web yank one (aim, yank key) and it shorts, draining him for a window.
+// on the roof feed him: smash one up close (they are too well grounded to yank loose) and it
+// shorts, draining him for a window.
 // Attacks: an arc bolt along a line (anything solid in between takes it), a ground pulse up close,
 // slow ball lightning that follows you. Phase 2 (50%): the magnetic pull carries him up a
 // chimney, he calls bolts down on marked circles; yank the relay at that chimney's foot and he
@@ -62,12 +63,12 @@ export function createElectro(ctx) {
     bolts.push({ line, t: life });
   }
 
-  // Shorting a relay: the yank key aimed at one (the director asks before props and enemies).
+  // The chimney relay (phase 2): the yank key aimed at it (the director asks before props and
+  // enemies). A roof relay in phase 1 is bolted down: the yank only says so (smash it instead).
   function yankAt(cam, heroP) {
     let best = null, bestA = 0.16;
     for (const r of relays) {
       if (!r.live) continue;
-      if (phase === 1 && r.chimney) continue;
       if (phase === 2 && (!perch || r.chimney !== perch)) continue;
       const dx = r.x - cam.x, dy = r.y - cam.y, dz = r.z - cam.z, d = Math.hypot(dx, dy, dz);
       if (Math.hypot(r.x - heroP.x, r.z - heroP.z) > 28) continue;
@@ -75,16 +76,31 @@ export function createElectro(ctx) {
       if (ang < bestA) { bestA = ang; best = r; }
     }
     if (!best) return null;
-    best.live = false; best.t = 0;
-    best.lamp.material = mats.dead;
+    if (phase === 1) { if (!best.chimney) word('BOLTED DOWN! SMASH IT!', { x: best.x, y: best.y + 1.5, z: best.z }, 'small'); return best.chimney ? null : { x: best.x, y: best.y, z: best.z }; }
     const h = hero.body.p;
     fx.tether({ x: h.x, y: h.y + 0.5, z: h.z }, { x: best.x, y: best.y, z: best.z });
     setTimeout(() => fx.tether(null), 200);
+    short(best);
+    return { x: best.x, y: best.y, z: best.z };
+  }
+  // A roof relay (phase 1): the attack key up close smashes it (the director asks first, so the
+  // blow goes to the box and not to Electro).
+  function attackAt(heroP) {
+    if (phase !== 1 || !charged) return null;
+    for (const r of relays) {
+      if (!r.live || r.chimney || Math.hypot(r.x - heroP.x, r.z - heroP.z) > 3 || Math.abs(r.y - heroP.y) > 2.5) continue;
+      short(r);
+      return r;
+    }
+    return null;
+  }
+  function short(best) {
+    best.live = false; best.t = 0;
+    best.lamp.material = mats.dead;
     word('SHORTED!', { x: best.x, y: best.y + 1, z: best.z }, 'big');
     shake(0.4);
     bolt({ x: best.x, y: best.y + 1, z: best.z }, { x: a.body.p.x, y: a.body.p.y + 0.5, z: a.body.p.z }, 0.35);
     drain(phase === 2 ? 5 : 4.2);
-    return { x: best.x, y: best.y, z: best.z };
   }
   function drain(t) {
     charged = false;
@@ -226,6 +242,7 @@ export function createElectro(ctx) {
     get state() { return { phase, hp: a.hpFrac(), charged, perched: !!perch, state: a.e.state, relays: relays.filter((r) => r.live && (phase === 1 ? !r.chimney : r.chimney === perch)).map((r) => ({ x: r.x, y: r.y, z: r.z })) }; },
     update,
     yankAt,
+    attackAt,
     setPhase(n) { if (n >= 2 && phase < 2) { phase = 2; a.e.hp = a.e.maxHp * 0.5; goUp(); } },
     dispose() {
       a.dispose();
