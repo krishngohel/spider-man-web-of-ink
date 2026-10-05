@@ -184,8 +184,14 @@ vec3 facade(vec3 base, float style, float seed) {
       col = glassColor(vec2(floor((u - u0) / bay), 99.0), seed, u, v);
       gGlass = max(gGlass, step(fract((u * 0.8 + sv) / 3.0), 0.12) * 0.5);
     }
-    // Awning stripe over each shop.
-    if (sv > 3.4 && sv < 4.2) col = mix(uAwning, uStone, step(0.5, fract(u / 0.8)) * 0.25);
+    // Awning stripe over each shop, a colour per shop (the city green, red, navy, mustard, maroon,
+    // teal), striped with cream on some.
+    if (sv > 3.4 && sv < 4.2) {
+      float ah = fract(sin(floor((u - u0) / bay) * 12.9898 + seed * 78.233) * 43758.5453);
+      vec3 aw = ah < 0.3 ? uAwning : ah < 0.45 ? vec3(0.72, 0.16, 0.14) : ah < 0.6 ? vec3(0.16, 0.24, 0.48) : ah < 0.72 ? vec3(0.86, 0.64, 0.18) : ah < 0.86 ? vec3(0.45, 0.12, 0.16) : vec3(0.12, 0.5, 0.52);
+      float stripes = step(0.5, fract(ah * 7.0)) * step(0.5, fract(u / 0.8));
+      col = mix(aw, uStone, max(step(0.5, fract(u / 0.8)) * 0.25, stripes * 0.85));
+    }
     gInk = max(gInk, hline(sv, 4.2, pw, 1.8) * lineK);
     gInk = max(gInk, hline(sv, 3.4, pw, 1.4) * lineK);
     gInk = max(gInk, frame(vec2(fx * bay, sv), lo * vec2(bay, 1.0), hi * vec2(bay, 1.0), pw, 1.4) * lineK);
@@ -309,7 +315,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v10';
+  mat.customProgramCacheKey = () => 'city-building-v11';
   return mat;
 }
 
