@@ -52,6 +52,7 @@ flat varying vec4 vBox;     // face u range (u0, u1) and the building's y range 
 float gInk = 0.0;           // ink drawn over the lit colour
 float gGlass = 0.0;         // a glass reflection streak, drawn over the lit colour
 float gEmit = 0.0;          // a lit window at night, unaffected by light
+vec3 gEmitCol = vec3(-1.0); // what lights up (a sign glows its own colour), else the window light
 float gNear = 1.0;          // fine detail fades with distance (1 near, 0 far)
 ${HASH}
 float h21(vec2 p) { return hash12(p); }
@@ -106,6 +107,7 @@ vec3 facade(vec3 base, float style, float seed) {
     float border = 1.0 - step(0.05, min(min(sp.x, 1.0 - sp.x), min(sp.y, 1.0 - sp.y)));
     col = mix(col, vec3(0.08), border);
     gEmit = max(gEmit, 0.25 + 0.75 * uNight);
+    gEmitCol = min(col * (1.0 + 0.25 * uNight), vec3(1.0)); // neon keeps its colour at night
     gInk = max(gInk, hline(top, 0.0, pw, 1.8));
     return col;
   }
@@ -300,14 +302,14 @@ vec3 facade(vec3 base, float style, float seed) {
   // sunlit tone, cross-hatching in shadow up close, then ink and glass shine on top.
   vec3 c = comicPattern(comicShade(diffuseColor.rgb, outgoingLight));
   c = mix(c, vec3(0.9, 0.95, 1.0), gGlass * (1.0 - 0.55 * gShadow));
-  c = mix(c, uWinLit, gEmit);
+  c = mix(c, gEmitCol.r < 0.0 ? uWinLit : gEmitCol, gEmit);
   c = mix(c, uInk, clamp(gInk, 0.0, 1.0));
   outgoingLight = c;
 }
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v9';
+  mat.customProgramCacheKey = () => 'city-building-v10';
   return mat;
 }
 

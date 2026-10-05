@@ -150,6 +150,7 @@ export function buildCity() {
       }
       buildBlock(b, d, rng, add);
       if (d.id === 'neon' && rng.chance(0.5)) addSigns(b, d, rng, add);
+      if (d.id === 'neon') addBlades(b, d, add);
     }
   }
 
@@ -240,6 +241,28 @@ function addSigns(b, d, rng, add) {
       const z = face === 2 ? b.minZ + s - 0.6 : b.maxZ - s + 0.1;
       const x = rng.range(b.minX + s + w / 2, Math.max(b.minX + s + w / 2 + 0.1, b.maxX - s - w / 2));
       add([x - w / 2, y, z], [x + w / 2, y + hgt, z + 0.5], 'sign', d.id, 18, { face: face === 2 ? -1 : 1, axis: 'z' });
+    }
+  }
+}
+
+// Neon Square's blade signs: tall, narrow signs sticking out over the sidewalk at street level, lit
+// at night (the flat billboards alone did not read as a neon district from the street). Their own
+// RNG per block, so the rest of the district is unchanged.
+function addBlades(b, d, add) {
+  const rng = createRng(((Math.round(b.minX) * 73856093) ^ (Math.round(b.minZ) * 19349663)) >>> 0);
+  const n = rng.int(2, 4), s = GRID.sidewalk, out = 2, th = 0.35;
+  for (let i = 0; i < n; i++) {
+    const y = rng.range(5, 9), hgt = rng.range(7, 13), face = rng.int(0, 3);
+    if (face < 2) {
+      const x = face === 0 ? b.minX + s : b.maxX - s;
+      const z = rng.range(b.minZ + s + 2, Math.max(b.minZ + s + 2.1, b.maxZ - s - 2));
+      const x0 = face === 0 ? x - out : x, x1 = face === 0 ? x : x + out;
+      add([x0, y, z - th / 2], [x1, y + hgt, z + th / 2], 'sign', d.id, 18, { face: face === 0 ? -1 : 1, axis: 'x' });
+    } else {
+      const z = face === 2 ? b.minZ + s : b.maxZ - s;
+      const x = rng.range(b.minX + s + 2, Math.max(b.minX + s + 2.1, b.maxX - s - 2));
+      const z0 = face === 2 ? z - out : z, z1 = face === 2 ? z : z + out;
+      add([x - th / 2, y, z0], [x + th / 2, y + hgt, z1], 'sign', d.id, 18, { face: face === 2 ? -1 : 1, axis: 'z' });
     }
   }
 }
