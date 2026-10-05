@@ -206,13 +206,14 @@ export const POSES = {
     hr: [-0.03, 0.47, 0.04], er: [-1, 0, 0.2], gr: 'grab', wrist: [0.2, 0.2],
     fl: [0.03, -0.85, 0.06], kl: [0, 0, 1], fr: [-0.09, -0.8, 0.14], kr: [0, 0, 1], toe: [0.55, 0.45],
   }),
-  // Upside down on the line (the classic): the web runs from the feet, one leg straight up the
-  // line, the other hooked round it, arms hanging loose past the head.
+  // Upside down on the line (the classic): the web runs from the left foot, that leg straight up
+  // the line, the right knee bent with its foot tucked behind the straight leg, the arms folded
+  // across the chest and the head lifted to look out (never arms dangling like a dropped puppet).
   hangInv: pose({
-    spine: [-0.08, 0, 0], head: [0.15, 0],
-    hl: [0.16, 0.36, 0.14], el: [1, 0, 0.3], gl: 'relaxed',
-    hr: [-0.1, 0.4, 0.2], er: [-1, 0, 0.3], gr: 'relaxed',
-    fl: [0.0, -0.87, 0.02], kl: [0, 0, 1], fr: [0.06, -0.52, -0.3], kr: [-0.4, 0, -1], toe: [0.9, 0.7],
+    spine: [0.12, 0, 0], head: [-0.35, 0],
+    hl: [-0.14, -0.2, 0.2], el: [1, -0.2, 0.5], gl: 'fist',
+    hr: [0.14, -0.16, 0.22], er: [-1, -0.2, 0.5], gr: 'fist',
+    fl: [0.0, -0.87, 0.02], kl: [0, 0, 1], fr: [0.05, -0.5, -0.2], kr: [-0.3, 0, 1], toe: [0.9, 0.7],
   }),
   // Mantle: both hands planted on the roof edge in front, pushing down, knees tucked up through.
   mantle: pose({

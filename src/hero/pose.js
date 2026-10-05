@@ -125,8 +125,8 @@ export function createPoser(heroModel) {
     // Where the web leaves the body: the web hand, or the feet when hanging upside down.
     lineWorld(out) {
       if (!inverted) return this.handWorld(out);
-      model.getObjectByName('foot_l').getWorldPosition(out);
-      return out.add(model.getObjectByName('foot_r').getWorldPosition(shoulder)).multiplyScalar(0.5);
+      // From the hooked foot (the straight leg up the line), not a point between both feet.
+      return model.getObjectByName('ball_l').getWorldPosition(out);
     },
 
     // at: where to draw the body (the game passes a position interpolated between physics steps).
