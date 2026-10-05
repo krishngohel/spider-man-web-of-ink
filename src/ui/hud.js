@@ -27,6 +27,12 @@ export function createHud(root, getSettings) {
   const letter = el('div', { class: 'letterbox' }, [el('i'), el('i')]);
   let letterT = null;
   const caption = el('div', { class: 'caption hidden' });
+  // Alerts (crimes) slide in at the right, apart from the caption box.
+  const alertBox = el('div', { class: 'alertbox' });
+  let alertT = 0;
+  // Captions queue (one at a time, never overwriting each other), duplicates dropped.
+  const captionQ = [];
+  let captionText = '';
   const wpMark = el('div', { class: 'waypoint hidden' }, [el('i'), el('span')]);
   const xpBox = el('div', { class: 'xpbox hidden' }, [el('b'), el('span', { class: 'xpbar' }, [el('i')])]);
   let xpT = 0;
@@ -35,7 +41,7 @@ export function createHud(root, getSettings) {
   const wordPool = Array.from({ length: 6 }, () => { const w = el('div', { class: 'word' }); words.append(w); return { el: w, t: 0 }; });
   let wordNext = 0;
   root.append(hud, toast, fader, letter);
-  hud.append(caption, wpMark, xpBox);
+  hud.append(caption, wpMark, xpBox, alertBox);
   const lctx = lines.getContext('2d');
 
   let tipIndex = 0;
@@ -100,7 +106,23 @@ export function createHud(root, getSettings) {
     fade(on) { fader.classList.toggle('on', on); },
     letterbox(secs) { letter.classList.add('on'); clearTimeout(letterT); letterT = setTimeout(() => letter.classList.remove('on'), secs * 1000); },
     // A comic caption box at the top left (a district name as you enter it).
-    caption(text, secs = 2.6) { caption.textContent = text; caption.classList.remove('hidden'); void caption.offsetWidth; caption.classList.add('show'); captionT = secs; },
+    caption(text, secs = 2.6) {
+      if (captionT > 0) {
+        if (text === captionText || captionQ.some((q) => q.text === text)) return;
+        captionQ.push({ text, secs });
+        if (captionQ.length > 3) captionQ.shift();
+        captionT = Math.min(captionT, 1.2); // the one showing makes way sooner
+        return;
+      }
+      captionText = text;
+      caption.textContent = text; caption.classList.remove('hidden'); void caption.offsetWidth; caption.classList.add('show'); captionT = secs;
+    },
+    // An alert at the right edge (a crime nearby), with its own slot.
+    alert(text, secs = 4) {
+      alertBox.textContent = text;
+      alertBox.classList.remove('show'); void alertBox.offsetWidth; alertBox.classList.add('show');
+      alertT = secs;
+    },
     setLockHint(on) { lockHint.classList.toggle('hidden', !on); },
     // The first-play tip steps aside while story tips or dialogue are up (never more than one
     // voice telling the player what to do).
@@ -171,7 +193,15 @@ export function createHud(root, getSettings) {
       }
       stateLabel.textContent = dev ? state : '';
       noAnchorT -= dt;
-      if (captionT > 0) { captionT -= dt; if (captionT <= 0) caption.classList.remove('show'); }
+      if (captionT > 0) {
+        captionT -= dt;
+        if (captionT <= 0) {
+          caption.classList.remove('show'); captionText = '';
+          const next = captionQ.shift();
+          if (next) setTimeout(() => this.caption(next.text, captionQ.length ? Math.min(next.secs, 2.2) : next.secs), 260);
+        }
+      }
+      if (alertT > 0) { alertT -= dt; if (alertT <= 0) alertBox.classList.remove('show'); }
       if (xpT > 0) { xpT -= dt; if (xpT <= 0) xpBox.classList.add('hidden'); }
       noAnchor.classList.toggle('show', noAnchorT > 0);
       reticle.classList.toggle('valid', !!(anchor && anchor.valid));

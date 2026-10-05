@@ -187,7 +187,7 @@ export function createContentWorld(g) {
         boss: { hit: (args) => { if (args.kind === 'web') carHit(); return { dealt: 0, blocked: true }; }, yank: () => { carHit(); return true; } } };
       combat.enemies.list.push(crime.car.e);
     }
-    g.caption(crime.bonus ? `CRIME: ${C.name}. ${crime.bonus.text}` : `CRIME: ${C.name}`, crime.bonus ? 4.5 : 3);
+    (g.alert ?? g.caption)(crime.bonus ? `CRIME: ${C.name}. ${crime.bonus.text}` : `CRIME: ${C.name}`, crime.bonus ? 5 : 3.5);
     g.crimeWaypoint({ x: spot.x, z: spot.z });
   }
   function carHit() {
@@ -212,9 +212,9 @@ export function createContentWorld(g) {
       g.reward('crime', { tokens: n <= CRIME_QUOTA ? { crime: 1 } : null, at: crime.spot });
       if (crime.bonus && crime.bonus.got >= crime.bonus.n) { g.reward('crime', { tokens: n <= CRIME_QUOTA ? { crime: 1 } : null, at: crime.spot }); g.stamp('BONUS!'); }
       if (nights) { nights.score++; nights.level = 1 + Math.floor(nights.score / 3); g.caption(`CRIME NIGHTS: ${nights.score} STOPPED, LEVEL ${nights.level}`, 2.5); }
-      g.caption(`${crime.C.name}: STOPPED`, 2.2);
+      (g.alert ?? g.caption)(`${crime.C.name}: STOPPED`, 2.5);
       g.persist();
-    } else if (crime) g.caption(`${crime.C.name}: TOO LATE`, 2.2);
+    } else if (crime) (g.alert ?? g.caption)(`${crime.C.name}: TOO LATE`, 2.5);
     g.crimeWaypoint(null);
     crime = null; crimeCd = nights ? 6 : 45 + Math.random() * 45;
   }

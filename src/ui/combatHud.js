@@ -157,7 +157,9 @@ export function createCombatHud(root, opts) {
       } else target.classList.add('hidden');
       // Prompts: at most two at a time, the most urgent first.
       {
-        const b = opts.getSettings?.()?.bindings ?? DEFAULT_BINDINGS, key = (a) => bindingLabel(b, a);
+        const b = opts.getSettings?.()?.bindings ?? DEFAULT_BINDINGS, pad = opts.getDevice?.() === 'pad';
+        const PADN = { attack: 'X', web: 'RB', hang: 'Y', finisher: 'R3', jump: 'A', dive: 'B', gadget: 'LB' };
+        const key = (a) => (pad ? PADN[a] ?? bindingLabel(b, a) : bindingLabel(b, a));
         const used = c.used ?? {}, fresh = (k, n = 3) => (used[k] ?? 0) < n;
         const t2 = c.target, near = t2 && isActive(t2) ? Math.hypot(t2.body.p.x - opts.hero.body.p.x, t2.body.p.z - opts.hero.body.p.z) : 99;
         const onGround = opts.hero.state === 'ground';

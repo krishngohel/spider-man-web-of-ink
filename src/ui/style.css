@@ -409,3 +409,5 @@ body.cb .bfill { background: linear-gradient(#5ab0ff, #1f4fb6); }
 .bpips i.now { background: #ff3a2a; }
 .cb-sensevig { position: absolute; inset: 0; opacity: 0; pointer-events: none; background: radial-gradient(circle, transparent 55%, rgba(255, 60, 40, 0.55) 100%); transition: opacity 0.06s; }
 .cb-sensevig.on { opacity: 1; }
+.alertbox { position: absolute; right: 22px; top: 120px; max-width: 360px; padding: 8px 14px; background: #ff4a3a; color: #fff; font-family: var(--head); font-size: 18px; letter-spacing: 0.5px; border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); transform: translateX(130%) rotate(1deg); transition: transform 0.28s cubic-bezier(.2,.9,.3,1.2); pointer-events: none; -webkit-text-stroke: 0.5px var(--ink); }
+.alertbox.show { transform: translateX(0) rotate(1deg); }

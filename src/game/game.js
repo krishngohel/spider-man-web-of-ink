@@ -194,7 +194,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const sfx = createSfx(() => settings.volume);
   const uiRoot = el('div', { class: 'ui-layer' });
   document.body.append(uiRoot);
-  const combatHud = createCombatHud(uiRoot, { get combat() { return combat; }, get hero() { return hero; }, getSettings: () => settings });
+  const combatHud = createCombatHud(uiRoot, { get combat() { return combat; }, get hero() { return hero; }, getSettings: () => settings, getDevice: () => input.device });
   {
     const sv = new THREE.Vector3();
     combat.setOnScreen((e) => { sv.set(e.body.p.x, e.body.p.y + 0.5, e.body.p.z).project(camera); return sv.z < 1 && Math.abs(sv.x) < 1 && Math.abs(sv.y) < 1; });
@@ -1086,7 +1086,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     reward: (kind, o = {}) => progress.reward(kind, o),
     say: (lines) => storyUi.say(lines),
     word: (t, p, kind) => { const sc = screenOf(p.x, (p.y ?? 1) + 1, p.z); if (sc.front) hud.word(t, sc.x, sc.y - 40, kind); },
-    caption: (t, s) => hud.caption(t, s), sfx, persist: () => persist(),
+    caption: (t, s) => hud.caption(t, s), alert: (t, s) => hud.alert(t, s), sfx, persist: () => persist(),
     stamp: (t) => { storyUi.stamp(t); sfx.event({ type: 'stamp' }); },
     timer: (label, s) => storyUi.timer(label, s),
     prompt: (t, k) => storyUi.hold(t, k),
