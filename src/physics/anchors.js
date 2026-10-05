@@ -25,6 +25,8 @@ export const SCORE = {
   dist: 1.6, clear: 0.59, vel: 1.15,
   survive: 3.49, progress: 0, heading: 2.06, keep: 0,
   predicted: 10, horizon: 1.8,
+  // Webs take turns either side of the street (left hand, right hand), as in Insomniac's games.
+  alternate: 0.3,
 };
 const PREDICT_DT = 1 / 45;
 export function predictSwing(world, p0, v0, a, g, k) {
@@ -54,7 +56,8 @@ export function predictSwing(world, p0, v0, a, g, k) {
 }
 
 // hero: { p, v }. opts: { dirX, dirZ } the wanted heading (unit, horizontal); assist; g gravity.
-export function findAnchor(world, hero, { dirX = 0, dirZ = 1, assist = 'normal', g = 19.62 } = {}) {
+// prevSide: which side of the heading the last web went (+1 / -1, 0 none): the other side scores higher.
+export function findAnchor(world, hero, { dirX = 0, dirZ = 1, assist = 'normal', g = 19.62, prevSide = 0 } = {}) {
   const fan = FANS[assist] ?? FANS.normal;
   const p = hero.p, v = hero.v;
   const ox = p.x, oy = p.y + SHOULDER, oz = p.z;
@@ -91,8 +94,9 @@ export function findAnchor(world, hero, { dirX = 0, dirZ = 1, assist = 'normal',
       const distScore = 1 - Math.abs(dist - ideal) / 30;
       const clearance = hit.y - dist - (floor + 2);
       const clearScore = clearance >= 0 ? SCORE.clear : clearance * 0.15;
-      const score = fan.aim * dirScore + SCORE.dist * distScore + clearScore + SCORE.vel * velScore;
-      cands.push({ x: hit.x, y: hit.y, z: hit.z, nx: hit.nx, ny: hit.ny, nz: hit.nz, box: hit.box, dist, score });
+      const side = Math.sign(px * rz - pz * rx);
+      const score = fan.aim * dirScore + SCORE.dist * distScore + clearScore + SCORE.vel * velScore + (prevSide && side === -prevSide ? SCORE.alternate : 0);
+      cands.push({ x: hit.x, y: hit.y, z: hit.z, nx: hit.nx, ny: hit.ny, nz: hit.nz, box: hit.box, dist, score, side });
     }
   }
   if (!cands.length) return null;

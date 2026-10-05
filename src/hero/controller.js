@@ -195,13 +195,18 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     // In the air only: on the ground the same button is the parkour run.
     if (assist && !hang && hero.state !== 'ground' && hero.assist !== 'off' && (hero.assist === 'high' || !hit || hit.y - body.p.y < 4)) {
       const d = wantedHeading(intent);
-      const auto = findAnchor(world, body, { dirX: d.x, dirZ: d.z, assist: hero.assist, g: g() });
+      const prevSide = hero.time - (hero.lastAnchorAt ?? -99) < 3 ? hero.lastAnchorSide ?? 0 : 0;
+      const auto = findAnchor(world, body, { dirX: d.x, dirZ: d.z, assist: hero.assist, g: g(), prevSide });
       if (auto) hit = { ...auto, auto: true };
     }
     // From the ground, a swing needs an anchor well overhead: a web to a rail or ledge at head
     // height only flings the hero sideways (off a bridge deck, into the street).
     if (hit && !hang && hero.state === 'ground' && hit.y - body.p.y < 4) hit = null;
     if (!hit) { if (!quiet) emit('miss'); return false; }
+    if (!hang) {
+      const d = wantedHeading(intent);
+      hero.lastAnchorSide = Math.sign(d.x * (hit.z - body.p.z) - d.z * (hit.x - body.p.x)); hero.lastAnchorAt = hero.time;
+    }
     const t = tune.webTravel + hit.dist / tune.webSpeed;
     hero.pendingWeb = { anchor: hit, t, travel: t, hang };
     emit('thwip', { x: hit.x, y: hit.y, z: hit.z });
