@@ -1,7 +1,7 @@
 import { applyDv } from '../physics/ledger.js';
 import { pickTarget, pickMeleeTarget, isActive, ARCHETYPES } from './enemies.js';
 import { TUNE } from './tuning.js';
-import { MOVES, chooseMove, clipFor, canChain, createBuffer, clipTiming, clipTimeAt } from './moves.js';
+import { MOVES, GROUND_FINISHERS, chooseMove, clipFor, canChain, createBuffer, clipTiming, clipTimeAt } from './moves.js';
 import { planWarp } from './warp.js';
 import { stopFor } from './hitstop.js';
 import { beatsToPunch } from './tokens.js';
@@ -35,7 +35,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     hp: COMBAT.hp, maxHp: COMBAT.hp, focus: 0,
     state: 'free', t: 0, combo: 0, comboT: 9, target: null,
     iframes: 0, outOfCombat: 9, attackHeldT: 0, webHeldT: 0, punchN: 0,
-    timeScale: 1, slowT: 0, slowKind: 'plain', finisherHoldT: 0, defeated: false, lastWord: 0,
+    timeScale: 1, slowT: 0, slowKind: 'plain', finisherHoldT: 0, finIdx: 0, defeated: false, lastWord: 0,
     webAmmo: TUNE.webCap, webRefillT: 0,
     move: null, step: 0, airStep: 0, lastKey: '', sameRun: 0, mash: 0, lastMoveAt: -9, lastMoveEnd: -9, airKeepT: 0, clock: 0, hclock: 0, counterUntil: -9, counterTgt: null, recent: [], used: {}, attackAt: -9, webAt: -9, stick: { x: 0, z: 0 }, camFwd: { x: 0, y: 0, z: 1 },
     heroStop: 0, heroStopAll: 0, faceYaw: null,
@@ -194,11 +194,13 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     let lift = M.lift;
     if (m.key === 'launcher') lift = COMBAT.uppercutLift;
     if (M.finisher) {
-      enemies.hit(tgt, { dmg: 999, dir: { x: toward(tgt).x, z: toward(tgt).z }, push: M.push, lift: M.lift, from: P() });
+      const u = toward(tgt);
+      if (M.fin === 'web') webFling(tgt, u.x * M.push, M.lift, u.z * M.push);
+      else enemies.hit(tgt, { dmg: 999, dir: { x: u.x, z: u.z }, push: M.push, lift: M.lift, from: P() });
       const s = stopFor('finisher');
       c.heroStop = Math.max(c.heroStop, s); c.heroStopAll = c.heroStop; enemies.freeze?.(tgt, s);
       if (finisherSlowmo) slowmo(0.4);
-      word('FINISHER!', tgt, 'big');
+      word(M.name ?? 'FINISHER!', tgt, 'big');
       onEvent({ type: 'finisher', e: tgt });
       return;
     }
@@ -530,18 +532,32 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       if (c.finisherHoldT > 0 && c.finisherHoldT < 0.45 && c.focus >= 1 && tgt && near.d < 3.2) {
         c.focus -= 1;
         if (!grounded()) {
-          enemies.hit(tgt, { dmg: 999, dir: { x: near.x, z: near.z }, push: 10, lift: 5, from: P() });
+          let name = 'SPIKED!';
+          if (tgt.boss) enemies.hit(tgt, { dmg: 999, dir: { x: near.x, z: near.z }, push: 10, lift: 5, from: P() });
+          else if (hero.state === 'wall') {
+            // From a wall: webbed and yanked onto the wall beside you (he sticks there).
+            webFling(tgt, -near.x * 14, 2, -near.z * 14);
+            name = 'WALL ART!';
+          } else {
+            // In the air: webbed and spiked into the street.
+            enemies.hit(tgt, { dmg: 999, dir: { x: near.x, z: near.z }, push: 3, lift: -16, kind: 'slam', from: P() });
+            applyDv(tgt.body, 'rope', 0, -16 - tgt.body.v.y, 0); // a knockout pops him up; a spike sends him down
+            onEvent({ type: 'slam', at: { x: tgt.body.p.x, y: tgt.body.p.y, z: tgt.body.p.z } });
+          }
           const s = stopFor('finisher');
           c.heroStop = Math.max(c.heroStop, s); c.heroStopAll = c.heroStop; enemies.freeze?.(tgt, s);
           if (finisherSlowmo) slowmo(0.4);
           c.used.finisher = (c.used.finisher ?? 0) + 1;
-          word('FINISHER!', tgt, 'big');
+          word(name, tgt, 'big');
           onEvent({ type: 'finisher', e: tgt });
         } else {
-          startMove('finisher');
-          c.iframes = Math.max(c.iframes, MOVES.finisher.time);
-          enemies.freeze?.(tgt, MOVES.finisher.impact);
-          onEvent({ type: 'finisherStart', e: tgt, time: MOVES.finisher.time });
+          // The ground finishers in turn (never the same one twice running); a brute is too big
+          // to fling or flip, he takes the kick.
+          const key = tgt.boss || tgt.A?.heavy ? 'finisher' : GROUND_FINISHERS[c.finIdx++ % GROUND_FINISHERS.length];
+          startMove(key);
+          c.iframes = Math.max(c.iframes, MOVES[key].time);
+          enemies.freeze?.(tgt, MOVES[key].impact);
+          onEvent({ type: 'finisherStart', e: tgt, time: MOVES[key].time });
         }
       }
       c.finisherHoldT = 0;
@@ -553,6 +569,14 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       onEvent({ type: 'heal' });
       word('PATCHED UP!', null);
     }
+  }
+
+  // Webbed up for good and thrown: a webbed body that hits a wall sticks there (enemies.js).
+  function webFling(e, vx, vy, vz) {
+    if (e.boss || e.puppet || e.isPlayer) { enemies.hit(e, { dmg: 999, dir: { x: vx, z: vz }, push: 10, lift: 5, from: P() }); return; }
+    enemies.hit(e, { kind: 'web', dmg: 99, from: P() });
+    e.takenDown = true; // no breaking out of a finisher
+    applyDv(e.body, 'rope', vx - e.body.v.x, vy - e.body.v.y, vz - e.body.v.z);
   }
 
   function startDodge(intent, engaged) {

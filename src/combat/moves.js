@@ -20,7 +20,11 @@ export const MOVES = {
   spike: { clips: ['Hurricane_Kick', 'Kick_Flying'], alt: 'Melee_Hook', time: 0.4, impact: 0.15, push: 3, lift: -16, dmg: 1.6, stop: 'ender', air: true, kick: true, knock: true },
   strike: { clips: ['Flying_Kick', 'Kick_Flying'], alt: 'Melee_Hook', time: 0.9, impact: 0.85, push: 8, lift: 3, dmg: 1.6, stop: 'ender', kick: true, travel: true },
   // The finisher (spec 1.9): one second, the hero untouchable, it cannot be cancelled.
-  finisher: { clips: ['Kip_Kick', 'Kick_Spin'], alt: 'Melee_Hook', time: 1.0, impact: 0.55, push: 10, lift: 5, dmg: 1, stop: 'finisher', kick: true, knock: true, finisher: true },
+  finisher: { clips: ['Kip_Kick', 'Kick_Spin'], alt: 'Melee_Hook', time: 1.0, impact: 0.55, push: 10, lift: 5, dmg: 1, stop: 'finisher', kick: true, knock: true, finisher: true, name: 'LIGHTS OUT!' },
+  // More ground finishers, taken in turn: webbed up and flung (he sticks to a wall he hits) and a
+  // flip kick that sends him sky high.
+  finWeb: { clips: ['Shoulder_Throw', 'Pull_Rope'], alt: 'Melee_Hook', time: 0.9, impact: 0.45, push: 16, lift: 4, dmg: 1, stop: 'finisher', knock: true, finisher: true, fin: 'web', name: 'WRAPPED UP!' },
+  finUpper: { clips: ['Flip_Kick', 'Kick_Front'], alt: 'Melee_Hook', time: 0.9, impact: 0.4, push: 2, lift: 13, dmg: 1, stop: 'finisher', kick: true, knock: true, finisher: true, name: 'SKY HIGH!' },
   throw: { clips: ['Shoulder_Throw', 'Pull_Rope'], alt: 'Melee_Hook', time: 0.5, impact: 0.25, push: 14, lift: 4, dmg: 1.2, stop: 'ender', knock: true },
   // Combo moves (after Insomniac's Spider-Man): each one is its own input, so a fight is choices,
   // not one string on repeat.
@@ -34,6 +38,7 @@ export const MOVES = {
   pull: { clips: ['Pull_Rope', 'Melee_Hook'], alt: 'Melee_Hook', time: 0.5, impact: 0.28, push: 0.5, lift: 11, dmg: 1.2, stop: 'launcher', noWarp: true, name: 'GET OVER HERE!' },
 };
 const STRING = ['jab', 'cross', 'round', 'ender'];
+export const GROUND_FINISHERS = ['finisher', 'finWeb', 'finUpper'];
 const AIR = ['air1', 'air2', 'air3', 'spike'];
 
 // Which move an attack press means (spec 1.4): by distance first, then height, then context.

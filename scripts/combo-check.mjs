@@ -128,6 +128,23 @@ const click = async (button = 'left') => { await p.mouse.down({ button }); await
   if (Math.sign(e1.z - h1.p.z) === side0) console.log('  vault debug', JSON.stringify(dbg), 'd0', Math.hypot(e0.x - h0.p.x, e0.z - h0.p.z).toFixed(2), 'hero state', h1.state);
   results.push(['vault over a shield thug', Math.sign(e1.z - h1.p.z) !== side0]);
 }
+// 8. Finishers: three in a row on the ground take turns (kick, web fling, flip), each one ends its thug.
+{
+  const seen = new Set(); let ended = 0;
+  for (let i = 0; i < 3; i++) {
+    await fresh([[0, -198.2]]);
+    await p.evaluate(() => { window.__game.combat().heroCombat.c.focus = 3; });
+    const s = await state(); await look(s.enemies[0].x, s.enemies[0].z);
+    await sleep(100);
+    await p.keyboard.down('KeyX'); await sleep(90); await p.keyboard.up('KeyX');
+    for (const k of await watch(1400)) seen.add(k);
+    await sleep(400);
+    const e = (await state()).enemies[0];
+    if (!e || ['out', 'webbed', 'pinned', 'air', 'down'].includes(e.state) || e.hp <= 0) ended++;
+    else console.log('  finisher left him', e.state, e.hp);
+  }
+  results.push([`ground finishers vary (${[...seen].filter((k) => /^fin/.test(k)).join(', ')}) and each ends the thug`, ['finisher', 'finWeb', 'finUpper'].every((k) => seen.has(k)) && ended === 3]);
+}
 await b.close();
 let fail = 0;
 for (const [name, ok] of results) { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`); if (!ok) fail++; }
