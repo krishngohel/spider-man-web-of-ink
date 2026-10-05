@@ -73,7 +73,10 @@ export function createAnimator(root, clips) {
     play(name, { fade = 0.15, once = false, timeScale = 1 } = {}) {
       const next = action(name);
       if (next === current && !once) { next.timeScale = timeScale; return next; }
-      next.reset();
+      // Called back while still fading out (idle, jog, idle on a quick turn): it carries on from
+      // where it is, at the weight it has, instead of restarting at frame 0 with no weight (a pop).
+      const back = !once && fadingOut.has(next) ? next.getEffectiveWeight() : -1;
+      if (back < 0) next.reset();
       next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
       next.clampWhenFinished = once;
       next.timeScale = timeScale;
@@ -81,8 +84,10 @@ export function createAnimator(root, clips) {
       fadingOut.delete(next);
       if (current && current !== next && fade > 0) {
         fadingOut.set(current, { w0: current.getEffectiveWeight(), t: 0, dur: fade });
-        next.setEffectiveWeight(0);
-        fadeIn = { action: next, t: 0, dur: fade };
+        // Start the eased ramp at the point that matches the weight it already has.
+        const w = Math.max(0, Math.min(1, back));
+        next.setEffectiveWeight(back < 0 ? 0 : w);
+        fadeIn = { action: next, t: back < 0 ? 0 : fade * (0.5 - Math.sin(Math.asin(1 - 2 * w) / 3)), dur: fade };
       } else {
         next.setEffectiveWeight(1);
         fadeIn = null;

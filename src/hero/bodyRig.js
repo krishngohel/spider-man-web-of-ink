@@ -110,11 +110,11 @@ export function createBodyRig(model) {
   const modelQ = new THREE.Quaternion();
   const toWorldDir = (x, y, z, out) => out.set(x, y, z).applyQuaternion(modelQ);
 
-  function solveArm(s, p, o, overrideWorld) {
-    // Hand target: shoulder joint + offset in the chest frame.
+  function solveArm(s, p, o, overrideWorld, w = 1) {
+    // Hand target: shoulder joint + offset in the chest frame, eased toward a pin (the web line).
     s.upper.getWorldPosition(v2);
-    if (overrideWorld) target.copy(overrideWorld);
-    else target.copy(v3.set(p[o], p[o + 1], p[o + 2]).applyQuaternion(chestQ)).add(v2);
+    target.copy(v3.set(p[o], p[o + 1], p[o + 2]).applyQuaternion(chestQ)).add(v2);
+    if (overrideWorld && w > 0) target.lerp(overrideWorld, Math.min(1, w));
     pole.set(p[o + 3], p[o + 4], p[o + 5]).applyQuaternion(chestQ);
     solveTwoBone(s.upper, s.lower, s.hand, target, pole, 1);
   }
@@ -134,7 +134,8 @@ export function createBodyRig(model) {
   }
 
   // p: pose vector (see poses.js LAYOUT). webHand: optional { side: 'l'|'r', world: Vector3 }
-  // to pin one hand onto the web line, overriding the pose's hand target.
+  // to pin one hand onto the web line, overriding the pose's hand target, or { l, r } each
+  // { world, w } for pins easing in and out (w 0 to 1).
   function apply(p, webHand = null) {
     resetToRest();
     model.getWorldQuaternion(modelQ);
@@ -157,8 +158,11 @@ export function createBodyRig(model) {
     v1.set(0, 1, 0).applyQuaternion(chestQ); mq.setFromAxisAngle(v1, p[4] * 0.5);
     rotateWorld(neck, mq); rotateWorld(head, mq);
     // Arms and legs.
-    solveArm(L, p, 5, webHand && webHand.side === 'l' ? webHand.world : null);
-    solveArm(R, p, 11, webHand && webHand.side === 'r' ? webHand.world : null);
+    if (webHand?.l) { solveArm(L, p, 5, webHand.l.world, webHand.l.w); solveArm(R, p, 11, webHand.r.world, webHand.r.w); }
+    else {
+      solveArm(L, p, 5, webHand && webHand.side === 'l' ? webHand.world : null);
+      solveArm(R, p, 11, webHand && webHand.side === 'r' ? webHand.world : null);
+    }
     solveLeg(L, p, 17);
     solveLeg(R, p, 23);
     // Wrists, toes, fingers (local rotations on top of the solved limbs).

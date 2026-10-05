@@ -91,6 +91,10 @@ export function createPoser(heroModel) {
   let trickWas = false;          // hands-on-the-edge pose while going over a ledge     // hanging upside down: the web runs from the feet
   const webWorld = new THREE.Vector3();
   const webHand = { side: 'r', world: webWorld };
+  // The pins as the rig sees them: each hand eases onto and off its pin, and a pinned hand
+  // glides to a new grip (a new web) rather than jumping. Held relative to the body, so a pin
+  // easing out at 40 m/s does not trail behind in the air.
+  const pins = { l: { world: new THREE.Vector3(), w: 0, rel: new THREE.Vector3(), on: false }, r: { world: new THREE.Vector3(), w: 0, rel: new THREE.Vector3(), on: false } };
 
   function sideOf(hero, x, z) {
     // Right of the facing (y up, right-handed): (-fz, fx).
@@ -426,7 +430,17 @@ export function createPoser(heroModel) {
       if (procW > 0.01) {
         root.updateMatrixWorld(true);
         rig.snapshot();
-        rig.apply(cur, pin);
+        for (const sd of ['l', 'r']) {
+          const q = pins[sd], want = pin && pin.side === sd;
+          if (want) {
+            tmp.copy(pin.world).sub(root.position);
+            if (!q.on && q.w < 0.02) q.rel.copy(tmp); else q.rel.lerp(tmp, 1 - Math.exp(-dt * 28));
+          }
+          q.on = !!want;
+          q.w += ((want ? 1 : 0) - q.w) * (1 - Math.exp(-dt * (want ? 18 : 12)));
+          q.world.copy(q.rel).add(root.position);
+        }
+        rig.apply(cur, pins);
         rig.blendWithSnapshot(procW);
       }
     },
