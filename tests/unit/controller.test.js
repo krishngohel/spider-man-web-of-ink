@@ -527,6 +527,21 @@ describe('ledges, corners and launches', () => {
     run(h, i, dt);
     expect(h.events.some((e) => e.type === 'launch')).toBe(false);
   });
+  it('a wall run past a corner wraps round onto the next face', () => {
+    const w = city();
+    const h = createHero(w);
+    h.place(15 - tune.radius - 0.02, 30, 84, 0, 0, 12, 'wall');
+    h.wall.nx = -1; h.wall.nz = 0; h.wallMomentum = true;
+    let wrapped = null;
+    h.on?.('cornerWrap', () => { wrapped = true; });
+    run(h, emptyIntent(), 0.8, () => { if (!wrapped && h.state === 'wall' && h.wall.nz > 0.9) wrapped = { x: h.body.p.x, z: h.body.p.z, vx: h.body.v.x }; });
+    expect(wrapped).toBeTruthy();
+    expect(h.state).toBe('wall');
+    expect(h.wall.nz).toBeGreaterThan(0.9);
+    expect(h.body.p.z).toBeGreaterThan(90);
+    expect(h.body.v.x).toBeGreaterThan(4);
+  });
+
   it('wall to wall: a wall jump across an alley sticks to the far wall and can jump again', () => {
     const w = createWorld();
     w.addBox({ min: [-20, 0, -30], max: [-4, 60, 30] });

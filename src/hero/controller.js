@@ -725,6 +725,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       hero.wallLost = 0;
       hero.wall.nx = touch.nx; hero.wall.nz = touch.nz; hero.wall.box = touch.box;
     } else {
+      if (cornerWrap()) return;
       hero.wallLost += dt;
       if (hero.wallLost > WALL_LOST) {
         const box = hero.wall.box;
@@ -742,6 +743,29 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
   }
 
   function runningUp(intent) { return intent.swing; }
+
+  // Running along a wall past the building's corner: round it onto the next face with the same
+  // speed (Insomniac's corner wrap), instead of dropping off into the air.
+  function cornerWrap() {
+    const box = hero.wall.box, p = body.p, v = body.v;
+    if (!box || box.minX === undefined || p.y > box.maxY - 0.6 || p.y < box.minY + 0.5) return false;
+    const nx = hero.wall.nx, nz = hero.wall.nz;
+    if (Math.abs(nx) < 0.95 && Math.abs(nz) < 0.95) return false;
+    const vn = v.x * nx + v.z * nz, tx = v.x - vn * nx, tz = v.z - vn * nz, th = Math.hypot(tx, tz);
+    if (th < 2) return false;
+    const ux = tx / th, uz = tz / th;
+    const beyond = ux > 0.9 ? p.x - box.maxX : ux < -0.9 ? box.minX - p.x : uz > 0.9 ? p.z - box.maxZ : uz < -0.9 ? box.minZ - p.z : -1;
+    if (beyond < -0.2 || beyond > 1.2) return false;
+    const R = tune.radius, IN = 0.4; // flush with the new face so the contact holds
+    if (Math.abs(ux) > 0.9) { p.x = ux > 0 ? box.maxX + R : box.minX - R; p.z = nz > 0 ? box.maxZ - IN : box.minZ + IN; }
+    else { p.z = uz > 0 ? box.maxZ + R : box.minZ - R; p.x = nx > 0 ? box.maxX - IN : box.minX + IN; }
+    // The new face looks along the old travel; the run carries on along it, away from the corner.
+    push(-nx * th - v.x - ux * ADHESION, 0, -nz * th - v.z - uz * ADHESION, 'corner wrap', true);
+    hero.wall.nx = ux; hero.wall.nz = uz;
+    hero.wallLost = 0;
+    emit('cornerWrap');
+    return true;
+  }
 
   // Glide ----------------------------------------------------------------------------------
   function glideStep(intent, dt) {
