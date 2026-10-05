@@ -22,6 +22,7 @@ import { createCityLife } from '../world/cityLife.js';
 import { SHADE_UNIFORMS, setShadowVolume } from '../render/comicShade.js';
 import { buildStreetProps, carBoxes } from '../world/streetProps.js';
 import { buildStreetMeshes } from '../world/streetMesh.js';
+import { buildLanterns } from '../world/lanterns.js';
 import { createHero, emptyIntent } from '../hero/controller.js';
 import { loadHeroAssets, buildHeroModel, loadCombatClips } from '../hero/model.js';
 import { TUNE } from '../combat/tuning.js';
@@ -115,6 +116,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   buildCityMeshes(city, scene, quality);
   setShadowVolume(buildShadowVolume(city.districts ?? []));
   const streetGroup = buildStreetMeshes(street, scene, quality);
+  const lanterns = buildLanterns(city, scene);
   const rain = createRain(scene);
   const life = createCityLife(scene, city, quality);
   let scare = null;
@@ -150,6 +152,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     mixC(a.fog, b.fog, t, fogState.color); fogState.near = a.fogNear + (b.fogNear - a.fogNear) * t;
     setNight(a.night);
     streetGroup.userData.setNight?.(a.night);
+    lanterns.userData.setNight(a.night);
     rain.setAmount(a.rain + (b.rain - a.rain) * t);
     // The light of the hour for the comic shading: its level and its colour.
     // Only partly lifted: a night stays mostly in shade, just not all of it.
