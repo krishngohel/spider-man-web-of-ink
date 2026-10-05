@@ -115,11 +115,13 @@ export const SHADOW_ALPHA = /* glsl */ `
 
 // A plain toon material (props, trees, water towers, crowds) shaded by the same comic rule.
 // hooks (optional): vertexHead / vertexBegin (vertex animation after begin_vertex),
-// fragmentHead / fragmentColor (colour changes after color_fragment), key (program cache).
+// fragmentHead / fragmentColor (colour changes after color_fragment), uniforms (added to the shader),
+// key (program cache).
 export function comicToon(params, hooks = null) {
   const mat = new THREE.MeshToonMaterial({ ...params, gradientMap: toonGradient() });
   mat.onBeforeCompile = (shader) => {
     addShadeUniforms(shader);
+    if (hooks?.uniforms) Object.assign(shader.uniforms, hooks.uniforms);
     if (hooks?.vertexHead) shader.vertexShader = shader.vertexShader.replace('#include <common>', `#include <common>
 ${hooks.vertexHead}`);
     if (hooks?.vertexBegin) shader.vertexShader = shader.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>

@@ -112,7 +112,9 @@ export function skillEffects(skills) {
 const PATTERN = { amazing: 1, scarlet: 2, homemade: 3, wrestler: 4, punk: 5 };
 // model: a fitted film suit mesh worn instead of the painted body (hero_m.glb SuitModel).
 const MODEL = { classic: 'tasm' };
-const SU = (id, name, style, red, blue, black, lens, level, cost, power = null, story = null) => ({ id, name, style, pattern: PATTERN[id] ?? 0, model: MODEL[id] ?? null, red, blue, black, lens, level, cost, power, story });
+// Colourways of the film suit (its texture recoloured): until a suit has a model of its own.
+const RECOLOR = new Set(['amazing', 'crimson', 'arctic', 'gold', 'rocket', 'sunset', 'negative', 'future', 'symbiote', 'last']);
+const SU = (id, name, style, red, blue, black, lens, level, cost, power = null, story = null) => ({ id, name, style, pattern: PATTERN[id] ?? 0, model: MODEL[id] ?? (RECOLOR.has(id) ? 'tasm' : null), recolor: RECOLOR.has(id), red, blue, black, lens, level, cost, power, story });
 export const SUITS = [
   SU('classic', 'Classic', 0, 0xbb121e, 0x192e7e, 0x0e0d16, 0xf4f6fb, 1, {}, 'webBlossom'),
   SU('amazing', 'Amazing', 0, 0xa3141e, 0x14235e, 0x14141c, 0xf2b33d, 2, { crime: 2 }),

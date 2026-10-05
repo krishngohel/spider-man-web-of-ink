@@ -402,6 +402,43 @@ ${SHADOW_ALPHA}
   return mat;
 }
 
+// The film suit recoloured (Crimson, Arctic, Black and Gold...): its texture's red panels take the
+// suit's main colour, the navy panels its second colour, the dark web lines its line colour and
+// the pale lenses its lens colour, each keeping the texture's own shading (the suit's weave and
+// folds). recolor 0 shows the texture as it is (the classic film suit).
+function makeRecolorUniforms(suit) {
+  const u = { uRcOn: { value: 0 }, uRcRed: { value: new THREE.Color() }, uRcBlue: { value: new THREE.Color() }, uRcLine: { value: new THREE.Color() }, uRcLens: { value: new THREE.Color() } };
+  applyRecolor(u, suit);
+  return u;
+}
+function applyRecolor(u, suit) {
+  u.uRcOn.value = suit.recolor ? 1 : 0;
+  u.uRcRed.value.set(suit.red); u.uRcBlue.value.set(suit.blue); u.uRcLine.value.set(suit.black); u.uRcLens.value.set(suit.lens);
+}
+const SUIT_RECOLOR_HOOKS = (uniforms) => ({
+  uniforms,
+  key: 'suit-recolor-v2',
+  fragmentHead: 'uniform float uRcOn; uniform vec3 uRcRed, uRcBlue, uRcLine, uRcLens;',
+  fragmentColor: `
+  if (uRcOn > 0.5) {
+    // Masks judged in display (sRGB) values, as the texture looks: in linear the navy panels read
+    // as near black and were taken for web lines.
+    vec3 c = diffuseColor.rgb, s = pow(max(c, vec3(0.0)), vec3(1.0 / 2.2));
+    float mx = max(s.r, max(s.g, s.b)), mn = min(s.r, min(s.g, s.b));
+    float sat = (mx - mn) / max(mx, 1e-3), lum = dot(s, vec3(0.3, 0.59, 0.11));
+    float red = smoothstep(0.12, 0.25, s.r - max(s.g, s.b));
+    float blue = smoothstep(0.04, 0.12, s.b - s.r) * smoothstep(0.15, 0.3, sat) * (1.0 - red);
+    float line = (1.0 - smoothstep(0.1, 0.2, lum)) * (1.0 - red) * (1.0 - blue);
+    float lens = smoothstep(0.45, 0.65, lum) * (1.0 - smoothstep(0.1, 0.22, sat));
+    // Shading relative to the panel's typical brightness, so the weave and folds carry over.
+    float lumL = dot(c, vec3(0.3, 0.59, 0.11));
+    vec3 r2 = uRcRed * clamp(lumL / 0.16, 0.4, 1.6), b2 = uRcBlue * clamp(lumL / 0.035, 0.4, 1.6);
+    c = mix(c, r2, red); c = mix(c, b2, blue);
+    c = mix(c, uRcLine * 0.9, line); c = mix(c, uRcLens * clamp(lum / 0.6, 0.6, 1.2), lens);
+    diffuseColor.rgb = c;
+  }`,
+});
+
 // A suit with a model (the fitted film suit) shows that mesh and hides the painted body.
 function showSuitModel(hero, on) {
   const use = on && hero.suitMeshes?.length > 0;
@@ -411,6 +448,7 @@ function showSuitModel(hero, on) {
 
 export function setSuit(hero, suit) {
   showSuitModel(hero, !!suit.model);
+  if (hero.recolorU) applyRecolor(hero.recolorU, suit);
   const u = hero.suitMat.userData.suit;
   u.uRed.value.set(suit.red); u.uBlue.value.set(suit.blue); u.uBlack.value.set(suit.black); u.uLens.value.set(suit.lens);
   u.uStyle.value = suit.style ?? 0;
@@ -463,6 +501,7 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
   orient.add(model);
   const suitMat = suitMaterial(suit);
   const suitMeshes = [], bodyMeshes = [];
+  const recolorU = makeRecolorUniforms(suit);
   const inSuitModel = (o) => { for (let n = o; n; n = n.parent) if (n.name === 'SuitModel') return true; return false; };
   if (female) suitMat.userData.suit.uBodyScale.value.set(...BODY_SCALE_F);
   const hulls = [];
@@ -470,7 +509,7 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
     if (!o.isSkinnedMesh) return;
     if (inSuitModel(o)) {
       // The fitted film suit: its own texture under the comic toon shading, outlined like the body.
-      o.material = comicToon({ map: o.material.map ?? null, color: 0xffffff });
+      o.material = comicToon({ map: o.material.map ?? null, color: 0xffffff }, SUIT_RECOLOR_HOOKS(recolorU));
       o.castShadow = true;
       o.frustumCulled = false;
       suitMeshes.push(o);
@@ -491,7 +530,7 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
   const bone = (n) => model.getObjectByName(n);
   showSuitModel({ suitMeshes, bodyMeshes }, !!suit.model);
   return {
-    root, orient, model, suitMat, hulls: hullMeshes, suitMeshes, bodyMeshes,
+    root, orient, model, suitMat, hulls: hullMeshes, suitMeshes, bodyMeshes, recolorU,
     animator: createAnimator(model, assets.clips),
     bones: {
       upperarmR: bone('upperarm_r'), lowerarmR: bone('lowerarm_r'), handR: bone('hand_r'),
