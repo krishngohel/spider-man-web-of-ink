@@ -62,6 +62,13 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
   const winding = new Map();
 
   function heroHit(h) { return heroCombat.takeHit(h); }
+  function senseFor(en, ranged) {
+    if (en.atBody && en.atBody !== hero.body) return false;
+    const p = en.body.p, h = hero.body.p, d = Math.hypot(p.x - h.x, p.y - h.y, p.z - h.z);
+    if (en.boss) return d < 40;
+    if (ranged) return d < (en.A?.reach ?? 30) + 4;
+    return d < (en.A?.reach ?? 2) + 3.5;
+  }
   const heroInvuln = () => heroCombat.c.iframes > 0;
 
   function preStep(intent, dt) {
@@ -145,7 +152,11 @@ export function createCombat({ scene, world, assets, hero, city, getSettings, fe
 
   function handle(e) {
     switch (e.type) {
-      case 'enemyWindup': winding.set(e.e, { red: false, heavy: !!e.unblockable, ranged: !!e.ranged }); feedback.sense(e.e, e.unblockable, e.ranged); break;
+      case 'enemyWindup':
+        // The spider-sense is for blows coming at you: not a thug swinging at the generator or
+        // another player, not a fist from across the street (it fired for every windup anywhere).
+        if (senseFor(e.e, !!e.ranged)) { winding.set(e.e, { red: false, heavy: !!e.unblockable, ranged: !!e.ranged }); feedback.sense(e.e, e.unblockable, e.ranged); }
+        break;
       case 'enemyRed': feedback.senseRed?.(e.e, e.heavy, e.ranged); break;
       case 'enemyShoot': {
         const p = e.e.body.p, h = e.to ?? hero.body.p, v = e.to ? { x: 0, y: 0, z: 0 } : hero.body.v;

@@ -38,9 +38,12 @@ export function createCombatHud(root, opts) {
     return { g, el: s, a };
   });
   const flash = el('div', { class: 'cb-flash' });
+  // The dodge window: the screen edge glows red (spider-sense pass).
+  const senseVig = el('div', { class: 'cb-sensevig' });
+  let vigT = 0;
   // Move prompts: what you can do right now, each fading for good once used a few times.
   const prompts = el('div', { class: 'cb-prompts' });
-  const box = el('div', { class: 'cb hidden' }, [panel, combo, sense, squig, ...rings.map((r) => r.el), ...tells.map((q) => q.el), target, gadget, prompts, flash, wheel]);
+  const box = el('div', { class: 'cb hidden' }, [panel, combo, sense, squig, ...rings.map((r) => r.el), ...tells.map((q) => q.el), target, gadget, prompts, senseVig, flash, wheel]);
   root.append(box);
   let squigT = 0, flashT = 0, shownCombo = 0, wheelOpen = false, wheelPick = null, wheelVec = { x: 0, y: 0 };
   const v = new THREE.Vector3();
@@ -65,6 +68,7 @@ export function createCombatHud(root, opts) {
     red(e, heavy) {
       squig.classList.add('red');
       squigT = Math.max(squigT, 0.3);
+      vigT = TUNE.redWindow + 0.05;
       if (heavy) { const r = rings.find((q) => q.e === e); if (r) r.el.classList.add('red'); }
       for (const a of arcs) if (a.e === e) a.el.classList.add('red');
       for (const q of tells) if (q.e === e) q.el.classList.add('red');
@@ -100,6 +104,7 @@ export function createCombatHud(root, opts) {
       pips.forEach((p, i) => { p.firstChild.style.width = `${Math.max(0, Math.min(1, c.focus - i)) * 100}%`; p.classList.toggle('full', c.focus >= i + 1); });
       if (c.combo !== shownCombo) { shownCombo = c.combo; combo.firstChild.textContent = `x${c.combo}`; combo.classList.toggle('hidden', c.combo < 2); if (c.combo >= 2) { combo.classList.remove('pop'); void combo.offsetWidth; combo.classList.add('pop'); } }
       squigT -= dt; squig.classList.toggle('show', squigT > 0);
+      vigT -= dt; senseVig.classList.toggle('on', vigT > 0 && (opts.getSettings?.()?.cameraShake ?? true));
       // Over the hero's head.
       const hero = opts.hero;
       if (squigT > 0 && hero) {

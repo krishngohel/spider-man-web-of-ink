@@ -57,9 +57,9 @@ describe('combat rules', () => {
     b.state = 'down';
     expect(hitDamage(b, 10, true)).toBeGreaterThan(10);
   });
-  it('light attacks wind up 0.6 s, heavies 0.9 s, guns keep their own', () => {
-    expect(windupFor(ARCHETYPES.brawler)).toBe(0.6);
-    expect(windupFor(ARCHETYPES.brute)).toBe(0.9);
+  it('light attacks wind up 0.7 s, heavies 1.0 s, guns keep their own', () => {
+    expect(windupFor(ARCHETYPES.brawler)).toBe(0.7);
+    expect(windupFor(ARCHETYPES.brute)).toBe(1.0);
     expect(windupFor(ARCHETYPES.gunner)).toBe(ARCHETYPES.gunner.windup);
   });
   it('every gadget has three levels of charges that never shrink', () => {

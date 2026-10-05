@@ -341,7 +341,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     }
     // A dodge needs a fight nearby, or an attack on its way (a shot or a dive from far off).
     const close = engaged.some((e) => toward(e).d < 15 + COMBAT.senseRange || (e.state === 'windup' && toward(e).d < 45 + COMBAT.senseRange));
-    if (intent.divePressed && close && ['ground', 'air', 'wall'].includes(hero.state)) buffer.press('dodge', c.hclock);
+    const sensed = engaged.some((e) => e.state === 'windup' && (!e.atBody || e.atBody === hero.body));
+    if (intent.divePressed && close && (['ground', 'air', 'wall'].includes(hero.state) || (sensed && (hero.state === 'swing' || hero.state === 'hang')))) buffer.press('dodge', c.hclock);
     groundAt = ctx.groundAt ?? null;
     finisherSlowmo = ctx.finisherSlowmo !== false;
     groundHere = ctx.groundBelow;
@@ -578,6 +579,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       if (dx * u.x + dz * u.z > Math.SQRT1_2) { const s = dx * u.z - dz * u.x > 0 ? 1 : -1; dx = u.z * s; dz = -u.x * s; }
     }
     if (hero.state === 'wall') { hero.state = 'air'; hero.airTime = 0; }
+    // Off a web: let go and flip clear.
+    if (hero.swing.active) { hero.swing.release(); hero.state = 'air'; hero.airTime = 0; }
     // A move in progress is dropped (every move but a finisher cancels into a dodge).
     c.move = null; c.airKeepT = 0;
     const air = !grounded();

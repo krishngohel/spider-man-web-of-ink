@@ -14,7 +14,8 @@ export const TUNE = {
   sameMoveLimit: 3,                                         // PUB (beat to the punch)
   airSafe: 1.5,                                             // PUB/COMM
   // Telegraphs (EST)
-  windupLight: 0.6, windupHeavy: 0.9, redWindow: 0.12, sniperLaser: 1.5, rifleEvery: [3.0, 4.0],
+  // Spider-sense pass: more warning and a wider dodge window (was 0.6 / 0.9 / 0.12).
+  windupLight: 0.7, windupHeavy: 1.0, redWindow: 0.2, sniperLaser: 1.5, rifleEvery: [3.0, 4.0],
   // Dodge (EST; cancel rule PUB)
   dodgeTime: 0.45, dodgeIframes: 0.25, dodgeDist: 3.5,
   perfectStun: 1.5, perfectScale: 0.3, perfectSlow: 0.9, perfectRamp: 0.15,
