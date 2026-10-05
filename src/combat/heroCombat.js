@@ -128,6 +128,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     c.punchN++;
     c.recent.push(key); if (c.recent.length > 6) c.recent.shift();
     c.used[key] = (c.used[key] ?? 0) + 1;
+    if (M.finisher && key !== 'finisher') c.used.finisher = (c.used.finisher ?? 0) + 1; // every finisher counts as one
     if (M.name) word(M.name, tgt, 'hit');
     if (key === 'pull' && tgt) {
       // The web pull: he flies in to arrive at the hero's fists on the impact frame.
@@ -534,7 +535,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
         c.focus -= 1;
         if (!grounded()) {
           let name = 'SPIKED!';
-          if (tgt.boss) enemies.hit(tgt, { dmg: 999, dir: { x: near.x, z: near.z }, push: 10, lift: 5, from: P() });
+          if (tgt.boss || tgt.puppet || tgt.isPlayer) enemies.hit(tgt, { dmg: 999, dir: { x: near.x, z: near.z }, push: 10, lift: 5, from: P() });
           else if (hero.state === 'wall') {
             // From a wall: webbed and yanked onto the wall beside you (he sticks there).
             webFling(tgt, -near.x * 14, 2, -near.z * 14);
@@ -574,10 +575,12 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
 
   // Webbed up for good and thrown: a webbed body that hits a wall sticks there (enemies.js).
   function webFling(e, vx, vy, vz) {
-    if (e.boss || e.puppet || e.isPlayer) { enemies.hit(e, { dmg: 999, dir: { x: vx, z: vz }, push: 10, lift: 5, from: P() }); return; }
-    enemies.hit(e, { kind: 'web', dmg: 99, from: P() });
+    if (e.boss || e.puppet || e.isPlayer || e.A?.heavy) { enemies.hit(e, { dmg: 999, dir: { x: vx, z: vz }, push: 10, lift: 5, from: P() }); return; }
+    // Already webbed: a second web would knock him out of it (stagger); he is just flung.
+    if (e.state !== 'webbed') enemies.hit(e, { kind: 'web', dmg: 99, from: P() });
     e.takenDown = true; // no breaking out of a finisher
     applyDv(e.body, 'rope', vx - e.body.v.x, vy - e.body.v.y, vz - e.body.v.z);
+    onEvent({ type: 'enemyOut', e }); // a finisher pays like a knockout (XP, the KO mark)
   }
 
   function startDodge(intent, engaged) {
@@ -649,7 +652,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       if (!threat.boss) enemies.stun?.(threat, TUNE.perfectStun);
       onEvent({ type: 'perfectCounter', e: threat });
     }
-    onEvent({ type: 'dodge', perfect, dir: { x: dx, z: dz }, air, side });
+    onEvent({ type: 'dodge', perfect, dir: { x: dx, z: dz }, air, side, e: threat });
   }
 
   // An enemy's hit lands on the hero (called by the enemies).

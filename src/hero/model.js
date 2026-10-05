@@ -76,7 +76,7 @@ export function createAnimator(root, clips) {
       // Called back while still fading out (idle, jog, idle on a quick turn): it carries on from
       // where it is, at the weight it has, instead of restarting at frame 0 with no weight (a pop).
       const back = !once && fadingOut.has(next) ? next.getEffectiveWeight() : -1;
-      if (back < 0) next.reset();
+      if (back < 0) next.reset(); else next.paused = false;
       next.setLoop(once ? THREE.LoopOnce : THREE.LoopRepeat, Infinity);
       next.clampWhenFinished = once;
       next.timeScale = timeScale;

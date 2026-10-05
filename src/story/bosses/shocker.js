@@ -57,7 +57,7 @@ export function createShocker(ctx) {
 
   a.floor = () => (phase === 1 ? 0.6 : phase === 2 ? 0.3 : 0);
   a.onYank = () => false; // a web strike: he is light enough to kick
-  let backfireCd = 0;
+  let backfireCd = 0, blasting = false; // blasting: the windup in progress is a vibro blast
 
   function update(dt) {
     if (done) return;
@@ -76,10 +76,10 @@ export function createShocker(ctx) {
     if (think <= 0) {
       const ventAfter = phase === 3 ? 6 : 3;
       if (blasts >= ventAfter) { vent(phase === 3 ? 2.6 : 3.2); think = 1; a.step(dt); return; }
-      if (t.d < 5) { think = 1.4; a.windup({ t: 0.8, ranged: true, unblockable: true, reach: 7, recover: 0.8, pose: 'slamStart', onStrike: quake }); }
-      else if (phase === 3 && burst === 0) { burst = 2; think = 0.5; a.windup({ t: 0.55, ranged: true, reach: 36, recover: 0.15, pose: 'punch', onStrike: () => vibro(9, 12) }); }
-      else if (burst > 0) { burst--; think = burst ? 0.45 : 1.6; a.windup({ t: 0.42, ranged: true, reach: 36, recover: 0.15, pose: 'punch', onStrike: () => vibro(9, 12) }); }
-      else { think = 1.5 + Math.random() * 0.8; a.windup({ t: 0.7, ranged: true, reach: 36, recover: 0.5, pose: 'punch', onStrike: () => vibro() }); }
+      if (t.d < 5) { think = 1.4; blasting = false; a.windup({ t: 0.8, ranged: true, unblockable: true, reach: 7, recover: 0.8, pose: 'slamStart', onStrike: quake }); }
+      else if (phase === 3 && burst === 0) { burst = 2; think = 0.5; blasting = true; a.windup({ t: 0.55, ranged: true, reach: 36, recover: 0.15, pose: 'punch', onStrike: () => vibro(9, 12) }); }
+      else if (burst > 0) { burst--; think = burst ? 0.45 : 1.6; blasting = true; a.windup({ t: 0.42, ranged: true, reach: 36, recover: 0.15, pose: 'punch', onStrike: () => vibro(9, 12) }); }
+      else { think = 1.5 + Math.random() * 0.8; blasting = true; a.windup({ t: 0.7, ranged: true, reach: 36, recover: 0.5, pose: 'punch', onStrike: () => vibro() }); }
     }
     a.step(dt);
   }
@@ -91,7 +91,7 @@ export function createShocker(ctx) {
     get state() { return { phase, hp: a.hpFrac(), blasts, state: a.e.state }; },
     update,
     onEvent(ev) {
-      if (done || ev.type !== 'dodge' || !ev.perfect || backfireCd > 0 || a.e.state !== 'windup' || a.toHero().d < 5) return;
+      if (done || ev.type !== 'dodge' || !ev.perfect || backfireCd > 0 || a.e.state !== 'windup' || !blasting || (ev.e && ev.e !== a.e)) return;
       backfireCd = 6;
       vent(2.6);
       word('BACKFIRE!', a.body.p, 'big');

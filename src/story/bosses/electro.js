@@ -69,6 +69,7 @@ export function createElectro(ctx) {
     let best = null, bestA = 0.16;
     for (const r of relays) {
       if (!r.live) continue;
+      if (phase === 1 && (r.chimney || !charged)) continue; // drained: the yank goes to him
       if (phase === 2 && (!perch || r.chimney !== perch)) continue;
       const dx = r.x - cam.x, dy = r.y - cam.y, dz = r.z - cam.z, d = Math.hypot(dx, dy, dz);
       if (Math.hypot(r.x - heroP.x, r.z - heroP.z) > 28) continue;
@@ -76,7 +77,7 @@ export function createElectro(ctx) {
       if (ang < bestA) { bestA = ang; best = r; }
     }
     if (!best) return null;
-    if (phase === 1) { if (!best.chimney) word('BOLTED DOWN! SMASH IT!', { x: best.x, y: best.y + 1.5, z: best.z }, 'small'); return best.chimney ? null : { x: best.x, y: best.y, z: best.z }; }
+    if (phase === 1) { word('BOLTED DOWN! SMASH IT!', { x: best.x, y: best.y + 1.5, z: best.z }, 'small'); return { x: best.x, y: best.y, z: best.z }; }
     const h = hero.body.p;
     fx.tether({ x: h.x, y: h.y + 0.5, z: h.z }, { x: best.x, y: best.y, z: best.z });
     setTimeout(() => fx.tether(null), 200);
