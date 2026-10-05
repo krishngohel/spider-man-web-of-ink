@@ -120,6 +120,9 @@ export function createHud(root, getSettings) {
     // An alert at the right edge (a crime nearby), with its own slot.
     alert(text, secs = 4) {
       alertBox.textContent = text;
+      // Under the objective card, whatever its height.
+      const ob = document.querySelector('.objective:not(.hidden)')?.getBoundingClientRect();
+      alertBox.style.top = `${Math.max(120, ob && ob.height ? ob.bottom + 14 : 0)}px`;
       alertBox.classList.remove('show'); void alertBox.offsetWidth; alertBox.classList.add('show');
       alertT = secs;
     },
