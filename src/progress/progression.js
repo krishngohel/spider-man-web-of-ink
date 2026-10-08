@@ -16,7 +16,7 @@ export function levelFor(xp) {
 // XP for each kind of deed.
 export const XP = {
   enemyOut: 25, gangBusted: 220, crime: 300, base: 900, challengeMedal: 250, research: 600, backpack: 150, photo: 120,
-  storyStep: 400, storyMission: 1600, bossDefeated: 2500, trick: 6, perfectRelease: 15, pigeon: 120, tag: 200, bugle: 300,
+  storyStep: 400, storyMission: 1600, bossDefeated: 2500, trick: 6, perfectRelease: 15, pigeon: 120, tag: 200, bugle: 300, request: 500,
 };
 
 // Skills ------------------------------------------------------------------------------------------

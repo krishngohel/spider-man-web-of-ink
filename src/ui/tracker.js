@@ -28,6 +28,7 @@ export function createTracker(root, { data, onBack }) {
         el('div', { class: 'tgrid' }, t.challenges.map((c) => el('div', { class: 'titem' }, [el('b', {}, c.name), medal(c)]))),
         el('h3', {}, 'Swing races'),
         el('div', { class: 'tgrid' }, t.races.map((c) => el('div', { class: 'titem' }, [el('b', {}, c.name), medal(c)]))),
+        ...(t.requests ? [el('h3', {}, 'Neighborhood requests'), el('div', { class: 'tgrid' }, [el('div', { class: 'titem' }, [el('b', {}, 'People helped'), el('span', { class: t.requests[0] >= t.requests[1] ? 'medal m3' : 'medal m0' }, `${t.requests[0]} / ${t.requests[1]}`)])])] : []),
         el('h3', {}, 'Daily Bugle assignments'),
         el('div', { class: 'tgrid' }, t.bugle.map((a) => el('div', { class: 'titem' }, [el('b', {}, a.title), el('span', { class: a.done ? 'medal m3' : 'medal m0' }, a.done ? 'printed' : 'open')]))),
       ]),

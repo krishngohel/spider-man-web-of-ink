@@ -23,6 +23,7 @@ import { createCityLife } from '../world/cityLife.js';
 import { createHalos, HALO } from '../render/halos.js';
 import { createCrowd } from '../world/crowd.js';
 import { createMusic } from '../audio/music.js';
+import { createRequests } from '../content/requests.js';
 const CAR_HEAD = [1.0, 0.88, 0.6], CAR_TAIL = [1.0, 0.1, 0.08];
 let carHalos = null;
 // Two white heads in front and two red tails behind a moving car.
@@ -336,7 +337,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     mode = 'map';
     if (document.pointerLockElement) document.exitPointerLock();
     const p = hero.body.p;
-    const icons = session.active ? [] : content.mapIcons().filter((ic) => ic.kind !== 'backpack' || save.world.districts.includes(city.districts.find((d) => ic.x >= d.minX && ic.x < d.maxX && ic.z >= d.minZ && ic.z < d.maxZ)?.id));
+    const icons = session.active ? [] : [...content.mapIcons(), ...requests.mapIcons()].filter((ic) => ic.kind !== 'backpack' || save.world.districts.includes(city.districts.find((d) => ic.x >= d.minX && ic.x < d.maxX && ic.z >= d.minZ && ic.z < d.maxZ)?.id));
     if (storyOn && director.marker) icons.push({ ...director.marker, kind: 'mission' });
     map.show({ x: p.x, z: p.z, yaw: Math.atan2(hero.facing.x, hero.facing.z) }, save.world.stations, waypoint, icons);
   }
@@ -537,7 +538,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     comicResumes();
   }
   function toTitle() {
-    content.stop(); storyEnv = null;
+    content.stop(); requests.stop(); storyEnv = null;
     if (storyOn) {
       director.stop(); storyOn = false; combat.setOccupation(null); content.stop();
       if (character.id !== 'peter' && (!rosterOpen() || character.kind === 'civilian')) switchCharacter('peter');
@@ -912,6 +913,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         emoteWheel.steer(input.look, input.move); intent.moveX = intent.moveZ = 0; intent.jump = intent.jumpPressed = false;
       }
       else if (emoteWheel.open) { const id = emoteWheel.close(); if (id && emoteOk) poser.playEmote(emoteById(id)); }
+      // A neighbourhood request's giver in reach: E talks.
+      requests.preStep(intent);
       // A fist bump with a fan who stopped to cheer (E / pad Y, standing near them, no fight on).
       if (crowd.bumpable && emoteOk && intent.hangPressed) {
         const at = crowd.fistBump();
@@ -961,6 +964,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (storyOn && !session.active && input.pressed('scan')) director.scan();
       if (input.pressed('photo') && !session.active) takePhoto();
       content.update(gdt, { active: !session.active && !(storyOn && director.quiet) && !storyUi.cardOpen && !storyUi.comicOpen });
+      requests.update(gdt, { active: !session.active && !(storyOn && director.quiet) && !storyUi.comicOpen && character.kind !== 'civilian' && !content.busyHere });
       if (!storyOn) storyUi.update(gdt); // radio lines and stamps from free roam
       // One voice at a time: the traversal tip steps aside for story tips, dialogue and fights.
       hud.setTipQuiet(storyUi.tipsShown || storyUi.talking || combat.enemies.engaged.length > 0);
@@ -1101,9 +1105,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     life.update(mode === 'play' ? gdt : dt * 0.5, renderP, scare);
     crowd.update(dt, camera.position, hero, { spidey: character.kind !== 'civilian' && mode === 'play' });
     {
-      const b = crowd.bumpable;
-      if (b && !(storyOn && director.step?.type === 'stroll')) storyUi.talkPrompt({ p: { x: b.m.root.position.x, y: 0.9, z: b.m.root.position.z }, label: 'FIST BUMP' }, screenOf);
-      else if (!(storyOn && director.step?.type === 'stroll')) storyUi.talkPrompt(null);
+      const b = crowd.bumpable, rq = requests.prompt, inStroll = storyOn && director.step?.type === 'stroll';
+      if (!inStroll) {
+        if (rq) storyUi.talkPrompt(rq, screenOf);
+        else if (b) storyUi.talkPrompt({ p: { x: b.m.root.position.x, y: 0.9, z: b.m.root.position.z }, label: 'FIST BUMP' }, screenOf);
+        else storyUi.talkPrompt(null);
+      }
     }
     halos.update(performance.now() / 1000, life.lightT, nightNow);
     skyline.setNight?.(nightNow, performance.now() / 1000);
@@ -1237,7 +1244,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     busy: () => (storyOn && director.quiet) || session.active || !settings.crimes || !!combat.encounter,
     puzzle: (kind) => { mode = 'comic'; input.setEnabled(false); if (locked()) document.exitPointerLock(); return puzzles.play(kind).then((ok) => { mode = 'play'; resetIntent(); input.setEnabled(true); return ok; }); },
   });
-  const tracker = createTracker(uiRoot, { data: () => content.tracker(), onBack: () => menus.showPause() });
+  // Neighborhood requests (src/content/requests.js): people around the city who need a hand.
+  const requests = createRequests({
+    scene, city, hero, combat, save, assets, buildCharacter, ui: storyUi, camera, lamps: street.lamps,
+    reward: (kind, o = {}) => progress.reward(kind, o), persist: () => persist(),
+    alert: (t, s) => hud.alert(t, s), caption: (t, s) => hud.caption(t, s), stamp: (t) => { storyUi.stamp(t); sfx.event({ type: 'stamp' }); },
+    waypoint: (w) => { if (w) { if (!waypoint || waypoint.auto) waypoint = { ...w, auto: true }; } else if (waypoint?.auto) waypoint = null; },
+  });
+  const tracker = createTracker(uiRoot, { data: () => ({ ...content.tracker(), requests: requests.count() }), onBack: () => menus.showPause() });
   function takePhoto() {
     const got = content.photo({ x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
     hud.flash?.();
@@ -1294,6 +1308,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     state,
     scene, // dev probes toggle parts of the scene to time them
     music: () => music.current,
+    requests: () => requests.state(),
+    requestSpots: () => requests.spots.map((s) => ({ id: s.r.id, giver: s.giver, roof: s.roof, corner: s.corner, kind: s.r.task.kind })),
     get frame() { return frame; },
     get fps() { return fps; },
     get mode() { return mode; },

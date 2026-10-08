@@ -27,7 +27,7 @@ export function createMap(root, city, { onTravel, onWaypoint }) {
 
   const view = { cx: 0, cz: 0, zoom: 1 };
   let open = false, hero = { x: 0, z: 0, yaw: 0 }, stations = new Set(), waypoint = null, hover = null, icons = [];
-  const ICON = { base: ['#d3232e', 'H'], race: ['#5ad0ff', 'R'], challenge: ['#f2c230', 'T'], research: ['#2a5a9a', 'O'], backpack: ['#c8202a', 'B'], mission: ['#f7e36a', '!'] };
+  const ICON = { base: ['#d3232e', 'H'], race: ['#5ad0ff', 'R'], challenge: ['#f2c230', 'T'], research: ['#2a5a9a', 'O'], backpack: ['#c8202a', 'B'], mission: ['#f7e36a', '!'], request: ['#3fbf6a', '?'] };
   const toScreen = (x, z) => {
     const s = view.zoom / PX;
     return [canvas.width / 2 + (x - view.cx) * s, canvas.height / 2 + (z - view.cz) * s];
