@@ -452,6 +452,7 @@ const REMAP = {
   shelter: { site: 'shelterWalk', sz: 0.5, flip: true },
 };
 const moveP = (r, p) => (r && p ? [p[0], p[1], p[2] * r.sz * (r.flip ? -1 : 1), ...p.slice(3)] : p);
+const moveDecor = (r, d) => (d ? d.map((q) => ({ ...q, ...(q.from ? { from: moveP(r, q.from), to: moveP(r, q.to) } : {}), ...(q.p ? { p: moveP(r, q.p) } : {}) })) : d);
 const moveYaw = (r, y) => (r && r.flip && typeof y === 'number' ? 180 - y : y);
 function relocate(st) {
   const r = REMAP[st.site];
@@ -460,7 +461,10 @@ function relocate(st) {
     s2.site = r.site;
     if (st.spawn) s2.spawn = [st.spawn[0], st.spawn[1], st.spawn[2] * r.sz * (r.flip ? -1 : 1), moveYaw(r, st.spawn[3])];
     if (st.npcs) s2.npcs = st.npcs.map((n) => ({ ...n, p: moveP(r, n.p), yaw: moveYaw(r, n.yaw) }));
+    if (st.decor) s2.decor = moveDecor(r, st.decor);
   }
+  // Panels carry their decor at the step (the site of their first shot decides the move).
+  if (!r && st.decor && st.pages) { const rr = REMAP[st.pages[0].panels[0].shot.at]; if (rr) s2.decor = moveDecor(rr, st.decor); }
   if (st.pages) {
     s2.pages = st.pages.map((pg) => ({ ...pg, panels: pg.panels.map((pn) => {
       const rr = REMAP[pn.shot.at];

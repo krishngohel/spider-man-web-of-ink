@@ -17,7 +17,8 @@
 import { ACT2 } from './acts/act2.js';
 import { ACT3 } from './acts/act3.js';
 import { ACT4 } from './acts/act4.js';
-import { spliceScenes } from './acts/peter.js';
+import { spliceScenes, PETER_SCENES } from './acts/peter.js';
+import { FINALE } from './acts/finale.js';
 
 const L = (who, text) => ({ who, text });
 
@@ -192,7 +193,7 @@ export const STEPS = spliceScenes([
   ...ACT2,
   ...ACT3,
   ...ACT4,
-]);
+], [...PETER_SCENES, FINALE]);
 
 export const stepById = (id) => STEPS.find((s) => s.id === id) ?? null;
 export const actById = (id) => ACTS.find((a) => a.id === id) ?? null;

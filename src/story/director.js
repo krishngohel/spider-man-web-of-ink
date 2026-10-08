@@ -11,7 +11,7 @@ import { createProps } from './props.js';
 const BOSS_PHASES = { electro: 2, goblin: 2, kingpin: 3, kraven: 2, lizard: 3, mysterio: 3, ock: 3, rhino: 3, sandman: 3, scorpion: 2, shocker: 3, venom: 2, vulture: 2 };
 import { createStoryFx, buildMarker } from './storyFx.js';
 import { createActors } from './actors.js';
-import { createStroll } from './stroll.js';
+import { createStroll, buildDecor } from './stroll.js';
 import { CROWD } from './cast.js';
 import { LAYER_FX } from '../render/layers.js';
 import { COPY } from '../ui/copy.js';
@@ -173,6 +173,9 @@ export function createDirector(g) {
   function drawPanels(step) {
     const out = [];
     g.hideHero(true);
+    // A step's set dressing (string lights) stands at its first shot's site for every panel.
+    let decor = null;
+    if (step.decor) { const s0 = resolveSite(city, step.pages[0].panels[0].shot.at); decor = buildDecor(step.decor, { x: s0.x, y: s0.y - 0.9, z: s0.z }); scene.add(decor); }
     for (const pg of step.pages) {
       const panels = [];
       for (const p of pg.panels) {
@@ -203,6 +206,7 @@ export function createDirector(g) {
       out.push({ ...pg, panels });
     }
     actors.hideAll();
+    if (decor) { scene.remove(decor); decor.traverse((o) => { if (o.isLine) o.geometry.dispose(); }); }
     g.hideHero(false);
     return out;
   }

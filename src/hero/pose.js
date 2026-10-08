@@ -292,6 +292,8 @@ export function createPoser(heroModel) {
           // Long blends between stand, jog and sprint: a 0.15 s crossfade popped the feet.
           // Standing a while: now and then he looks around (mocap), then settles back.
           if (hs < 0.4) play(idleT > 8 && (idleT % 24) < 6.2 && animator.has('Idle_Look') ? 'Idle_Look' : 'Idle_Loop', { fade: 0.5 });
+          // A walking pace walks (mocap), not a jog in slow motion.
+          else if (hs < 2.6 && animator.has('Walking')) play('Walking', { timeScale: Math.max(0.6, hs / 1.35), fade: 0.3 });
           else if (hs < 10.5) play('Jog_Fwd_Loop', { timeScale: Math.max(0.6, hs / 6.5), fade: 0.28 });
           else play('Sprint_Loop', { timeScale: Math.max(0.8, hs / 11), fade: 0.3 });
         }

@@ -22,7 +22,7 @@ function disposeModel(m) {
     if (!o.isSkinnedMesh) o.geometry?.dispose?.();
   });
 }
-const TALK_R = 2.6, WALK_MAX = 3.6;
+const TALK_R = 2.6, WALK_MAX = 2.3; // a brisk walk (the mocap walk keeps up to about 2.6 m/s)
 const SEATED = /^Sit_|^Gaming$|^Writing$/;
 
 const propMats = { wood: comicToon({ color: 0x8a5a3a }), iron: comicToon({ color: 0x2c2c32 }), top: comicToon({ color: 0xd9cfb8 }), cloth: comicToon({ color: 0x7a2a2a }) };
@@ -38,6 +38,11 @@ export function propMesh(kind) {
     box(0.48, 0.06, 0.48, 0, 0.46, 0, propMats.wood);
     if (kind === 'chair') box(0.48, 0.5, 0.05, 0, 0.74, -0.22, propMats.wood);
     for (const [x, z] of [[-0.2, -0.2], [0.2, -0.2], [-0.2, 0.2], [0.2, 0.2]]) box(0.05, 0.46, 0.05, x, 0.23, z, propMats.iron);
+  } else if (kind === 'grill') {
+    // A kettle grill on three legs, coals glowing.
+    const bowl = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), propMats.iron); bowl.position.y = 0.8; g.add(bowl);
+    const coals = new THREE.Mesh(new THREE.CircleGeometry(0.3, 12), new THREE.MeshBasicMaterial({ color: 0xff6a2a })); coals.rotation.x = -Math.PI / 2; coals.position.y = 0.78; g.add(coals);
+    for (const a of [0, 2.1, 4.2]) box(0.04, 0.8, 0.04, Math.sin(a) * 0.22, 0.4, Math.cos(a) * 0.22, propMats.iron);
   } else if (kind === 'desk' || kind === 'table') {
     const w = kind === 'desk' ? 1.4 : 0.9;
     box(w, 0.05, 0.75, 0, 0.75, 0, kind === 'desk' ? propMats.top : propMats.cloth);
@@ -46,9 +51,31 @@ export function propMesh(kind) {
   return g;
 }
 
+// Set dressing for a scene: { kind: 'lights', from, to } strings of coloured bulbs sagging between
+// two points (offsets from the site), unlit-bright so they glow at night.
+const BULBS = [0xff4a4a, 0xffd23a, 0x4ad0ff, 0x7aff6a, 0xff7ad8];
+const bulbGeo = new THREE.SphereGeometry(0.07, 6, 5);
+const bulbMats = BULBS.map((c) => new THREE.MeshBasicMaterial({ color: c }));
+const cordMat = new THREE.LineBasicMaterial({ color: 0x1a1418 });
+export function buildDecor(list, base) {
+  const g = new THREE.Group();
+  for (const d of list ?? []) {
+    if (d.kind !== 'lights') continue;
+    const a = new THREE.Vector3(base.x + d.from[0], base.y + d.from[1], base.z + d.from[2]);
+    const b = new THREE.Vector3(base.x + d.to[0], base.y + d.to[1], base.z + d.to[2]);
+    const pts = [], n = 24, sag = 0.5;
+    for (let i = 0; i <= n; i++) { const t = i / n; pts.push(new THREE.Vector3().lerpVectors(a, b, t).add(new THREE.Vector3(0, -sag * 4 * t * (1 - t), 0))); }
+    g.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), cordMat));
+    for (let i = 1; i < n; i += 1) { const m = new THREE.Mesh(bulbGeo, bulbMats[i % bulbMats.length]); m.position.copy(pts[i]).y -= 0.08; g.add(m); }
+  }
+  return g;
+}
+
 export function createStroll(g, { scene, hero, ui, say, site, step, crowd }) {
   const people = [], props = [];
   const base = { x: site.x, y: site.y - 0.9, z: site.z };
+  const decor = buildDecor(step.decor, base);
+  scene.add(decor);
   for (const n of step.npcs ?? []) {
     const def = CAST[n.who] ?? crowd?.[n.who] ?? characterById(n.who);
     const m = g.buildCharacter(g.assets, def);
@@ -63,7 +90,7 @@ export function createStroll(g, { scene, hero, ui, say, site, step, crowd }) {
     if (n.prop) {
       const pm = propMesh(n.prop);
       // A seat sits under them; a desk or table stands in front.
-      const front = n.prop === 'desk' || n.prop === 'table' ? 0.55 : -0.05;
+      const front = n.prop === 'desk' || n.prop === 'table' || n.prop === 'grill' ? 0.55 : -0.05;
       pm.position.set(p.x + Math.sin(yaw) * front, p.y, p.z + Math.cos(yaw) * front);
       pm.rotation.y = yaw;
       scene.add(pm); props.push(pm);
@@ -157,6 +184,7 @@ export function createStroll(g, { scene, hero, ui, say, site, step, crowd }) {
     dispose() {
       for (const q of people) { scene.remove(q.m.root); disposeModel(q.m); }
       for (const pm of props) scene.remove(pm);
+      scene.remove(decor); decor.traverse((o) => { if (o.isLine) o.geometry.dispose(); });
       people.length = 0; props.length = 0;
       g.heroEmote?.(null);
     },
