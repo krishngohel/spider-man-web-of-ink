@@ -134,7 +134,15 @@ export function buildStreetMeshes(props, scene, quality) {
   group.name = 'street';
   const mat = comicToon({ vertexColors: true });
   const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-  const add = (geo, list, place, colorOf, shadows = false) => {
+  // Every prop kind draws only the ones within R of the camera, packed at the front of its mesh
+  // (count = how many): drawing the whole city's lamps, trees and clutter cost about 0.8 ms of GPU
+  // every frame, shadow pass included, for things too small to see from afar.
+  const bubbles = [];
+  const bubble = (mesh, list, R) => {
+    mesh.frustumCulled = false;
+    bubbles.push({ mesh, R2: R * R, xs: Float32Array.from(list, (it) => it.x), zs: Float32Array.from(list, (it) => it.z), all: mesh.instanceMatrix.array.slice(), allCol: mesh.instanceColor ? mesh.instanceColor.array.slice() : null });
+  };
+  const add = (geo, list, place, colorOf, shadows = false, R = 260) => {
     if (!list.length) return;
     const mesh = new THREE.InstancedMesh(geo, mat, list.length);
     list.forEach((it, i) => {
@@ -146,6 +154,26 @@ export function buildStreetMeshes(props, scene, quality) {
     mesh.castShadow = quality.shadows && shadows;
     mesh.receiveShadow = quality.shadows;
     group.add(mesh);
+    bubble(mesh, list, R);
+  };
+  let bubbleT = 0;
+  group.userData.updateProps = (cam, dt) => {
+    bubbleT -= dt;
+    if (bubbleT > 0) return;
+    bubbleT = 0.35;
+    for (const b of bubbles) {
+      const m = b.mesh.instanceMatrix.array, c = b.mesh.instanceColor?.array;
+      let n = 0;
+      for (let i = 0; i < b.xs.length; i++) {
+        const dx = b.xs[i] - cam.x, dz = b.zs[i] - cam.z;
+        if (dx * dx + dz * dz > b.R2) continue;
+        if (n !== i) { m.set(b.all.subarray(i * 16, i * 16 + 16), n * 16); if (c) c.set(b.allCol.subarray(i * 3, i * 3 + 3), n * 3); }
+        n++;
+      }
+      b.mesh.count = n;
+      b.mesh.instanceMatrix.needsUpdate = true;
+      if (c) b.mesh.instanceColor.needsUpdate = true;
+    }
   };
   add(lampGeometry(), props.lamps, (l) => { p.set(l.x, 0, l.z); q.setFromAxisAngle(up, l.facing > 0 ? Math.PI / 2 : -Math.PI / 2); s.set(1, 1, 1); });
   add(trafficGeometry(), props.lights, (l) => { p.set(l.x, 0, l.z); q.setFromAxisAngle(up, Math.PI / 2); s.set(1, 1, 1); });
@@ -180,16 +208,16 @@ export function buildStreetMeshes(props, scene, quality) {
     group.add(nearCars, farCars);
   }
   add(treeGeometry(), props.trees, (t) => { p.set(t.x, 0, t.z); q.setFromAxisAngle(up, t.x * 0.37); s.setScalar(t.s); }, null, true);
-  add(hydrantGeometry(), props.hydrants, (h) => { p.set(h.x, 0, h.z); q.identity(); s.set(1, 1, 1); });
+  add(hydrantGeometry(), props.hydrants, (h) => { p.set(h.x, 0, h.z); q.identity(); s.set(1, 1, 1); }, null, false, 140);
   const cl = props.clutter;
   if (cl) {
     const at = (o, sc = 1) => { p.set(o.x, 0, o.z); q.setFromAxisAngle(up, o.yaw); s.set(sc, sc, sc); };
-    add(newsGeometry(), cl.news, (o) => at(o), (o) => o.color);
-    add(canGeometry(), cl.cans, (o) => at(o));
-    add(bagsGeometry(), cl.bags, (o) => at(o, o.s));
-    add(mailGeometry(), cl.mail, (o) => at(o));
-    add(benchGeometry(), cl.benches, (o) => at(o));
-    add(boothGeometry(), cl.booths, (o) => at(o));
+    add(newsGeometry(), cl.news, (o) => at(o), (o) => o.color, false, 140);
+    add(canGeometry(), cl.cans, (o) => at(o), null, false, 140);
+    add(bagsGeometry(), cl.bags, (o) => at(o, o.s), null, false, 120);
+    add(mailGeometry(), cl.mail, (o) => at(o), null, false, 140);
+    add(benchGeometry(), cl.benches, (o) => at(o), null, false, 160);
+    add(boothGeometry(), cl.booths, (o) => at(o), null, false, 200);
     s.set(1, 1, 1);
   }
   // Night: bulbs light up and throw a comic cone of light (additive, no real light: cheap).
@@ -235,6 +263,7 @@ uniform float uGlow; void main() { gl_FragColor = vec4(mix(vec3(0.95, 0.92, 0.8)
     cones.visible = false;
     cones.renderOrder = 4;
     group.add(cones, bulbs);
+    bubble(cones, props.lamps, 260); bubble(bulbs, props.lamps, 260);
     group.userData.setNight = (n) => { glow.value = n; cones.visible = n > 0.05; };
   }
   scene.add(group);

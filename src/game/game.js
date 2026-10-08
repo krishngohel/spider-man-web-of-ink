@@ -136,6 +136,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Halos for the city's small lights at night (render/halos.js): lamps, signals, beacons, cars.
   const halos = createHalos();
   carHalos = halos;
+  halos.points.name = 'halos';
   scene.add(halos.points);
   {
     const LAMP = [1.0, 0.72, 0.36], RED = [1.0, 0.16, 0.12], AMBER = [1.0, 0.62, 0.12], GREEN = [0.25, 1.0, 0.45];
@@ -163,6 +164,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       color: [[1, 0.24, 0.48], [0.24, 0.98, 1], [1, 0.88, 0.24], [0.5, 1, 0.36], [1, 0.48, 0.16], [0.72, 0.5, 1]][i % 6], w: 0.9, len: 12, k: 0.7, h: b.min[1] + 2,
     })),
   ]);
+  wetStreaks.name = 'wetStreaks';
   scene.add(wetStreaks);
   let scare = null;
   // Time of day and weather: free roam cycles unless the settings (or a mission) hold them.
@@ -1078,6 +1080,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }
     const Tr = performance.now();
     streetGroup.userData.updateCars?.(camera.position, dt);
+    streetGroup.userData.updateProps?.(camera.position, dt);
     ink.render(scene, camera, time);
     const renderMs = performance.now() - Tr;
     prof('render', Tr);
@@ -1231,6 +1234,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   window.__game = {
     state,
+    scene, // dev probes toggle parts of the scene to time them
     get frame() { return frame; },
     get fps() { return fps; },
     get mode() { return mode; },
