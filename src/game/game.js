@@ -22,6 +22,7 @@ import { createRain } from '../world/rain.js';
 import { createCityLife } from '../world/cityLife.js';
 import { createHalos, HALO } from '../render/halos.js';
 import { createCrowd } from '../world/crowd.js';
+import { createMusic } from '../audio/music.js';
 const CAR_HEAD = [1.0, 0.88, 0.6], CAR_TAIL = [1.0, 0.1, 0.08];
 let carHalos = null;
 // Two white heads in front and two red tails behind a moving car.
@@ -252,6 +253,22 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Input, sound, UI -----------------------------------------------------------------------------
   const input = createInput({ target: window, bindings: settings.bindings });
   const sfx = createSfx(() => settings.volume);
+  const music = createMusic(() => settings.volume);
+  let fightHold = 0;
+  // What the soundtrack plays now: bosses, then fights (held a few seconds after the last thug, so
+  // it does not flip back and forth), Peter's scenes, missions on the way, the city by day or night.
+  function pickMusic(dt) {
+    if (mode === 'title') return 'mission';
+    const st = storyOn ? director.step : null;
+    if (storyOn && director.inFight && st?.type === 'boss') return 'boss';
+    const fighting = combat.enemies.engaged.length > 0 || (storyOn && director.inFight);
+    fightHold = fighting ? 4 : Math.max(0, fightHold - dt);
+    if (fightHold > 0) return st?.type === 'chase' ? 'mission' : 'fight';
+    if (st?.type === 'stroll') return 'peter';
+    // On the way to a mission site (the story's 'go there' steps): the mission theme.
+    if (st?.type === 'reach') return 'mission';
+    return nightNow > 0.5 ? 'night' : 'day';
+  }
   const uiRoot = el('div', { class: 'ui-layer' });
   document.body.append(uiRoot);
   const emoteWheel = createEmoteWheel(uiRoot, { has: (clip) => heroModel.animator.has(clip) });
@@ -856,6 +873,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     last = now;
     if (!(dtMs > 0)) dtMs = 16.7;
     const dt = Math.min(0.1, dtMs / 1000);
+    music.set(pickMusic(dt));
+    music.duck(storyUi.comicOpen ? 0.45 : storyUi.talking ? 0.6 : 1);
+    music.update(dt);
     time += dt;
     frame++;
     fps += (1000 / Math.max(1, dtMs) - fps) * 0.05;
@@ -1256,6 +1276,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   window.__game = {
     state,
     scene, // dev probes toggle parts of the scene to time them
+    music: () => music.current,
     get frame() { return frame; },
     get fps() { return fps; },
     get mode() { return mode; },

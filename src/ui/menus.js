@@ -103,6 +103,7 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       choice(C.weather[0], null, ['cycle', 'clear', 'overcast', 'rain'], 'weather', C.weatherValues),
       el('h3', {}, C.sections.audio),
       slider(C.master[0], 0, 1, 0.05, () => getSettings().volume.master, (v) => update({ volume: { ...getSettings().volume, master: v } })),
+      slider(C.music[0], 0, 1, 0.05, () => getSettings().volume.music, (v) => update({ volume: { ...getSettings().volume, music: v } })),
       slider(C.sfx[0], 0, 1, 0.05, () => getSettings().volume.sfx, (v) => update({ volume: { ...getSettings().volume, sfx: v } })),
       el('div', { class: 'foot' }, [el('button', { class: 'mbtn', onclick: back }, COPY.buttons.back)]),
     ]));
