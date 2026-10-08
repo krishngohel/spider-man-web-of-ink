@@ -1064,6 +1064,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     poser.lineWorld(hand);
     webLine.update(hand, hero.swing, hero.rope, hero.pendingWeb, tune.webTravel);
     sfx.setSpeed(mode === 'play' ? hero.speed : 0, dt);
+    sfx.setAmbience({ height: Math.max(0, hero.body.p.y - 1), night: nightNow, crime: content?.crimeOn ? 1 : 0, quiet: mode !== 'play' && mode !== 'photo' }, dt);
 
     if (camOverride) {
       // Test hook: a fixed offset from the hero, looking at him (filming poses from the side).

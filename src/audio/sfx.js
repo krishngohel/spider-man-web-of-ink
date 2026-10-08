@@ -6,6 +6,9 @@ export function createSfx(getVolume) {
   let ctx = null, out = null, noise = null;
   let wind = null, windGain = null, windFilter = null;
   let windLevel = 0;
+  // The city around you: a low traffic rumble at street level that thins with height and at
+  // night, now and then a car horn far off, and a siren while a crime runs nearby.
+  let city = null, cityGain = null, cityLevel = 0, hornT = 3, siren = null, sirenGain = null, sirenLevel = 0, sirenLfo = null;
 
   function ensure() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume().catch(() => {}); return true; }
@@ -24,6 +27,21 @@ export function createSfx(getVolume) {
     windGain = ctx.createGain(); windGain.gain.value = 0;
     wind.connect(windFilter).connect(windGain).connect(out);
     wind.start();
+    city = ctx.createBufferSource(); city.buffer = noise; city.loop = true; city.playbackRate.value = 0.6;
+    const cf = ctx.createBiquadFilter(); cf.type = 'lowpass'; cf.frequency.value = 180;
+    const cf2 = ctx.createBiquadFilter(); cf2.type = 'peaking'; cf2.frequency.value = 90; cf2.gain.value = 8;
+    cityGain = ctx.createGain(); cityGain.gain.value = 0;
+    city.connect(cf).connect(cf2).connect(cityGain).connect(out);
+    city.start();
+    // The siren: a saw tone swept up and down by a slow oscillator, through a band filter.
+    siren = ctx.createOscillator(); siren.type = 'sawtooth'; siren.frequency.value = 760;
+    sirenLfo = ctx.createOscillator(); sirenLfo.frequency.value = 0.35;
+    const lfoGain = ctx.createGain(); lfoGain.gain.value = 260;
+    sirenLfo.connect(lfoGain).connect(siren.frequency);
+    const sf = ctx.createBiquadFilter(); sf.type = 'bandpass'; sf.frequency.value = 900; sf.Q.value = 1.2;
+    sirenGain = ctx.createGain(); sirenGain.gain.value = 0;
+    siren.connect(sf).connect(sirenGain).connect(out);
+    siren.start(); sirenLfo.start();
     applyVolume();
     return true;
   }
@@ -151,6 +169,26 @@ export function createSfx(getVolume) {
       windLevel += (want - windLevel) * Math.min(1, dt * 4);
       windGain.gain.value = windLevel * 0.55;
       windFilter.frequency.value = 250 + windLevel * 2200;
+    },
+    // Called every frame: how high the hero is above the street, how dark it is, a crime nearby.
+    setAmbience({ height = 0, night = 0, crime = 0, quiet = false } = {}, dt = 1 / 60) {
+      if (!ctx || !cityGain) return;
+      const want = quiet ? 0 : Math.max(0, 1 - height / 90) * (1 - 0.45 * night);
+      cityLevel += (want - cityLevel) * Math.min(1, dt * 1.5);
+      cityGain.gain.value = cityLevel * 0.16;
+      sirenLevel += ((quiet ? 0 : crime) - sirenLevel) * Math.min(1, dt * 0.8);
+      sirenGain.gain.value = sirenLevel * 0.035 * (0.5 + 0.5 * Math.max(0, 1 - height / 140));
+      // A horn now and then down on the street (two short notes, a little detuned).
+      hornT -= dt;
+      if (hornT <= 0) {
+        hornT = 4 + Math.random() * 9;
+        if (cityLevel > 0.25) {
+          const f = 330 + Math.random() * 140, k = cityLevel * 0.05;
+          tone({ freq: f, freq2: f * 0.98, dur: 0.22, gain: k, type: 'square' });
+          tone({ freq: f * 1.26, freq2: f * 1.24, dur: 0.22, gain: k * 0.7, type: 'square' });
+          if (Math.random() < 0.4) setTimeout(() => tone({ freq: f, freq2: f * 0.98, dur: 0.35, gain: k, type: 'square' }), 320);
+        }
+      }
     },
     get running() { return !!ctx && ctx.state === 'running'; },
   };
