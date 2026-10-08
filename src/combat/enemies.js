@@ -7,6 +7,31 @@ import { perceive, patrolWant, takedownKind } from './stealth.js';
 import { TUNE } from './tuning.js';
 import { createTokens, airSafe } from './tokens.js';
 import { shake } from './hitstop.js';
+import { CLIP_DATA } from './clipData.js';
+
+// Goon animation pools (Mixamo mocap retargeted into anims_combat.glb). Each state picks one of
+// the clips it has at random, so a fight is not the same three flinches on repeat; until the
+// mocap has loaded (or if a clip is missing) the Quaternius clip after it plays.
+const POOL = {
+  brawler: ['Goon_Hook', 'Goon_Cross', 'Goon_Jab_Cross', 'Goon_Kick', 'Goon_Elbow', 'Goon_Combo'],
+  brute: ['Brute_Punch', 'Brute_Swipe', 'Goon_Elbow'],
+  whip: ['Goon_Hook', 'Goon_Kick'],
+  reactFront: ['React_Front', 'React_Head', 'React_Gut', 'React_Small_L', 'React_Small_R'],
+  reactBack: ['React_Back'],
+  down: ['Knocked_Down', 'Sweep_Fall', 'Liver_Knockdown'],
+  out: ['Fall_Back_Death', 'Knocked_Out', 'Knocked_Down'],
+  getup: ['Getting_Up', 'Kip_Up'],
+  stunned: ['Stunned'],
+  fightIdle: ['Fight_Idle', 'Fight_Idle_Bounce'],
+  taunt: ['Goon_Taunt', 'Goon_Taunt2', 'Emote_Taunt'],
+  cheer: ['Goon_Cheer', 'Emote_Cheer'],
+};
+const pickClip = (a, names, fallback) => {
+  const ok = names ? names.filter((n) => a.has(n)) : [];
+  return ok.length ? ok[Math.floor(Math.random() * ok.length)] : fallback;
+};
+// How far into a clip its blow lands (from the retarget's contact frame), else 0.6.
+const contactFrac = (clip, dur) => { const d = CLIP_DATA[clip]; return d && d.contact > 0 ? Math.min(0.9, d.contact / (d.duration || dur)) : 0.6; };
 
 // Enemies (spec 8.1): a body each on the same collision world as the hero, a state machine per
 // archetype, and a director (tokens.js) that lets one fist and a few guns go at a time. Attacks
@@ -161,20 +186,28 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
       case 'windup': {
         // Anticipation: 40% of the clip spread over the white part of the windup, held and
         // readable; the red part snaps through the rest (see snapWindup).
-        const act = a.play(e.disarmed ? 'Punch_Jab' : e.A.clip, { once: true, fade: 0.08, timeScale: 1 });
+        const clip = e.disarmed ? 'Punch_Jab' : e.A.ranged ? e.A.clip : pickClip(a, POOL[e.arch], e.A.clip);
+        const act = a.play(clip, { once: true, fade: 0.08, timeScale: 1 });
         const dur = act.getClip().duration, white = Math.max(0.05, (e.strikeAt || TUNE.windupLight) - TUNE.redWindow);
-        act.timeScale = (dur * 0.4) / white;
+        // Two thirds of the way to the blow over the white part (held, readable), the rest in the red.
+        e.windFrac = contactFrac(clip, dur);
+        act.timeScale = (dur * e.windFrac * 0.67) / white;
         e.windAction = act;
         break;
       }
-      case 'stagger': a.play(Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head', { once: true, fade: 0.05, timeScale: 1.3 }); break;
+      case 'stagger': {
+        const back = e.hitFromBack;
+        a.play(pickClip(a, back ? POOL.reactBack : POOL.reactFront, Math.random() < 0.5 ? 'Hit_Chest' : 'Hit_Head'), { once: true, fade: 0.05, timeScale: 1.3 });
+        break;
+      }
       case 'air': a.play('Hit_Knockback', { once: true, fade: 0.05 }); break;
-      // Knocked down: the fall (until the Mixamo knockdown arrives); out: the same fall, for good.
-      case 'down': case 'out': a.play('Death01', { once: true, fade: 0.1 }); break;
+      // Knocked down (mocap falls, several kinds) and out for good.
+      case 'down': a.play(pickClip(a, POOL.down, 'Death01'), { once: true, fade: 0.1 }); break;
+      case 'out': a.play(pickClip(a, POOL.out, 'Death01'), { once: true, fade: 0.1 }); break;
       // Webbed up or stuck to a wall: upright and struggling against the web, never a death.
       case 'webbed': case 'pinned': a.play('Idle_No_Loop', { fade: 0.12, timeScale: 1.7 }); break;
-      case 'getup': a.play('LayToIdle', { once: true, fade: 0.1, timeScale: 1.6 }); break;
-      case 'stunned': a.play('Hit_Head', { once: true, fade: 0.05, timeScale: 0.45 }); break;
+      case 'getup': { const c = pickClip(a, POOL.getup, 'LayToIdle'); a.play(c, { once: true, fade: 0.1, timeScale: c === 'LayToIdle' ? 1.6 : 1.25 }); break; }
+      case 'stunned': { const c = pickClip(a, POOL.stunned, 'Hit_Head'); a.play(c, { once: true, fade: 0.05, timeScale: c === 'Hit_Head' ? 0.45 : 1 }); break; }
       default: break;
     }
   }
@@ -193,6 +226,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     let push = args.push ?? 3, lift = args.lift ?? 0;
     if (!e.alive || e.state === 'out' || e.state === 'pinned' || (e.hp <= 0 && kind !== 'slam')) return { dealt: 0, blocked: false, ignored: true };
     const front = from ? ((from.x - e.body.p.x) * Math.sin(e.facing) + (from.z - e.body.p.z) * Math.cos(e.facing)) > 0 : true;
+    e.hitFromBack = !front;
     if (kind === 'web') {
       e.webAgo = 0; // a web pull can yank him in for a moment after
       e.web = Math.min(1, e.web + dmg / (e.A.heavy ? 2 : e.A.shield ? 4 / 3 : 1));
@@ -327,7 +361,14 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
             onEvent({ type: 'enemyWindup', e, at: e.strikeAt, ranged: gun, unblockable: !!A.unblockable });
           }
           const moving = Math.hypot(wantVx, wantVz);
-          e.model.animator.play(moving > 3.6 ? 'Jog_Fwd_Loop' : moving > 0.4 ? 'Walk_Loop' : 'Idle_Loop', { timeScale: Math.max(0.7, moving / 3.2) });
+          const an = e.model.animator;
+          // Waiting his turn: now and then a taunt (Insomniac's goons jeer between attacks).
+          if (e.tauntT > 0) e.tauntT -= dt;
+          else if (moving < 1.2 && !A.ranged && !tokensOf(T).isHolder(e) && Math.random() < dt * 0.07) {
+            const c = pickClip(an, POOL.taunt, null);
+            if (c) { an.play(c, { once: true, fade: 0.2 }); e.tauntT = Math.min(2.6, an.duration(c)); }
+          }
+          if (!(e.tauntT > 0)) an.play(moving > 3.6 ? 'Jog_Fwd_Loop' : moving > 0.4 ? 'Walk_Loop' : (e.fightIdle && e.fightIdle !== 'Idle_Loop' ? e.fightIdle : (e.fightIdle = pickClip(an, POOL.fightIdle, 'Idle_Loop'))), { timeScale: moving > 0.4 ? Math.max(0.7, moving / 3.2) : 1 });
           break;
         }
         case 'windup':
@@ -337,7 +378,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
             e.red = true;
             if (e.model.tell) e.model.tell.value = 2;
             const act = e.windAction;
-            if (act) act.timeScale = (act.getClip().duration * 0.6) / 0.18;
+            if (act) act.timeScale = (act.getClip().duration * (e.windFrac ?? 0.6) * 0.33) / Math.max(0.1, e.strikeAt - e.t);
           }
           if (e.t >= e.strikeAt) {
             setState(e, 'strike');

@@ -411,3 +411,6 @@ body.cb .bfill { background: linear-gradient(#5ab0ff, #1f4fb6); }
 .cb-sensevig.on { opacity: 1; }
 .alertbox { position: absolute; right: 22px; top: 120px; max-width: 360px; padding: 8px 14px; background: #ff4a3a; color: #fff; font-family: var(--head); font-size: 18px; letter-spacing: 0.5px; border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); transform: translateX(130%) rotate(1deg); transition: transform 0.28s cubic-bezier(.2,.9,.3,1.2); pointer-events: none; -webkit-text-stroke: 0.5px var(--ink); }
 .alertbox.show { transform: translateX(0) rotate(1deg); }
+.emote-wheel { position: fixed; z-index: 30; }
+.emote-title { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 30px var(--head); letter-spacing: 1px; color: var(--ink); }
+.cb-slot.off { opacity: 0.35; }

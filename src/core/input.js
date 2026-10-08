@@ -28,6 +28,7 @@ export function padActions(pad, out = new Set()) {
   if (btn(PAD.scan)) out.add('scan');
   if (btn(PAD.photo)) out.add('photo');
   if (btn(PAD.trick)) out.add('trick');
+  if (btn(PAD.emote)) out.add('emote');
   if (btn(PAD.pause)) out.add('pause');
   // LT + RT is a zip; RT alone is swing.
   if (btn(PAD.swing)) out.add(btn(PAD.zipHold) ? 'zip' : 'swing');

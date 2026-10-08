@@ -22,6 +22,7 @@ export const ACTIONS = [
   { id: 'ping', label: 'Multiplayer: ping where you look', group: 'Other' },
   { id: 'chat', label: 'Multiplayer: chat', group: 'Other' },
   { id: 'quickChat', label: 'Multiplayer: quick chat (hold, then 1 to 8)', group: 'Other' },
+  { id: 'emote', label: 'Emote wheel (hold, then let go on one)', group: 'Other' },
   { id: 'help', label: 'Controls help', group: 'Other' },
   { id: 'pause', label: 'Pause and settings', group: 'Other' },
 ];
@@ -48,6 +49,7 @@ export const DEFAULT_BINDINGS = {
   ping: ['KeyG'],
   chat: ['Enter'],
   quickChat: ['KeyT'],
+  emote: ['KeyB'],
   help: ['KeyH'],
   pause: ['Escape'],
   photo: ['KeyP'],
@@ -70,6 +72,7 @@ export const PAD = {
   scan: 12,     // D-pad up (Kraven and Mysterio need the scan: a pad once could not)
   photo: 14,    // D-pad left
   trick: 15,    // D-pad right (D-pad down advances the radio)
+  emote: 13,    // D-pad down held: the emote wheel (a tap still advances the radio)
   pause: 9,     // Start / Options
 };
 

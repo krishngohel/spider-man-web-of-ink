@@ -23,6 +23,8 @@ import { SHADE_UNIFORMS, setShadowVolume } from '../render/comicShade.js';
 import { buildStreetProps, carBoxes } from '../world/streetProps.js';
 import { buildStreetMeshes } from '../world/streetMesh.js';
 import { buildLanterns } from '../world/lanterns.js';
+import { createEmoteWheel } from '../ui/emoteWheel.js';
+import { emoteById } from '../hero/emotes.js';
 import { createHero, emptyIntent } from '../hero/controller.js';
 import { loadHeroAssets, buildHeroModel, loadCombatClips } from '../hero/model.js';
 import { TUNE } from '../combat/tuning.js';
@@ -197,6 +199,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const sfx = createSfx(() => settings.volume);
   const uiRoot = el('div', { class: 'ui-layer' });
   document.body.append(uiRoot);
+  const emoteWheel = createEmoteWheel(uiRoot, { has: (clip) => heroModel.animator.has(clip) });
   const combatHud = createCombatHud(uiRoot, { get combat() { return combat; }, get hero() { return hero; }, getSettings: () => settings, getDevice: () => input.device });
   {
     const sv = new THREE.Vector3();
@@ -517,7 +520,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (input.device === 'pad' && !input.down('gadget') && padGadgetDown && !wheelUsed) intent.gadgetPressed = true;
     if (input.device === 'pad') { if (!input.down('gadget')) wheelUsed = false; padGadgetDown = input.down('gadget'); }
   }
-  let gadgetHold = 0, padGadgetDown = false, wheelUsed = false;
+  let gadgetHold = 0, padGadgetDown = false, wheelUsed = false, emoteHold = 0;
   const clearEdges = () => {
     intent.swingPressed = false; intent.swingReleased = false; intent.jumpPressed = false; intent.jumpReleased = false; intent.zipPressed = false; intent.hangPressed = false; intent.trickPressed = false;
     intent.attackPressed = false; intent.webPressed = false; intent.yankPressed = false; intent.gadgetPressed = false; intent.divePressed = false;
@@ -814,6 +817,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (combatHud.wheelOpen) { if (!session.active) gdt *= 0.25; intent.moveX = intent.moveZ = 0; }
       if (gadgetHold > 12) { if (!combatHud.wheelOpen) combatHud.openWheel(); combatHud.steerWheel(input.look, input.move); wheelUsed = true; }
       else if (combatHud.wheelOpen) { const pick = combatHud.closeWheel(); if (pick) combat.gadgets.select(pick); }
+      // The emote wheel (hold B / D-pad down): free roam, standing on the ground, nobody to fight.
+      emoteHold = input.down('emote') ? emoteHold + 1 : 0;
+      const emoteOk = hero.state === 'ground' && !combat.heroCombat.c.move && combat.enemies.engaged.length === 0;
+      if (emoteHold > 10 && emoteOk) { if (!emoteWheel.open) emoteWheel.show(); emoteWheel.steer(input.look, input.move); intent.moveX = intent.moveZ = 0; }
+      else if (emoteWheel.open) { const id = emoteWheel.close(); if (id && emoteOk) poser.playEmote(emoteById(id)); }
       if (storyOn) director.preStep(intent, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
       combat.preStep(intent, gdt);
       const Tp = performance.now();

@@ -76,6 +76,7 @@ export function createPoser(heroModel) {
   let landT = 0;            // superhero landing hold
   let shot = null;          // { t, x, y, z } while a web shot animates
   let trick = null;         // { def, name, t }
+  let emote = null;         // { clip, loop, t, started } while an emote plays (src/hero/emotes.js)
   let lastTrick = '';
   let trickN = 0;
   let variant = 0;          // which swing pose set this swing uses (A, B, C)
@@ -125,6 +126,9 @@ export function createPoser(heroModel) {
     rig,
     get webHand() { return webSide; },
     get trick() { return trick ? trick.name : null; },
+    get emote() { return emote ? emote.clip : null; },
+    playEmote(e) { emote = e && animator.has(e.clip) ? { clip: e.clip, loop: !!e.loop, t: 0, started: false } : null; return !!emote; },
+    stopEmote() { emote = null; },
     handWorld(out) { return model.getObjectByName(webSide === 'r' ? 'hand_r' : 'hand_l').getWorldPosition(out); },
     // Where the web leaves the body: the web hand, or the feet when hanging upside down.
     lineWorld(out) {
@@ -212,6 +216,7 @@ export function createPoser(heroModel) {
       // How long he has stood still (the idle clip runs; he no longer squats just for standing on a
       // roof: like Insomniac's Spider-Man he stands easy, and perches only off a zip or a launch).
       idleT = st === 'ground' && hs < 0.3 ? idleT + dt : 0;
+      if (emote && (st !== 'ground' || hs > 0.6 || combatAnim.active || !animator.has(emote.clip))) emote = null;
 
       // Orientation and target pose for this state -------------------------------------------
       let wantProc = 1;
@@ -225,7 +230,13 @@ export function createPoser(heroModel) {
         basis(UP, tmp, qBase);
       } else if (st === 'ground') {
         basis(UP, tmp, qBase);
-        if (landT > 0) {
+        if (emote) {
+          // An emote: the clip plays the whole body (a once-clip is started once, not every frame).
+          wantProc = 0;
+          if (!emote.started) { animator.play(emote.clip, { once: !emote.loop, fade: 0.3 }); emote.started = true; }
+          emote.t += dt;
+          if (!emote.loop && emote.t > animator.duration(emote.clip) - 0.3) emote = null;
+        } else if (landT > 0) {
           target.set(POSES.land);
           // Plant the fist: the right hand pinned to the ground just ahead of the body.
           handTarget.set(0, 0, 0.45).applyQuaternion(orient.quaternion).add(root.position);
