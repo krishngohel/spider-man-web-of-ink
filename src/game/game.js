@@ -19,6 +19,8 @@ import { createSky, createSkyline } from '../world/sky.js';
 import { env as envAt, createClock, PRESETS, WEATHERS } from '../world/timeWeather.js';
 import { createRain } from '../world/rain.js';
 import { createCityLife } from '../world/cityLife.js';
+import { createHalos, HALO } from '../render/halos.js';
+const CAR_HEAD = [1.0, 0.88, 0.6], CAR_TAIL = [1.0, 0.1, 0.08];
 import { SHADE_UNIFORMS, setShadowVolume } from '../render/comicShade.js';
 import { buildStreetProps, carBoxes } from '../world/streetProps.js';
 import { buildStreetMeshes } from '../world/streetMesh.js';
@@ -121,6 +123,27 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const lanterns = buildLanterns(city, scene);
   const rain = createRain(scene);
   const life = createCityLife(scene, city, quality);
+  // Halos for the city's small lights at night (render/halos.js): lamps, signals, beacons, cars.
+  const halos = createHalos();
+  scene.add(halos.points);
+  {
+    const LAMP = [1.0, 0.72, 0.36], RED = [1.0, 0.16, 0.12], AMBER = [1.0, 0.62, 0.12], GREEN = [0.25, 1.0, 0.45];
+    for (const l of street.lamps) halos.add(l.x + (l.facing > 0 ? 1.5 : -1.5), 5.9, l.z, LAMP, 2.0);
+    // The signal housing hangs 3.6 m out on its arm (streetMesh.js trafficGeometry, turned 90 deg).
+    for (const l of street.lights) {
+      halos.add(l.x - 3.62, 4.67, l.z, RED, 1.3, HALO.RED);
+      halos.add(l.x - 3.62, 4.27, l.z, AMBER, 1.3, HALO.AMBER);
+      halos.add(l.x - 3.62, 3.87, l.z, GREEN, 1.3, HALO.GREEN);
+    }
+    // Aircraft beacons: every antenna top, and the roofs of the tallest towers.
+    let k = 0;
+    for (const b of city.boxes) {
+      const h = b.max[1], cx = (b.min[0] + b.max[0]) / 2, cz = (b.min[2] + b.max[2]) / 2;
+      if (b.style === 16 && b.kind === 'prop') halos.add(cx, h + 0.3, cz, RED, 4.5, HALO.BLINK, (k++ * 0.37) % 1);
+      else if (b.kind === 'building' && h > 150) halos.add(cx, h + 1.5, cz, RED, 7, HALO.BLINK, (k++ * 0.61) % 1);
+    }
+  }
+  let nightNow = 0;
   let scare = null;
   // Time of day and weather: free roam cycles unless the settings (or a mission) hold them.
   // Free roam opens at golden hour (spec G5), then the day cycles as before.
@@ -153,18 +176,22 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     mixC(a.hemiSky, b.hemiSky, t, hemi.color); mixC(a.hemiGround, b.hemiGround, t, hemi.groundColor); hemi.intensity = a.hemiI + (b.hemiI - a.hemiI) * t;
     mixC(a.fog, b.fog, t, fogState.color); fogState.near = a.fogNear + (b.fogNear - a.fogNear) * t;
     setNight(a.night);
+    nightNow = a.night;
     streetGroup.userData.setNight?.(a.night);
     lanterns.userData.setNight(a.night);
     rain.setAmount(a.rain + (b.rain - a.rain) * t);
     // The light of the hour for the comic shading: its level and its colour.
     // Only partly lifted: a night stays mostly in shade, just not all of it.
     const lvl = Math.max(0.55, (sun.intensity * 0.55 + hemi.intensity * 0.45) / (1.9 * 0.55 + 1.25 * 0.45));
+    // Night: the darks go dark (the tint below) and the vignette deepens, so lit windows, signs
+    // and lamps carry the frame.
+    ink.setVignette?.(0.36 + 0.24 * a.night);
     if (shadeFreeze) return;
     SHADE_UNIFORMS.uLightLevel.value = lvl;
     const nightK = a.night, warm = Math.max(0, 1 - Math.abs(clock.hour - 18.4) / 1.6) + Math.max(0, 1 - Math.abs(clock.hour - 6.6) / 1.2);
     SHADE_UNIFORMS.uTint.value.setRGB(1, 1, 1)
       .lerp(C4.setRGB(1.08, 0.94, 0.8), Math.min(1, warm) * (1 - nightK))
-      .lerp(C4.setRGB(0.34, 0.38, 0.62), nightK);
+      .lerp(C4.setRGB(0.15, 0.17, 0.33), nightK);
   }
   onProgress(0.15);
 
@@ -994,6 +1021,18 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     prof('aim', Tprev);
     fx.update(dt);
     life.update(mode === 'play' ? gdt : dt * 0.5, renderP, scare);
+    halos.update(performance.now() / 1000, life.lightT, nightNow);
+    if (nightNow > 0.02) {
+      // Car lamps: two white heads in front, two red tails behind.
+      halos.beginDynamic();
+      life.eachCar((x, z, dx, dz) => {
+        for (const s of [-0.75, 0.75]) {
+          halos.addDynamic(x + dx * 2.3 - dz * s, 0.75, z + dz * 2.3 + dx * s, CAR_HEAD, 1.0);
+          halos.addDynamic(x - dx * 2.3 - dz * s, 0.8, z - dz * 2.3 + dx * s, CAR_TAIL, 0.9);
+        }
+      });
+      halos.endDynamic();
+    }
     combatHud.update(dt, camera);
     scare = null;
     if (trace) {

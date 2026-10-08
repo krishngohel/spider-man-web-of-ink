@@ -144,9 +144,23 @@ export function buildStreetMeshes(props, scene, quality) {
     const coneMat = new THREE.ShaderMaterial({
       uniforms: { uGlow: glow, uCol: { value: new THREE.Color(0xffd98a) } },
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
-      vertexShader: `varying float vH; void main() { vH = position.y / 5.95; gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0); }`,
+      // Light, not a solid wedge: brightest where the cone faces the eye (its middle) and fading to
+      // nothing at its silhouette, toward the ground and when the camera is inside it.
+      vertexShader: `varying float vH; varying vec3 vN; varying vec3 vV;
+void main() {
+  vH = position.y / 5.95;
+  vec4 mv = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+  vN = normalize(normalMatrix * mat3(instanceMatrix) * normal);
+  vV = -mv.xyz;
+  gl_Position = projectionMatrix * mv;
+}`,
       fragmentShader: `${AUX_DECL}
-uniform float uGlow; uniform vec3 uCol; varying float vH; void main() { gl_FragColor = vec4(uCol * uGlow * 0.22 * (1.0 - vH * 0.85), 1.0); ${AUX_WRITE_NONE} }`,
+uniform float uGlow; uniform vec3 uCol; varying float vH; varying vec3 vN; varying vec3 vV;
+void main() {
+  float face = abs(dot(normalize(vN), normalize(vV)));
+  float k = face * face * (0.25 + 0.75 * vH * vH) * smoothstep(1.5, 5.0, length(vV));
+  gl_FragColor = vec4(uCol * uGlow * 0.3 * k, 1.0); ${AUX_WRITE_NONE}
+}`,
     });
     const cones = new THREE.InstancedMesh(cone, coneMat, props.lamps.length);
     const bulbMat = new THREE.ShaderMaterial({

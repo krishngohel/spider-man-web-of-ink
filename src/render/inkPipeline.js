@@ -17,6 +17,7 @@ uniform sampler2D tDepth;
 uniform sampler2D tAux;    // view normal (octahedral), object id, flags: see render/gbuffer.js
 uniform vec2 uTexel;
 uniform float uNear, uFar, uTime, uFlash, uHalftone, uHalftoneAmount;
+uniform float uVignette;
 uniform float uWobble, uHatch, uMidDots, uSkyDots, uColorEdges, uMisreg, uPaletteAmt, uImpact, uImpactSoft, uPaperTex, uFilter;
 uniform vec2 uImpactCenter;
 uniform vec3 uPalette[6];
@@ -227,11 +228,11 @@ void main() {
   }
   col *= 0.96 + 0.04 * hash(floor(frag / 2.0) + floor(uTime * 6.0));
   vec2 v = vUv - 0.5;
-  col *= 1.0 - 0.36 * dot(v, v);
+  col *= 1.0 - uVignette * dot(v, v);
   // Pixels a material marked with alpha < 0.5 (Spider-Man's lenses) skip the ink: clean colour, only
   // the paper vignette.
   vec4 raw = texture2D(tColor, vUv);
-  if (raw.a < 0.5) col = raw.rgb * (1.0 - 0.36 * dot(v, v));
+  if (raw.a < 0.5) col = raw.rgb * (1.0 - uVignette * dot(v, v));
   gl_FragColor = vec4(col, 1.0);
   if (uDebugAux > 0.5) gl_FragColor = vec4(texture2D(tAux, vUv).rgb, 1.0);
   #include <colorspace_fragment>
@@ -268,6 +269,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     uAccent: { value: new THREE.Color(PALETTE.suitRed) },
     uFilter: { value: 0 },
     uWobble: { value: 0 }, uHatch: { value: 0 }, uMidDots: { value: 0 }, uSkyDots: { value: 0 },
+    uVignette: { value: 0.36 },
     uColorEdges: { value: 0 }, uMisreg: { value: 0 }, uPaletteAmt: { value: 0 }, uPaperTex: { value: 0 },
     uDebugAux: { value: 0 }, uSpeedK: { value: 0 },
     uFogColor: { value: new THREE.Color(PALETTE.haze) }, uFogNear: { value: 320 }, uFogFar: { value: 1800 },
@@ -326,6 +328,8 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     if (cx !== undefined) uniforms.uImpactCenter.value.set(cx, cy);
   }
   const FILTER_INDEX = { ink: 0, noir: 1, pop: 2, sepia: 3 };
+  // The paper vignette: light by day, deeper at night so the lit windows and signs carry the frame.
+  function setVignette(v) { uniforms.uVignette.value = v; }
   function setFilter(name) { uniforms.uFilter.value = FILTER_INDEX[name] ?? 0; }
 
   // Benchmark switches: cachedShadows skips the shadow map update; repeat draws the composite k
@@ -402,5 +406,5 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     }
   }
 
-  return { uniforms, setSize, render, setFog, warm, setComic, setPalette, setImpact, setFilter, compileAsync, debug, get gpuMs() { return gpuMs; } };
+  return { uniforms, setSize, render, setFog, warm, setComic, setPalette, setImpact, setFilter, setVignette, compileAsync, debug, get gpuMs() { return gpuMs; } };
 }

@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { signAtlas } from './signAtlas.js';
 import { PALETTE } from '../render/palette.js';
 import { toonGradient } from '../render/toon.js';
 import { ISLAND, QUEENS, RESERVOIR, BRIDGE } from './city.js';
@@ -35,6 +36,7 @@ function buildingMaterial() {
     shader.uniforms.uInk = { value: new THREE.Color(PALETTE.ink) };
     shader.uniforms.uStone = { value: new THREE.Color(PALETTE.limestone) };
     shader.uniforms.uAwning = { value: new THREE.Color(PALETTE.awning) };
+    shader.uniforms.uWords = { value: signAtlas() };
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nattribute vec2 aStyle;\nattribute vec4 aBox;\nvarying vec3 vWPos;\nvarying vec3 vWNrm;\nflat varying vec2 vStyle;\nflat varying vec4 vBox;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvWPos = (modelMatrix * vec4(position, 1.0)).xyz;\nvWNrm = normal;\nvStyle = aStyle;\nvBox = aBox;');
@@ -42,6 +44,7 @@ function buildingMaterial() {
       .replace('#include <common>', `#include <common>
 uniform float uNight;
 uniform vec3 uWinDark, uWinLit, uRoof, uInk, uStone, uAwning;
+uniform sampler2D uWords; // signAtlas.js: shop boards, billboards, neon blades
 ${COMIC_SHADE}
 varying vec3 vWPos;
 varying vec3 vWNrm;
@@ -53,6 +56,7 @@ float gInk = 0.0;           // ink drawn over the lit colour
 float gGlass = 0.0;         // a glass reflection streak, drawn over the lit colour
 float gEmit = 0.0;          // a lit window at night, unaffected by light
 vec3 gEmitCol = vec3(-1.0); // what lights up (a sign glows its own colour), else the window light
+vec2 gPane = vec2(0.5);     // where in its pane this pixel is (0..1), for what is inside a lit room
 float gNear = 1.0;          // fine detail fades with distance (1 near, 0 far)
 ${HASH}
 float h21(vec2 p) { return hash12(p); }
@@ -68,14 +72,43 @@ float hline(float y, float at, float pw, float px) {
 }
 float inside(vec2 p, vec2 lo, vec2 hi) { return step(lo.x, p.x) * step(p.x, hi.x) * step(lo.y, p.y) * step(p.y, hi.y); }
 
+// A lit room's light: mostly warm lamps in a few tints, some cool office light, now and then a
+// television's blue (linear colour, like the uniforms).
+vec3 roomLight(float t) {
+  return t < 0.5 ? vec3(1.0, 0.58, 0.16) : t < 0.76 ? vec3(1.0, 0.74, 0.34) : t < 0.93 ? vec3(0.62, 0.8, 1.0) : vec3(0.22, 0.42, 1.0);
+}
 vec3 glassColor(vec2 id, float seed, float u, float v) {
   float r = h21(id + seed * 13.1);
   vec3 g = mix(uWinDark, uWinDark * 1.6 + vec3(0.05, 0.09, 0.14), step(0.7, r));
   // Night: lights come on in clusters (three bays of one floor: an office, a flat), a few windows
-  // in a lit cluster still dark.
+  // in a lit cluster still dark. Each building has its own hour: some towers mostly asleep.
   float rc = h21(floor(id / vec2(3.0, 1.0)) + seed * 7.3);
-  gEmit = max(gEmit, step(1.0 - uNight * 0.6, rc) * step(0.18, r) * uNight);
-  return mix(g, uWinLit * (0.75 + 0.25 * r), gEmit);
+  float occ = 0.2 + 0.32 * fract(seed * 9.17);
+  float lit = step(1.0 - occ, rc) * step(0.18, r) * step(0.01, uNight);
+  if (lit < 0.5) return g;
+  gEmit = max(gEmit, lit * uNight);
+  // Inside the room (near only): the lamp's hotspot in two flat bands, then blinds, curtains or
+  // someone at the window on some.
+  vec3 lc = roomLight(h21(id * 1.7 + seed * 3.1));
+  vec2 q = gPane;
+  float k = gNear;
+  vec2 hp = vec2(0.2 + 0.6 * fract(r * 7.13), 0.32);
+  lc *= mix(1.0, 1.0 - 0.16 * step(0.45, length((q - hp) * vec2(1.0, 1.5))), k);
+  float kind = fract(r * 31.7);
+  if (kind < 0.24) {
+    float down = 0.3 + 0.5 * fract(r * 13.3);
+    lc *= 1.0 - k * step(1.0 - down, q.y) * (0.22 + 0.2 * step(0.5, fract(q.y * 9.0)));
+  } else if (kind < 0.44) {
+    float side = 0.16 + 0.12 * (1.0 - q.y);
+    lc = mix(lc, lc * vec3(0.55, 0.32, 0.3), k * step(0.5 - side, abs(q.x - 0.5)));
+  } else if (kind < 0.52) {
+    vec2 c = vec2(0.35 + 0.3 * fract(r * 5.7), 0.5);
+    float head = step(length((q - c) * vec2(1.0, 1.6)), 0.13);
+    float body = step(abs(q.x - c.x), 0.22) * step(q.y, c.y - 0.12) * step(length(vec2(max(abs(q.x - c.x) - 0.1, 0.0), max(q.y - (c.y - 0.2), 0.0)) * vec2(1.0, 1.6)), 0.14);
+    lc = mix(lc, vec3(0.08, 0.06, 0.1), k * max(head, body));
+  }
+  gEmitCol = lc;
+  return mix(g, lc, uNight);
 }
 
 vec3 facade(vec3 base, float style, float seed) {
@@ -94,18 +127,22 @@ vec3 facade(vec3 base, float style, float seed) {
 
   // Building edges: a strong ink line down each corner and along the roof line.
   gInk = max(gInk, hline(du, 0.0, pw, 2.2));
-  // Giant signs (Neon Square, the Bugle): bold colour panels with blocks of "lettering", lit.
+  // Giant signs (Neon Square, the Bugle): billboards with real words, neon blades spelling down.
   if (style > 17.5 && style < 18.5) {
     float h = fract(seed * 13.7);
-    vec3 sc = h < 0.17 ? vec3(0.98, 0.82, 0.18) : h < 0.34 ? vec3(0.9, 0.2, 0.25) : h < 0.5 ? vec3(0.2, 0.75, 0.9) : h < 0.67 ? vec3(0.95, 0.35, 0.75) : h < 0.84 ? vec3(0.35, 0.85, 0.4) : vec3(0.98, 0.55, 0.15);
     vec2 sp = vec2((u - u0) / max(u1 - u0, 0.1), (v - y0) / max(y1 - y0, 0.1));
-    col = sc;
-    // Lettering: two rows of blocky bars with gaps, and a border.
-    float row = step(0.22, sp.y) * step(sp.y, 0.44) + step(0.56, sp.y) * step(sp.y, 0.78);
-    float letter = step(0.35, fract(sp.x * (5.0 + floor(h * 4.0)) + h)) * step(0.08, sp.x) * step(sp.x, 0.92);
-    col = mix(col, vec3(0.98, 0.96, 0.9), row * letter);
-    float border = 1.0 - step(0.05, min(min(sp.x, 1.0 - sp.x), min(sp.y, 1.0 - sp.y)));
-    col = mix(col, vec3(0.08), border);
+    // Read left to right from in front, whichever way the face points.
+    if ((xFace && vWNrm.x > 0.0) || (!xFace && vWNrm.z < 0.0)) sp.x = 1.0 - sp.x;
+    vec2 st = vec2(sp.x, 1.0 - sp.y);
+    float asp = (u1 - u0) / max(y1 - y0, 0.1);
+    if (asp < 0.6) {
+      float i = floor(h * 8.0);
+      col = texture2D(uWords, vec2(1536.0 + mod(i, 4.0) * 128.0 + 4.0 + st.x * 120.0, 1024.0 + floor(i / 4.0) * 512.0 + 4.0 + st.y * 504.0) / 2048.0).rgb;
+    } else {
+      float i = y0 > 110.0 ? 11.0 : floor(h * 11.0);
+      col = texture2D(uWords, vec2(mod(i, 3.0) * 512.0 + 2.0 + st.x * 508.0, 1024.0 + floor(i / 3.0) * 256.0 + 2.0 + st.y * 252.0) / 2048.0).rgb;
+    }
+    // A neon flicker now and then on some signs.
     gEmit = max(gEmit, 0.25 + 0.75 * uNight);
     gEmitCol = min(col * (1.0 + 0.25 * uNight), vec3(1.0)); // neon keeps its colour at night
     gInk = max(gInk, hline(top, 0.0, pw, 1.8));
@@ -151,7 +188,10 @@ vec3 facade(vec3 base, float style, float seed) {
     if (style > 23.5) tint = base * 1.1;
     col = mix(tint, tint * 1.45 + vec3(0.06, 0.08, 0.1), smoothstep(0.35, 1.0, hgt));
     float r = h21(id + seed * 13.1);
-    gEmit = max(gEmit, step(1.0 - uNight * 0.55, r) * uNight);
+    float rc = h21(floor(id / vec2(4.0, 1.0)) + seed * 5.9);
+    float litG = step(1.0 - (0.18 + 0.3 * fract(seed * 7.7)), rc) * step(0.2, r);
+    gEmit = max(gEmit, litG * uNight);
+    if (litG > 0.5) gEmitCol = roomLight(h21(id * 1.3 + seed)) * (0.8 + 0.2 * r);
     col = mix(col, uWinLit * (0.75 + 0.25 * r), gEmit);
     // Mullions and floor slabs.
     float mull = max(1.0 - smoothstep(0.0, fwidth(g.x) * 1.5, min(f.x, 1.0 - f.x)), 1.0 - smoothstep(0.0, fwidth(g.y) * 2.5, min(f.y, 1.0 - f.y)));
@@ -163,6 +203,16 @@ vec3 facade(vec3 base, float style, float seed) {
     return col;
   }
 
+  // Masonry under its cornice slab (pushBox): the slab's flat ink shadow on the wall below it.
+  bool slab = (style < 1.5 || (style > 2.5 && style < 3.5) || (style > 6.5 && style < 7.5) || (style > 16.5 && style < 17.5) || (style > 21.5 && style < 23.5)) && y1 - y0 > 12.0;
+  if (slab && top > 0.9 && top < 1.25) return mix(base, uStone, 0.65) * 0.28;
+  // A belt course a third of the way up tall masonry: a stone band with its own shadow line.
+  float belt = y0 + 0.36 * (y1 - y0);
+  if (slab && y1 - y0 > 24.0 && abs(v - belt) < 0.45) {
+    col = mix(base, uStone, 0.7) * (v < belt - 0.25 ? 0.4 : 1.0);
+    gInk = max(gInk, max(hline(v, belt + 0.45, pw, 1.4), hline(v, belt - 0.45, pw, 1.4)) * lineK);
+    return col;
+  }
   // Masonry: cornice band at the top.
   if (top < 1.8) {
     col = mix(base, uStone, 0.65);
@@ -181,11 +231,38 @@ vec3 facade(vec3 base, float style, float seed) {
     vec2 lo = vec2(0.08, 0.5), hi = vec2(0.92, 3.3);
     vec2 q = vec2(fx, sv / 1.0);
     if (fx > lo.x && fx < hi.x && sv > lo.y && sv < hi.y) {
+      gPane = vec2((fx - lo.x) / (hi.x - lo.x), (sv - lo.y) / (hi.y - lo.y));
       col = glassColor(vec2(floor((u - u0) / bay), 99.0), seed, u, v);
+      float shopId = floor((u - u0) / bay);
+      if (h21(vec2(shopId, seed * 3.3)) > 0.22) {
+        vec3 sc = mix(vec3(1.0, 0.7, 0.32), vec3(0.8, 0.9, 1.0), step(0.75, h21(vec2(seed, shopId))));
+        // Shelves and goods: two inked shelf lines and a row of coloured blocks on each.
+        float shelf = max(hline(sv, 1.25, max(length(fwidth(vec2(u, v))), 1e-4), 1.6), hline(sv, 2.15, max(length(fwidth(vec2(u, v))), 1e-4), 1.6));
+        float goodsRow = step(0.0, sv - 1.25) * step(sv - 1.25, 0.32) + step(0.0, sv - 2.15) * step(sv - 2.15, 0.32);
+        vec3 goods = roomLight(h21(vec2(floor(u * 2.3), shopId))) * vec3(0.9, 0.5, 0.45);
+        sc = mix(sc, goods, goodsRow * gNear * step(0.35, fract(u * 2.3)));
+        sc = mix(sc, vec3(0.2, 0.14, 0.12), shelf * gNear);
+        gEmit = max(gEmit, uNight);
+        gEmitCol = sc;
+        col = mix(col, sc, uNight);
+      }
       gGlass = max(gGlass, step(fract((u * 0.8 + sv) / 3.0), 0.12) * 0.5);
     }
     // Awning stripe over each shop, a colour per shop (the city green, red, navy, mustard, maroon,
     // teal), striped with cream on some.
+    float shopN = floor((u - u0) / bay);
+    float board = h21(vec2(shopN * 1.37, seed * 9.1));
+    if (board < 0.55 && sv > 3.4 && sv < 4.55 && fx > 0.04 && fx < 0.96) {
+      vec2 sb = vec2((fx - 0.04) / 0.92, (sv - 3.4) / 1.15);
+      if ((xFace && vWNrm.x > 0.0) || (!xFace && vWNrm.z < 0.0)) sb.x = 1.0 - sb.x;
+      float ti = floor(h21(vec2(shopN, seed * 3.7)) * 64.0);
+      col = texture2D(uWords, vec2(mod(ti, 4.0) * 512.0 + 2.0 + sb.x * 508.0, floor(ti / 4.0) * 64.0 + 2.0 + (1.0 - sb.y) * 60.0) / 2048.0).rgb;
+      // Lit from the shop below at night.
+      gEmit = max(gEmit, 0.55 * uNight);
+      gEmitCol = col * 1.1;
+      gInk = max(gInk, hline(sv, 4.55, pw, 1.6) * lineK);
+      return col;
+    }
     if (sv > 3.4 && sv < 4.2) {
       float ah = fract(sin(floor((u - u0) / bay) * 12.9898 + seed * 78.233) * 43758.5453);
       vec3 aw = ah < 0.3 ? uAwning : ah < 0.45 ? vec3(0.72, 0.16, 0.14) : ah < 0.6 ? vec3(0.16, 0.24, 0.48) : ah < 0.72 ? vec3(0.86, 0.64, 0.18) : ah < 0.86 ? vec3(0.45, 0.12, 0.16) : vec3(0.12, 0.5, 0.52);
@@ -250,6 +327,7 @@ vec3 facade(vec3 base, float style, float seed) {
     gInk = max(gInk, hline(fy, 0.38, pw, 1.6) * escK);
   }
   if (inWin > 0.5) {
+    gPane = (fp - lo) / max(hi - lo, vec2(1e-3));
     col = glassColor(id, seed, u, v);
     // A diagonal highlight in the top corner of each pane.
     float s = (fp.x - lo.x) + (hi.y - fp.y);
@@ -315,7 +393,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v11';
+  mat.customProgramCacheKey = () => 'city-building-v14';
   return mat;
 }
 
@@ -359,7 +437,18 @@ function pushBox(b, seed, arr) {
     const stone = new THREE.Color(PALETTE.limestone).multiplyScalar(0.95 * j);
     pushQuadBox(arr, { min: [x0 - out, y1 - 0.9, z0 - out], max: [x1 + out, y1 - 0.1, z1 + out] }, 13, seed, stone, y1 - 0.9, y1 - 0.1, true);
   }
+  // A parapet round every flat roof (not the glass towers): a low lip that gives each roof a
+  // silhouette against the sky. Visual only and kept low (the hero perches on the collision roof
+  // at the edge, so a tall wall would swallow his feet).
+  if (b.kind === 'building' && !GLASS.has(b.style) && y1 - y0 > 8 && x1 - x0 > 6 && z1 - z0 > 6) {
+    const H = 0.55, T = 0.32;
+    const lip = col.clone().multiplyScalar(0.82);
+    for (const [a0, a1, c0, c1] of [[x0, x1, z0, z0 + T], [x0, x1, z1 - T, z1], [x0, x0 + T, z0 + T, z1 - T], [x1 - T, x1, z0 + T, z1 - T]]) {
+      pushQuadBox(arr, { min: [a0, y1, c0], max: [a1, y1 + H, c1] }, 13, seed, lip, y1, y1 + H, false);
+    }
+  }
 }
+const GLASS = new Set([2, 24, 9, 13, 14, 15, 16, 18]);
 
 export function buildCityMeshes(city, scene, quality) {
   const group = new THREE.Group();
@@ -526,6 +615,7 @@ uniform vec2 uCorners;
 uniform float uNightG;
 uniform sampler2D uLand;
 float gInkG = 0.0;
+float gPoolG = 0.0;   // a street lamp's pool of light on the ground (lit at night, after shading)
 ${HASH}
 float inkAt(float d, float pw, float px) { return 1.0 - smoothstep(pw * px * 0.5, pw * (px * 0.5 + 1.0), abs(d)); }
 varying vec3 vWPos;
@@ -635,17 +725,34 @@ ${COMIC_SHADE}`)
     } else {
       col = uSidewalk * 0.9;
     }
+    // Pools of lamplight (night): the lamps stand on a fixed grid (streetProps.js: 0.9 m in from the
+    // avenue kerb every 28 m, none near a cross street) with the head 1.5 m out over the road, so
+    // the nearest one is found by arithmetic. A hard-edged ellipse with a ring of Ben-Day dots at
+    // its rim: the comic version of a soft pool.
+    if (!suburb && uNightG > 0.01) {
+      float lx = ax < uGrid.z * 0.5 ? ax - 14.4 : ax - (uGrid.z - 14.4);
+      float lz = mod(w.y - uGrid.y - 14.0, 28.0) - 14.0;
+      float lampSz = mod(w.y - lz - uGrid.y, uGrid.w);
+      if (lampSz >= 13.0 && lampSz <= uGrid.w - 13.0) {
+        float r = length(vec2(lx / 4.6, lz / 5.6));
+        vec2 dc = fract(w * 2.2) - 0.5;
+        float dots = step(length(dc), 0.34 * (1.0 - smoothstep(0.78, 1.0, r)));
+        gPoolG = r < 0.78 ? 1.0 - 0.25 * smoothstep(0.3, 0.78, r) : r < 1.0 ? dots * 0.55 : 0.0;
+      }
+    }
   }
   diffuseColor.rgb = col;
 }`)
       .replace('#include <opaque_fragment>', `{
   // Comic shading, shared with the buildings.
   outgoingLight = mix(comicPattern(comicShade(diffuseColor.rgb, outgoingLight)), uInkG, gInkG);
+  // The pool: the ground's own colour lit warm, strong enough to read on dark asphalt.
+  outgoingLight = mix(outgoingLight, max(diffuseColor.rgb * vec3(1.6, 1.15, 0.62), vec3(0.3, 0.19, 0.08)), gPoolG * uNightG * 0.85);
 }
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-ground-v7';
+  mat.customProgramCacheKey = () => 'city-ground-v8';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';

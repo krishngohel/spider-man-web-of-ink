@@ -224,6 +224,17 @@ void main() { gl_FragColor = vec4(0.32, 0.33, 0.4, 1.0); ${AUX_WRITE_FLAT} }`,
   const streetGreen = () => (lightT % 24) >= 12 && (lightT % 24) < 23;
   return {
     group,
+    // Seconds into the traffic cycle (halos light the matching signal lamp).
+    get lightT() { return lightT; },
+    // Every moving car: fn(x, z, dirX, dirZ).
+    eachCar(fn) {
+      for (let i = 0; i < CAR_N; i++) {
+        const c = car[i];
+        if (!c.alive) continue;
+        const x = c.axis === 0 ? c.lane : c.pos, z = c.axis === 0 ? c.pos : c.lane;
+        fn(x, z, c.axis === 0 ? 0 : c.dir, c.axis === 0 ? c.dir : 0);
+      }
+    },
     // hero: position and velocity, landed: a hard landing this frame (people scatter).
     update(dt, heroP, scare = null) {
       lightT += dt;
