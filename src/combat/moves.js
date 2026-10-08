@@ -2,20 +2,21 @@ import { TUNE } from './tuning.js';
 import { CLIP_DATA } from './clipData.js';
 
 // The hero's moves (spec 1.4 to 1.6): what each one is, which clip plays it, and which one an
-// attack press means right now. clips lists the preferred clips in order (Mixamo, then Gotham's
-// mocap kicks); alt is the Quaternius clip used until the combat clips have loaded.
+// attack press means right now. clips lists the clips a move can play (Mixamo mocap, then
+// Gotham's kicks): the loaded ones take turns, so a jab is not the same jab every time; alt is the
+// Quaternius clip used until the combat clips have loaded.
 //   time: how long the move holds the hero (s); impact: when it lands (s, game time);
 //   push and lift: what it does to the enemy (m/s); stop: the hitstop kind (TUNE.stop).
 
 const L = TUNE.lightTime, I = TUNE.lightImpact;
 export const MOVES = {
-  jab: { clips: ['Punch_Jab'], alt: 'Punch_Jab', time: L, impact: I, push: 3, lift: 0, dmg: 1, stop: 'light' },
-  cross: { clips: ['Punch_Cross'], alt: 'Punch_Cross', time: L, impact: I, push: 3.5, lift: 0, dmg: 1, stop: 'light' },
-  round: { clips: ['Martelo_2', 'Kick_Round'], alt: 'Melee_Hook', time: L, impact: I + 0.02, push: 4, lift: 0, dmg: 1.15, stop: 'round', kick: true },
-  ender: { clips: ['Armada', 'Kick_Spin'], alt: 'Melee_Hook', time: TUNE.enderTime, impact: 0.2, push: TUNE.enderPush * 3, lift: 2, dmg: 1.6, stop: 'ender', kick: true, knock: true },
+  jab: { clips: ['Lead_Jab', 'Jab_Cross', 'Quad_Punch'], alt: 'Punch_Jab', time: L, impact: I, push: 3, lift: 0, dmg: 1, stop: 'light' },
+  cross: { clips: ['Cross_Punch', 'Hook_Punch', 'Elbow_Punch', 'Body_Jab_Cross'], alt: 'Punch_Cross', time: L, impact: I, push: 3.5, lift: 0, dmg: 1, stop: 'light' },
+  round: { clips: ['Martelo_2', 'Mma_Kick', 'Roundhouse_Kick', 'Side_Kick', 'Kick_Round'], alt: 'Melee_Hook', time: L, impact: I + 0.02, push: 4, lift: 0, dmg: 1.15, stop: 'round', kick: true },
+  ender: { clips: ['Armada', 'Meia_Lua', 'Kick_Spin'], alt: 'Melee_Hook', time: TUNE.enderTime, impact: 0.2, push: TUNE.enderPush * 3, lift: 2, dmg: 1.6, stop: 'ender', kick: true, knock: true },
   launcher: { clips: ['Flip_Kick', 'Kick_Front'], alt: 'Melee_Hook', time: 0.42, impact: 0.14, push: 0.5, lift: 11, dmg: 0.8, stop: 'launcher', kick: true },
-  air1: { clips: ['Kick_Front'], alt: 'Punch_Jab', time: TUNE.airHitTime, impact: 0.1, push: 1.2, lift: 0, dmg: 1, stop: 'light', air: true, kick: true },
-  air2: { clips: ['Knee_Strike'], alt: 'Punch_Cross', time: TUNE.airHitTime, impact: 0.1, push: 1.2, lift: 0, dmg: 1, stop: 'light', air: true, kick: true },
+  air1: { clips: ['Kick_Front', 'Side_Kick'], alt: 'Punch_Jab', time: TUNE.airHitTime, impact: 0.1, push: 1.2, lift: 0, dmg: 1, stop: 'light', air: true, kick: true },
+  air2: { clips: ['Knee_Strike', 'Illegal_Knee'], alt: 'Punch_Cross', time: TUNE.airHitTime, impact: 0.1, push: 1.2, lift: 0, dmg: 1, stop: 'light', air: true, kick: true },
   air3: { clips: ['Scissor_Kick', 'Kick_Round'], alt: 'Melee_Hook', time: TUNE.airHitTime, impact: 0.11, push: 1.4, lift: 0, dmg: 1.1, stop: 'light', air: true, kick: true },
   spike: { clips: ['Hurricane_Kick', 'Kick_Flying'], alt: 'Melee_Hook', time: 0.4, impact: 0.15, push: 3, lift: -16, dmg: 1.6, stop: 'ender', air: true, kick: true, knock: true },
   strike: { clips: ['Flying_Kick', 'Kick_Flying'], alt: 'Melee_Hook', time: 0.9, impact: 0.85, push: 8, lift: 3, dmg: 1.6, stop: 'ender', kick: true, travel: true },
@@ -25,20 +26,24 @@ export const MOVES = {
   // flip kick that sends him sky high.
   finWeb: { clips: ['Shoulder_Throw', 'Pull_Rope'], alt: 'Melee_Hook', time: 0.9, impact: 0.45, push: 16, lift: 4, dmg: 1, stop: 'finisher', knock: true, finisher: true, fin: 'web', name: 'WRAPPED UP!' },
   finUpper: { clips: ['Flip_Kick', 'Kick_Front'], alt: 'Melee_Hook', time: 0.9, impact: 0.4, push: 2, lift: 13, dmg: 1, stop: 'finisher', kick: true, knock: true, finisher: true, name: 'SKY HIGH!' },
+  // A flying knee into a flurry of fists, the last one sending him across the street.
+  finKnee: { clips: ['Flying_Knee', 'Knee_Strike'], alt: 'Melee_Hook', time: 1.0, impact: 0.5, push: 14, lift: 3, dmg: 1, stop: 'finisher', knock: true, finisher: true, name: 'TAKE A KNEE!' },
+  // Over the shoulder and down on the pavement.
+  finSlam: { clips: ['Flying_Shoulder_Throw', 'Shoulder_Throw'], alt: 'Melee_Hook', time: 1.0, impact: 0.55, push: 4, lift: 2, dmg: 1, stop: 'finisher', knock: true, finisher: true, name: 'SPLAT!' },
   throw: { clips: ['Shoulder_Throw', 'Pull_Rope'], alt: 'Melee_Hook', time: 0.5, impact: 0.25, push: 14, lift: 4, dmg: 1.2, stop: 'ender', knock: true },
   // Combo moves (after Insomniac's Spider-Man): each one is its own input, so a fight is choices,
   // not one string on repeat.
   // Attack right after a dodge: a flying kick that floors the one who swung.
-  counter: { clips: ['Kick_Flying', 'Kick_Spin'], alt: 'Melee_Hook', time: 0.45, impact: 0.14, push: 10, lift: 2, dmg: 1.8, stop: 'counter', kick: true, knock: true, name: 'COUNTER!' },
+  counter: { clips: ['Kick_Flying', 'Roundhouse_Kick', 'Kick_Spin'], alt: 'Melee_Hook', time: 0.45, impact: 0.14, push: 10, lift: 2, dmg: 1.8, stop: 'counter', kick: true, knock: true, name: 'COUNTER!' },
   // Attack, a beat's pause, attack: a spinning sweep that trips everyone close.
-  sweep: { clips: ['Kick_Spin'], alt: 'Melee_Hook', time: 0.5, impact: 0.18, push: 5, lift: 0, dmg: 1, stop: 'ender', kick: true, aoe: 2.6, name: 'SWEEP!' },
+  sweep: { clips: ['Leg_Sweep', 'Kick_Spin'], alt: 'Melee_Hook', time: 0.5, impact: 0.18, push: 5, lift: 0, dmg: 1, stop: 'ender', kick: true, aoe: 2.6, name: 'SWEEP!' },
   // A thug behind you: a back kick without turning round.
   backKick: { clips: ['Kick_Round'], alt: 'Melee_Hook', time: 0.4, impact: 0.13, push: 10, lift: 1, dmg: 1.4, stop: 'ender', kick: true, knock: true, name: 'BACK KICK!' },
   // A thug you just webbed, out of reach: yank him in and launch him.
-  pull: { clips: ['Pull_Rope', 'Melee_Hook'], alt: 'Melee_Hook', time: 0.5, impact: 0.28, push: 0.5, lift: 11, dmg: 1.2, stop: 'launcher', noWarp: true, name: 'GET OVER HERE!' },
+  pull: { clips: ['Pull_Rope'], alt: 'Melee_Hook', time: 0.5, impact: 0.28, push: 0.5, lift: 11, dmg: 1.2, stop: 'launcher', noWarp: true, name: 'GET OVER HERE!' },
 };
 const STRING = ['jab', 'cross', 'round', 'ender'];
-export const GROUND_FINISHERS = ['finisher', 'finWeb', 'finUpper'];
+export const GROUND_FINISHERS = ['finisher', 'finWeb', 'finUpper', 'finKnee', 'finSlam'];
 const AIR = ['air1', 'air2', 'air3', 'spike'];
 
 // Which move an attack press means (spec 1.4): by distance first, then height, then context.
@@ -55,10 +60,10 @@ export function chooseMove({ d, dy = 0, step = 0, airStep = 0, grounded = true, 
   return { key: STRING[step % STRING.length], lunge: d > TUNE.closeBand };
 }
 
-// The first preferred clip that has loaded, else the fallback.
-export function clipFor(move, have) {
-  for (const c of move.clips) if (have.has(c)) return c;
-  return move.alt;
+// One of the move's clips that has loaded (n picks which, in turn), else the fallback.
+export function clipFor(move, have, n = 0) {
+  const ok = move.clips.filter((c) => have.has(c));
+  return ok.length ? ok[n % ok.length] : move.alt;
 }
 
 // Where each mocap clip's useful part starts (clip seconds): the long studio wind-ups are skipped
@@ -66,10 +71,12 @@ export function clipFor(move, have) {
 export const CLIP_START = { Kick_Front: 0.25, Kick_Round: 0.5, Kick_Spin: 0.1, Kick_Flying: 0.05, Knee_Strike: 0.25 };
 
 // A clip's start, contact and end in clip seconds. Clips without mocap data (the Quaternius
-// punches) land a little before their middle.
+// punches) land a little before their middle. A Mixamo take can carry seconds of stance before
+// and after its blow: the move plays at most WIND before the contact frame and AFTER past it.
+const WIND = 0.7, AFTER = 1.0;
 export function clipTiming(clip, duration) {
   const d = CLIP_DATA[clip];
-  if (d) return { start: CLIP_START[clip] ?? 0, contact: d.contact, end: d.duration };
+  if (d) return { start: CLIP_START[clip] ?? Math.max(0, d.contact - WIND), contact: d.contact, end: CLIP_START[clip] !== undefined ? d.duration : Math.min(d.duration, d.contact + AFTER) };
   return { start: 0, contact: duration * 0.42, end: duration };
 }
 

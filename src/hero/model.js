@@ -26,12 +26,19 @@ export async function loadHeroAssets(base = './assets/', onProgress = () => {}) 
   return { body, bodyHero, bodyF: heroF.scene, hair: hair.scene, clips };
 }
 
-// The combat clips (kicks, flips, evades, reactions; scripts/retarget-mocap.mjs) load after the
-// game is up, so the first load stays fast; until then moves fall back to the Quaternius clips.
+// The mocap clips (scripts/mixamo-clips.mjs) load after the game is up, so the first load stays
+// fast: the combat set first (kicks, punches, reactions, falls), then the social set (emotes, story
+// and city acting). Until then everything falls back to the Quaternius clips.
 export async function loadCombatClips(assets, base = './assets/') {
-  const g = await new GLTFLoader().loadAsync(base + 'anims_combat.glb');
+  const loader = new GLTFLoader();
+  const g = await loader.loadAsync(base + 'anims_combat.glb');
   for (const clip of g.animations) assets.clips.set(clip.name, sanitizeClip(clip));
   assets.combatReady = true;
+  try {
+    const s = await loader.loadAsync(base + 'anims_social.glb');
+    for (const clip of s.animations) assets.clips.set(clip.name, sanitizeClip(clip));
+    assets.socialReady = true;
+  } catch (err) { console.warn('social clips', err); }
   return true;
 }
 

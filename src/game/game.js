@@ -638,7 +638,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         }
         break;
       }
-      case 'heroHurt': sfx.event({ type: 'hurt' }); combatHud.hurt(); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.5); break;
+      case 'heroHurt': sfx.event({ type: 'hurt' }); combatHud.hurt(); combat.enemies.cheer?.(); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.5); break;
       case 'finisher': {
         const s = screenOf(at.x, at.y, at.z);
         if (settings.impactFrames !== 'off') ink.setImpact(1, settings.impactFrames === 'soft', s.x / innerWidth, 1 - s.y / innerHeight);
@@ -820,7 +820,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       // The emote wheel (hold B / D-pad down): free roam, standing on the ground, nobody to fight.
       emoteHold = input.down('emote') ? emoteHold + 1 : 0;
       const emoteOk = hero.state === 'ground' && !combat.heroCombat.c.move && combat.enemies.engaged.length === 0;
-      if (emoteHold > 10 && emoteOk) { if (!emoteWheel.open) emoteWheel.show(); emoteWheel.steer(input.look, input.move); intent.moveX = intent.moveZ = 0; }
+      if (emoteHold > 10 && emoteOk) {
+        if (!emoteWheel.open) emoteWheel.show();
+        if (input.pressed('jump')) emoteWheel.flip();
+        emoteWheel.steer(input.look, input.move); intent.moveX = intent.moveZ = 0; intent.jump = intent.jumpPressed = false;
+      }
       else if (emoteWheel.open) { const id = emoteWheel.close(); if (id && emoteOk) poser.playEmote(emoteById(id)); }
       if (storyOn) director.preStep(intent, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
       combat.preStep(intent, gdt);

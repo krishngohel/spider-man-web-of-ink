@@ -57,6 +57,10 @@ const TRICKS = {
   corkscrew: { axis: [0, 1, 0], turns: 1, dur: 0.5, tuck: 0.9 },
 };
 
+// Mocap flinches when the hero is hit on the ground: small ones, and a big one for a heavy blow.
+const HURT = ['React_Small_F', 'React_Gut', 'React_Small_L', 'React_Small_R'];
+const HURT_BIG = ['React_Front', 'Big_Head_Hit', 'Uppercut_Hit'];
+
 export function createPoser(heroModel) {
   const { root, orient, animator, model } = heroModel;
   animator.prime(CLIPS);
@@ -120,6 +124,16 @@ export function createPoser(heroModel) {
   }
 
   const choose = (name) => (webSide === 'r' ? POSES : MIRRORED)[name];
+  let hurtN = 0;
+  // Which mocap fall to play, or null for the procedural air body: falling (not rising, not
+  // fast and level), no trick, web shot or landing brace under way.
+  const fallClip = (hero, b, speed) => {
+    if (trick || shot || b.v.y > -4 || (hero.toGround ?? 9) < 0.6) return null;
+    const level = Math.hypot(b.v.x, b.v.z);
+    if (level > 18 && level > -b.v.y * 1.2) return null;
+    if (b.v.y < -24 && (hero.toGround ?? 99) > 25 && animator.has('Falling')) return 'Falling';
+    return animator.has('Falling_Idle') ? 'Falling_Idle' : null;
+  };
   const shoulderOf = () => model.getObjectByName(webSide === 'r' ? 'upperarm_r' : 'upperarm_l').getWorldPosition(shoulder);
 
   return {
@@ -193,15 +207,31 @@ export function createPoser(heroModel) {
         else if (e.type === 'moveAbort') combatAnim.stop();
         // The dodge is a flip or a vault (a corkscrew when it is perfect), over the shoulder away.
         else if (e.type === 'dodge') { combatAnim.stop(); once = null; trick = e.perfect ? { def: TRICKS.corkscrew, name: 'corkscrew', t: 0 } : { def: e.side === 'l' ? TRICKS.dodgeL : TRICKS.dodgeR, name: 'dodge', t: 0 }; }
-        else if (e.type === 'heroHurt') { combatAnim.stop(); if (hero.state === 'ground') { once = 'Hit_Chest'; onceT = 0.3; animator.play('Hit_Chest', { once: true, fade: 0.04, timeScale: 1.5 }); } else trick = { def: TRICKS.backflip, name: 'backflip', t: 0.3 }; }
+        else if (e.type === 'heroHurt') {
+          combatAnim.stop();
+          if (hero.state === 'ground') {
+            const big = (e.dmg ?? 1) >= 2 || e.unblockable;
+            const pool = (big ? HURT_BIG : HURT).filter((c) => animator.has(c));
+            const clip = pool.length ? pool[hurtN++ % pool.length] : 'Hit_Chest';
+            once = clip; onceT = pool.length ? (big ? 0.7 : 0.45) : 0.3;
+            animator.play(clip, { once: true, fade: 0.04, timeScale: pool.length ? 1.35 : 1.5 });
+          } else trick = { def: TRICKS.backflip, name: 'backflip', t: 0.3 };
+        }
         else if (e.type === 'airTrick') startTrick('trick', hero);
         else if (e.type === 'slamStart') { slamT = 2; trick = null; }
 
         else if (e.type === 'land') {
           trick = null;
           if (e.hard && hs < 10) landT = 0.6;
-          else if (e.hard) { once = 'Roll'; onceT = 0.55; animator.play('Roll', { once: true, fade: 0.05, timeScale: 1.3 }); }
-          else if (e.impact > 6) { once = 'Jump_Land'; onceT = 0.3; animator.play('Jump_Land', { once: true, fade: 0.05, timeScale: 1.4 }); }
+          else if (e.hard) {
+            const roll = animator.has('Falling_To_Roll') ? 'Falling_To_Roll' : 'Roll';
+            once = roll; onceT = roll === 'Roll' ? 0.55 : 0.75;
+            animator.play(roll, { once: true, fade: 0.05, timeScale: roll === 'Roll' ? 1.3 : 1.9 });
+          } else if (e.impact > 6) {
+            const land = hs < 3 && animator.has('Falling_To_Landing') ? 'Falling_To_Landing' : 'Jump_Land';
+            once = land; onceT = land === 'Jump_Land' ? 0.3 : 0.4;
+            animator.play(land, { once: true, fade: 0.05, timeScale: land === 'Jump_Land' ? 1.4 : 1.6 });
+          }
         }
       }
       if (once) { onceT -= dt; if (onceT <= 0 || st !== 'ground') once = null; }
@@ -247,7 +277,8 @@ export function createPoser(heroModel) {
         } else {
           wantProc = 0;
           // Long blends between stand, jog and sprint: a 0.15 s crossfade popped the feet.
-          if (hs < 0.4) play('Idle_Loop', { fade: 0.3 });
+          // Standing a while: now and then he looks around (mocap), then settles back.
+          if (hs < 0.4) play(idleT > 8 && (idleT % 24) < 6.2 && animator.has('Idle_Look') ? 'Idle_Look' : 'Idle_Loop', { fade: 0.5 });
           else if (hs < 10.5) play('Jog_Fwd_Loop', { timeScale: Math.max(0.6, hs / 6.5), fade: 0.28 });
           else play('Sprint_Loop', { timeScale: Math.max(0.8, hs / 11), fade: 0.3 });
         }
@@ -339,6 +370,14 @@ export function createPoser(heroModel) {
           tmp2.copy(tmp).negate().lerp(DOWN, 0.2);
           basis(vel, tmp2, qBase);
           target.set(POSES.dive);
+        } else if (fallClip(hero, b, speed)) {
+          // Dropping with nothing else going on: the mocap fall, upright with a slight lean into
+          // the drift; a long drop goes belly-down (the clip lies flat itself).
+          const clip = fallClip(hero, b, speed);
+          u.set(0, 1, 0).lerp(tmp2.copy(vel).normalize(), 0.12).normalize();
+          basis(u, tmp, qBase);
+          wantProc = 0;
+          animator.play(clip, { fade: clip === 'Falling' ? 0.6 : 0.35 });
         } else {
           // Lean into the flight: fast and level, the body lies along the path, head first, like
           // a diver; slow, it stays upright.

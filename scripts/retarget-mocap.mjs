@@ -4,7 +4,13 @@
 // T-poses like ours, so rotations transfer as world-space deltas from the bind pose.
 //
 //   node scripts/retarget-mocap.mjs [--map meshy|mixamo] [--append] [--fps 30] [--keep-travel]
-//        Name=C:/path/clip.glb[:limb][@contact][!noaim][~mirror] ...
+//        [--out file.glb] [--data file.js|none]
+//        Name=C:/path/clip.glb[:limb][@contact][!noaim][~mirror][%loop][%air] ...
+// %loop (idles, swings, dances, story acting): kept whole, not eased into the idle, not aimed, and
+// the hips keep their own sway (only the drift from first to last frame is removed, so it loops).
+// %air (falls, swings, hangs): the pose is not dropped onto the ground by its lowest toe, and the
+// hips' own rise and fall goes (the hero's physics owns the height).
+// :hand (or :hand_l / :hand_r) makes the contact the hand's farthest reach (punches).
 // :limb names the striking limb (default: whichever foot goes highest); its highest frame is the
 // contact frame, unless @seconds (source clip time) sets it. !noaim keeps the clip's own heading
 // (evades, reactions) instead of turning it so the strike lands straight ahead. ~mirror also
@@ -41,14 +47,18 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--target') opt.target = args[++i];
   else if (a === '--map') opt.map = args[++i];
   else if (a === '--append') opt.append = true;
+  else if (a === '--data') opt.data = args[++i];
   else if (a.includes('=')) {
     const [name, spec0] = a.split('=');
     let spec = spec0;
+    const flags = new Set();
+    for (let f; (f = spec.match(/%(loop|air)$/)); ) { flags.add(f[1]); spec = spec.slice(0, f.index); }
+    const loop = flags.has('loop'), air = flags.has('air');
     const mirror = spec.endsWith('~mirror'); if (mirror) spec = spec.slice(0, -7);
     const noaim = spec.endsWith('!noaim'); if (noaim) spec = spec.slice(0, -6);
     const m = spec.match(/^(.*?)(?::(\w+))?(?:@([\d.]+))?$/);
-    jobs.push({ name, file: m[1], limb: m[2] ?? 'auto', contactAt: m[3] ? Number(m[3]) : null, noaim, mirror: false });
-    if (mirror) jobs.push({ name: name + '_M', file: m[1], limb: m[2] ? swapLR(m[2]) : 'auto', contactAt: m[3] ? Number(m[3]) : null, noaim, mirror: true });
+    jobs.push({ name, file: m[1], limb: m[2] ?? 'auto', contactAt: m[3] ? Number(m[3]) : null, noaim: noaim || loop, mirror: false, loop, air });
+    if (mirror) jobs.push({ name: name + '_M', file: m[1], limb: m[2] ? swapLR(m[2]) : 'auto', contactAt: m[3] ? Number(m[3]) : null, noaim: noaim || loop, mirror: true, loop, air });
   }
 }
 if (!jobs.length) { console.error('no clips given (Name=file.glb)'); process.exit(1); }
@@ -72,6 +82,10 @@ const MIXAMO = {
   LeftUpLeg: 'thigh_l', LeftLeg: 'calf_l', LeftFoot: 'foot_l', LeftToeBase: 'ball_l',
   RightUpLeg: 'thigh_r', RightLeg: 'calf_r', RightFoot: 'foot_r', RightToeBase: 'ball_r',
 };
+// Mixamo's fingers too (pointing, clapping, fists): HandIndex1..3 -> index_01..03_l and so on.
+for (const [side, s] of [['Left', 'l'], ['Right', 'r']]) {
+  for (const f of ['Thumb', 'Index', 'Middle', 'Ring', 'Pinky']) for (let k = 1; k <= 3; k++) MIXAMO[`${side}Hand${f}${k}`] = `${f.toLowerCase()}_0${k}_${s}`;
+}
 const MAP = opt.map === 'mixamo' ? MIXAMO : MESHY;
 // Mixamo bones arrive as "mixamorig:Hips", or "mixamorigHips" once three has sanitized the name.
 const norm = (n) => n.replace(/^mixamorig\d*:?/, '');
@@ -154,7 +168,7 @@ function sourceHipsPosition(rig, chans, t, mirror = false) {
   const hips = rig.info.get('Hips');
   const tr = chans.get('Hips.translation');
   const local = tr ? sample(tr, t, new THREE.Vector3()) : hips.t.clone();
-  const w = local.applyMatrix4(hips.above);
+  const w = local.applyMatrix4(hips.above).multiplyScalar(rig.hipScale ?? 1);
   if (mirror) w.x = -w.x;
   return w;
 }
@@ -225,10 +239,15 @@ const ease = (k) => k * k * (3 - 2 * k);
 const idleLocalPelvis = idlePelvisWorld.clone().applyQuaternion(rootRot.clone().invert());
 const idleLowestToe = (() => { const p = targetPositions(idleRot, idleLocalPelvis); return Math.min(p.get('ball_l').y, p.get('ball_r').y); })();
 
-async function retargetClip({ name, file, limb, contactAt, noaim, mirror }) {
+async function retargetClip({ name, file, limb, contactAt, noaim, mirror, loop, air }) {
   const doc = await io.read(file);
   const rig = describeRig(doc);
-  const anim = doc.getRoot().listAnimations()[0];
+  // FBX exports carry an empty 'Take 001' beside the real one; take the longest.
+  const animDur = (a) => Math.max(0, ...a.listChannels().map((c) => { const t = c.getSampler().getInput().getArray(); return t[t.length - 1]; }));
+  const anim = doc.getRoot().listAnimations().reduce((b, a) => (animDur(a) > animDur(b) ? a : b));
+  // Hips travel in our metres: Mixamo FBX arrives in centimetres on a taller body.
+  const hipsRest = rig.info.get('Hips');
+  rig.hipScale = idlePelvisWorld.length() / hipsRest.t.clone().applyMatrix4(hipsRest.above).length();
   const chans = channelsOf(anim);
   let dur = 0;
   for (const c of chans.values()) dur = Math.max(dur, c.times[c.times.length - 1]);
@@ -246,9 +265,9 @@ async function retargetClip({ name, file, limb, contactAt, noaim, mirror }) {
   const peak = Math.max(...energy);
   const active = energy.map((e) => e > peak * 0.4);
   let first = active.indexOf(true), last = active.lastIndexOf(true);
-  if (first < 0) { first = 0; last = n - 1; }
-  const start = Math.max(0, first - Math.round(0.1 * opt.fps));
-  const end = Math.min(n - 1, last + Math.round(0.15 * opt.fps));
+  if (first < 0 || loop) { first = 0; last = n - 1; }
+  const start = loop ? 0 : Math.max(0, first - Math.round(0.1 * opt.fps));
+  const end = loop ? n - 1 : Math.min(n - 1, last + Math.round(0.15 * opt.fps));
   const idx = [];
   for (let i = start; i <= end; i++) idx.push(i);
   const h0 = raw[start].hips.clone();
@@ -256,20 +275,30 @@ async function retargetClip({ name, file, limb, contactAt, noaim, mirror }) {
   // Horizontal travel (x and z) becomes root motion; only the vertical motion stays in the clip.
   let yawQ = new THREE.Quaternion();
   const hipsDelta = (hips) => hips.clone().sub(h0).applyQuaternion(yawQ);
-  const pelvisLocalAt = (hips, dy = 0, withTravel = opt.keepTravel) => {
+  // A loop keeps its hips sway; only the net drift from its first to its last frame goes.
+  const drift = raw[end].hips.clone().sub(h0);
+  const pelvisLocalAt = (hips, dy = 0, withTravel = opt.keepTravel, k = 0) => {
     const d = hipsDelta(hips);
-    if (!withTravel) { d.x = 0; d.z = 0; }
+    if (loop) { const f = idx.length > 1 ? k / (idx.length - 1) : 0; d.x -= drift.x * f; d.z -= drift.z * f; }
+    else if (!withTravel) { d.x = 0; d.z = 0; }
+    // In the air the physics owns the height (a rope swing's arc, a fall): the pose stays centred.
+    if (air) d.y = 0;
     d.y += dy;
     return idlePelvisWorld.clone().add(d).applyQuaternion(rootRot.clone().invert());
   };
   // Contact: the striking limb's highest frame (kicks and knees peak at full extension).
   // With no limb given, the foot that goes highest is the kicking one.
-  const candidates = limb === 'auto' ? ['ball_l', 'ball_r'] : [limb];
+  // Punches (:hand) land at the hand's farthest reach from the hips (a lunging punch included).
+  const byReach = limb.startsWith('hand');
+  const candidates = limb === 'auto' ? ['ball_l', 'ball_r'] : limb === 'hand' ? ['hand_l', 'hand_r'] : [limb];
   let contactIdx = 0, best = -Infinity;
-  const travelled = (i) => { const p = targetPositions(raw[i].locals, pelvisLocalAt(raw[i].hips, 0, true)); return p; };
+  const travelled = (i) => { const p = targetPositions(raw[i].locals, pelvisLocalAt(raw[i].hips, 0, !loop)); return p; };
   idx.forEach((i, k) => {
-    const p = travelled(i);
-    for (const c of candidates) { const y = p.get(c).y; if (y > best) { best = y; contactIdx = k; limb = c; } }
+    const p = travelled(i), pel = p.get('pelvis');
+    for (const c of candidates) {
+      const v = byReach ? Math.hypot(p.get(c).x - pel.x, p.get(c).z - pel.z) : p.get(c).y;
+      if (v > best) { best = v; contactIdx = k; limb = c; }
+    }
   });
   if (contactAt !== null) contactIdx = Math.max(0, Math.min(idx.length - 1, Math.round(contactAt * opt.fps) - start));
   // Aim: where the limb is at contact relative to where the root started, travel included.
@@ -289,15 +318,15 @@ async function retargetClip({ name, file, limb, contactAt, noaim, mirror }) {
     const p = targetPositions(f.locals, pelvisLocalAt(f.hips));
     lowest = Math.min(lowest, p.get('ball_l').y, p.get('ball_r').y);
   });
-  const dy = idleLowestToe - lowest;
+  const dy = air ? 0 : idleLowestToe - lowest;
   const times = [], rot = new Map(target.order.map((j) => [j.name, []])), pelvisPos = [], posFrames = [], root = [];
   kept.forEach((f, k) => {
     times.push(k * dt);
     const hd = hipsDelta(f.hips);
-    // Both horizontal components go to the game as root motion (none with --keep-travel).
-    root.push(opt.keepTravel ? [0, 0] : [hd.x, hd.z]);
-    const w = k < lead ? ease(k / lead) : k > kept.length - 1 - tail ? ease((kept.length - 1 - k) / tail) : 1;
-    const pLocal = idleLocalPelvis.clone().lerp(pelvisLocalAt(f.hips, dy), w);
+    // Both horizontal components go to the game as root motion (none with --keep-travel or %loop).
+    root.push(opt.keepTravel || loop ? [0, 0] : [hd.x, hd.z]);
+    const w = loop ? 1 : k < lead ? ease(k / lead) : k > kept.length - 1 - tail ? ease((kept.length - 1 - k) / tail) : 1;
+    const pLocal = idleLocalPelvis.clone().lerp(pelvisLocalAt(f.hips, dy, opt.keepTravel, k), w);
     pelvisPos.push(pLocal);
     const locals = new Map();
     for (const j of target.order) {
@@ -326,7 +355,7 @@ async function retargetClip({ name, file, limb, contactAt, noaim, mirror }) {
     console.log(`  ball_r xz: ${posFrames.map((p) => `${p.get('ball_r').x.toFixed(2)},${p.get('ball_r').z.toFixed(2)}`).join(' ')}`);
   }
   const reachOut = { x: +limbAt.x.toFixed(3), y: +limbAt.y.toFixed(3), z: +limbAt.z.toFixed(3) };
-  return { name, times, rot, pelvisPos, duration: +times[times.length - 1].toFixed(4), contact: +contact.toFixed(4), limb, reach: reachOut, root: rootFlat, fps: opt.fps };
+  return { name, times, rot, pelvisPos, duration: +times[times.length - 1].toFixed(4), contact: +contact.toFixed(4), limb, reach: reachOut, root: loop ? [] : rootFlat, fps: opt.fps };
 }
 
 // ---- output document: the target joint hierarchy (no mesh) plus one animation per clip ----
@@ -359,24 +388,29 @@ if (opt.append) {
         const sm = ch.getSampler(), node = nodes.get(ch.getTargetNode().getName());
         if (!node) continue;
         const inp = out.createAccessor().setType('SCALAR').setArray(sm.getInput().getArray().slice()).setBuffer(buffer);
-        const outp = out.createAccessor().setType(sm.getOutput().getType()).setArray(sm.getOutput().getArray().slice()).setBuffer(buffer);
+        const outp = out.createAccessor().setType(sm.getOutput().getType()).setArray(sm.getOutput().getArray().slice()).setNormalized(sm.getOutput().getNormalized()).setBuffer(buffer);
         const s2 = out.createAnimationSampler().setInput(inp).setOutput(outp).setInterpolation(sm.getInterpolation());
         anim.addSampler(s2).addChannel(out.createAnimationChannel().setTargetNode(node).setTargetPath(ch.getTargetPath()).setSampler(s2));
       }
     }
-    const prev = await import(pathToFileURL(inRepo('src/combat/clipData.js')).href + '?t=' + Date.now());
+    const prev = opt.data === 'none' ? { CLIP_DATA: {} } : await import(pathToFileURL(inRepo(opt.data ?? 'src/combat/clipData.js')).href + '?t=' + Date.now());
     keptData = Object.fromEntries(Object.entries(prev.CLIP_DATA).filter(([k]) => !results.some((r) => r.name === k)));
   }
 }
 for (const clip of results) {
   const anim = out.createAnimation(clip.name);
   const input = out.createAccessor().setType('SCALAR').setArray(new Float32Array(clip.times)).setBuffer(buffer);
+  // Rotations as normalized shorts (core glTF allows it for rotation outputs; half the bytes), and
+  // a bone that never moves (root, finger tips) as one key.
+  const input1 = out.createAccessor().setType('SCALAR').setArray(new Float32Array([0])).setBuffer(buffer);
   for (const j of target.order) {
-    const qs = clip.rot.get(j.name);
-    const arr = new Float32Array(qs.length * 4);
-    qs.forEach((q, i) => arr.set([q.x, q.y, q.z, q.w], i * 4));
-    const output = out.createAccessor().setType('VEC4').setArray(arr).setBuffer(buffer);
-    const sampler = out.createAnimationSampler().setInput(input).setOutput(output).setInterpolation('LINEAR');
+    let qs = clip.rot.get(j.name);
+    const still = qs.every((q) => Math.abs(q.dot(qs[0])) > 0.999999);
+    if (still) qs = [qs[0]];
+    const arr = new Int16Array(qs.length * 4);
+    qs.forEach((q, i) => arr.set([q.x, q.y, q.z, q.w].map((v) => Math.round(THREE.MathUtils.clamp(v, -1, 1) * 32767)), i * 4));
+    const output = out.createAccessor().setType('VEC4').setArray(arr).setNormalized(true).setBuffer(buffer);
+    const sampler = out.createAnimationSampler().setInput(still ? input1 : input).setOutput(output).setInterpolation('LINEAR');
     const channel = out.createAnimationChannel().setTargetNode(nodes.get(j.name)).setTargetPath('rotation').setSampler(sampler);
     anim.addSampler(sampler).addChannel(channel);
   }
@@ -388,7 +422,8 @@ for (const clip of results) {
 }
 await io.write(opt.out, out);
 // Generated per-clip data for the game: duration, contact frame, striking limb and root motion.
-const dataPath = inRepo('src/combat/clipData.js');
+if (opt.data === 'none') { console.log(`wrote ${opt.out}: ${results.length} clips`); process.exit(0); }
+const dataPath = inRepo(opt.data ?? 'src/combat/clipData.js');
 const data = { ...keptData, ...Object.fromEntries(results.map((r) => [r.name, { duration: r.duration, contact: r.contact, limb: r.limb, reach: r.reach, fps: r.fps, root: r.root }])) };
 const { writeFileSync } = await import('node:fs');
 const header = '// Generated by scripts/retarget-mocap.mjs (combat clips); do not edit by hand.\n'

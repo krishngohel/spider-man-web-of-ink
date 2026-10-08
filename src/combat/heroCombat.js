@@ -97,7 +97,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
   function startMove(key) {
     const M = MOVES[key], tgt = c.target;
     if (hero.swing.active) { hero.swing.release(); hero.state = 'air'; }
-    const clip = clipFor(M, clips);
+    const clip = clipFor(M, clips, c.punchN);
     const dur = clips.get(clip)?.duration ?? 1;
     const tm = clipTiming(clip, dur);
     let plan = null;

@@ -13,18 +13,19 @@ import { CLIP_DATA } from './clipData.js';
 // the clips it has at random, so a fight is not the same three flinches on repeat; until the
 // mocap has loaded (or if a clip is missing) the Quaternius clip after it plays.
 const POOL = {
-  brawler: ['Goon_Hook', 'Goon_Cross', 'Goon_Jab_Cross', 'Goon_Kick', 'Goon_Elbow', 'Goon_Combo'],
-  brute: ['Brute_Punch', 'Brute_Swipe', 'Goon_Elbow'],
-  whip: ['Goon_Hook', 'Goon_Kick'],
-  reactFront: ['React_Front', 'React_Head', 'React_Gut', 'React_Small_L', 'React_Small_R'],
+  brawler: ['Hook_Punch', 'Cross_Punch', 'Jab_Cross', 'Mma_Kick', 'Elbow_Punch', 'Punch_Combo', 'Lead_Jab', 'Body_Jab_Cross', 'Headbutt', 'Side_Kick'],
+  brute: ['Brute_Punch', 'Brute_Swipe', 'Elbow_Punch', 'Headbutt'],
+  whip: ['Hook_Punch', 'Mma_Kick', 'Cross_Punch'],
+  reactFront: ['React_Front', 'React_Head', 'React_Gut', 'React_Small_L', 'React_Small_R', 'React_Small_F', 'Big_Head_Hit', 'React_Left', 'React_Right'],
   reactBack: ['React_Back'],
-  down: ['Knocked_Down', 'Sweep_Fall', 'Liver_Knockdown'],
-  out: ['Fall_Back_Death', 'Knocked_Out', 'Knocked_Down'],
-  getup: ['Getting_Up', 'Kip_Up'],
+  down: ['Knocked_Down', 'Sweep_Fall', 'Liver_Knockdown', 'Flying_Back_Death'],
+  out: ['Fall_Back_Death', 'Knocked_Out', 'Knocked_Down', 'Flying_Back_Death'],
+  getup: ['Getting_Up', 'Kip_Up', 'Corkscrew_Kip_Up'],
   stunned: ['Stunned'],
   fightIdle: ['Fight_Idle', 'Fight_Idle_Bounce'],
-  taunt: ['Goon_Taunt', 'Goon_Taunt2', 'Emote_Taunt'],
-  cheer: ['Goon_Cheer', 'Emote_Cheer'],
+  taunt: ['Goon_Taunt', 'Goon_Taunt2', 'Goon_Battlecry', 'Goon_Threat', 'Goon_Insult', 'Emote_Taunt'],
+  roar: ['Brute_Roar', 'Goon_Taunt2'],
+  cheer: ['Goon_Cheer', 'Emote_Cheer', 'Emote_Excited', 'Emote_Victory'],
 };
 const pickClip = (a, names, fallback) => {
   const ok = names ? names.filter((n) => a.has(n)) : [];
@@ -365,7 +366,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
           // Waiting his turn: now and then a taunt (Insomniac's goons jeer between attacks).
           if (e.tauntT > 0) e.tauntT -= dt;
           else if (moving < 1.2 && !A.ranged && !tokensOf(T).isHolder(e) && Math.random() < dt * 0.07) {
-            const c = pickClip(an, POOL.taunt, null);
+            const c = pickClip(an, A.heavy ? POOL.roar : POOL.taunt, null);
             if (c) { an.play(c, { once: true, fade: 0.2 }); e.tauntT = Math.min(2.6, an.duration(c)); }
           }
           if (!(e.tauntT > 0)) an.play(moving > 3.6 ? 'Jog_Fwd_Loop' : moving > 0.4 ? 'Walk_Loop' : (e.fightIdle && e.fightIdle !== 'Idle_Loop' ? e.fightIdle : (e.fightIdle = pickClip(an, POOL.fightIdle, 'Idle_Loop'))), { timeScale: moving > 0.4 ? Math.max(0.7, moving / 3.2) : 1 });
@@ -595,6 +596,14 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     // Airborne without the hang's damping (a web pull flies him in on a planned arc).
     airborne(e) { if (e.boss || e.puppet || e.isPlayer || e.hp <= 0 || !isActive(e)) return; setState(e, 'air'); e.onGround = false; e.hangT = 0; },
     hang(e, s) { if (e.boss || e.puppet || e.isPlayer || e.hp <= 0) return; e.hangT = s; if (e.state !== 'air' && isActive(e)) { setState(e, 'air'); } e.onGround = false; },
+    // The hero just took a hit: the ones waiting their turn nearby cheer it (a fist pump, a jeer).
+    cheer() {
+      for (const e of list) {
+        if (!isActive(e) || e.isPlayer || e.boss || e.puppet || e.state !== 'engage' || e.tauntT > 0 || e.A?.ranged || Math.random() > 0.6) continue;
+        const an = e.model.animator, c = pickClip(an, POOL.cheer, null);
+        if (c) { an.play(c, { once: true, fade: 0.15 }); e.tauntT = Math.min(1.8, an.duration(c)); }
+      }
+    },
     // Open for a beat (a perfect dodge's web to the face).
     stun(e, s) { if (e.boss || e.puppet || e.isPlayer || !isActive(e)) return; e.stunT = s; setState(e, 'stunned'); onEvent({ type: 'enemyStunned', e }); },
     // Beaten to the punch: the swing never comes.
