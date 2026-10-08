@@ -5,7 +5,7 @@ import { ACTIONS, DEFAULT_BINDINGS, keyLabel, rebind } from '../core/bindings.js
 // Title screen, pause menu, settings and controls (with rebinding). Mouse, keyboard and gamepad
 // (D-pad or left stick to move, A to choose, B to go back, left/right to change a value).
 
-export function createMenus(root, { getSettings, setSettings, input, onPlay, onResume, onRestart, onQuit, onProgress = () => {}, onRoster = () => {}, onMultiplayer = () => {}, onStory = () => {}, onTracker = () => {}, onGauntlet = () => {}, onNights = () => {}, postGame = () => false }) {
+export function createMenus(root, { getSettings, setSettings, input, onPlay, onResume, onRestart, onQuit, onProgress = () => {}, onRoster = () => {}, onMultiplayer = () => {}, onStory = () => {}, onTracker = () => {}, onPhoto = () => {}, onGauntlet = () => {}, onNights = () => {}, postGame = () => false }) {
   const C = COPY.settings;
   // Title ---------------------------------------------------------------------------------------
   const title = el('div', { class: 'title hidden' }, el('div', { class: 'card' }, [
@@ -28,6 +28,7 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       el('button', { class: 'mbtn primary', onclick: () => onResume() }, COPY.buttons.resume),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onProgress(); } }, COPY.buttons.progress),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onTracker(); } }, COPY.buttons.tracker),
+      el('button', { class: 'mbtn', onclick: () => { hideAll(); onPhoto(); } }, COPY.buttons.photo),
       el('button', { class: 'mbtn postgame', onclick: () => { hideAll(); onGauntlet(); } }, COPY.buttons.gauntlet),
       el('button', { class: 'mbtn postgame', onclick: () => { hideAll(); onNights(); } }, COPY.buttons.nights),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onRoster(); } }, COPY.buttons.roster),

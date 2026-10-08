@@ -24,6 +24,7 @@ import { createHalos, HALO } from '../render/halos.js';
 import { createCrowd } from '../world/crowd.js';
 import { createMusic } from '../audio/music.js';
 import { createRequests } from '../content/requests.js';
+import { createPhotoMode } from '../ui/photoMode.js';
 const CAR_HEAD = [1.0, 0.88, 0.6], CAR_TAIL = [1.0, 0.1, 0.08];
 let carHalos = null;
 // Two white heads in front and two red tails behind a moving car.
@@ -354,6 +355,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onMultiplayer: () => lobby.show(),
     onStory: () => slots.show(),
     onTracker: () => tracker.show(),
+    onPhoto: () => { resume(); enterPhoto(); },
     postGame: () => !session.active && (save.story.done.includes('act4.epilogue') || !!save.story.choices?.completedOnce),
     onGauntlet: () => { storyOn = true; enterPlay(); director.startGauntlet(); },
     onNights: () => { if (storyOn) { director.stop(); storyOn = false; } storyEnv = { hour: 23, weather: 'clear' }; enterPlay(); content.startNights(); },
@@ -522,6 +524,33 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     comicResumes();
   }
   let pausedAt = 0;
+  // Photo mode: the world holds, the HUD goes, an orbit camera and a framing card (ui/photoMode.js).
+  let filterWas = 0;
+  const photoMode = createPhotoMode(document.body, {
+    capture: () => { ink.render(scene, camera, time); return renderer.domElement.toDataURL('image/png'); },
+    setFilter: (n) => { if (n === 'restore') ink.uniforms.uFilter.value = filterWas; else ink.setFilter(n); },
+    getHour: () => clock.hour,
+    setHour: (h) => { if (!storyEnv) { settings = { ...settings, timeOfDay: 'cycle' }; clock.set(h); } },
+    playPose: (e) => { if (e) poser.playEmote(e); else poser.stopEmote(); },
+    onShot: () => { content.photo({ x: camera.position.x, y: camera.position.y, z: camera.position.z, fx: -Math.sin(photoMode.cam.yaw), fy: 0, fz: -Math.cos(photoMode.cam.yaw) }); sfx.event({ type: 'stamp' }); },
+    onExit: () => exitPhoto(),
+  });
+  function enterPhoto() {
+    if (mode !== 'play') return;
+    mode = 'photo';
+    filterWas = ink.uniforms.uFilter.value;
+    if (locked()) document.exitPointerLock();
+    uiRoot.style.visibility = 'hidden';
+    photoMode.show(Math.atan2(hero.facing.x, hero.facing.z));
+  }
+  function exitPhoto() {
+    if (mode !== 'photo') return;
+    mode = 'play';
+    uiRoot.style.visibility = '';
+    // The key that closed photo mode must not also pause the game or open it again.
+    input.swallowCode('Escape'); input.swallowCode('KeyO');
+    resetIntent();
+  }
   function pauseGame() {
     mode = 'paused';
     pausedAt = performance.now();
@@ -963,6 +992,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (input.pressed('suitPower') && character.kind !== 'civilian') progress.usePower();
       if (storyOn && !session.active && input.pressed('scan')) director.scan();
       if (input.pressed('photo') && !session.active) takePhoto();
+      if (input.pressed('photoMode') && !session.active) enterPhoto();
       content.update(gdt, { active: !session.active && !(storyOn && director.quiet) && !storyUi.cardOpen && !storyUi.comicOpen });
       requests.update(gdt, { active: !session.active && !(storyOn && director.quiet) && !storyUi.comicOpen && character.kind !== 'civilian' && !content.busyHere });
       if (!storyOn) storyUi.update(gdt); // radio lines and stamps from free roam
@@ -989,6 +1019,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       hud.setLockHint(!locked() && input.device !== 'pad');
     } else {
       fixed.reset();
+      if (mode === 'photo') { photoMode.update(dt, input); interpolate(); }
       if (mode === 'title') {
         // The hero holds his perch on the ledge (the poser crouches on a perch event).
         events.push({ type: 'perch' });
@@ -1046,6 +1077,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       camera.lookAt(renderP.x, renderP.y, renderP.z);
       if (camera.fov !== o.fov) { camera.fov = o.fov; camera.updateProjectionMatrix(); }
       }
+    } else if (mode === 'photo') {
+      // Photo mode's orbit round the hero.
+      const c = photoMode.cam, cp = Math.cos(c.pitch);
+      camera.position.set(renderP.x + Math.sin(c.yaw) * cp * c.dist, renderP.y + 0.3 + Math.sin(c.pitch) * c.dist + c.up, renderP.z + Math.cos(c.yaw) * cp * c.dist);
+      camera.lookAt(renderP.x, renderP.y + 0.3 + c.up * 0.6, renderP.z);
+      if (camera.fov !== c.fov) { camera.fov = c.fov; camera.updateProjectionMatrix(); }
     } else if (mode === 'title') {
       // Out past the ledge and a little below him, looking up: the hero against the sky, the
       // camera drifting slowly.

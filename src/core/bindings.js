@@ -19,6 +19,7 @@ export const ACTIONS = [
   { id: 'map', label: 'City map', group: 'Other' },
   { id: 'scan', label: 'Spider-sense scan (Hide and Seek: ping)', group: 'Other' },
   { id: 'photo', label: 'Take a photo (landmarks, Bugle assignments)', group: 'Other' },
+  { id: 'photoMode', label: 'Photo mode', group: 'Other' },
   { id: 'ping', label: 'Multiplayer: ping where you look', group: 'Other' },
   { id: 'chat', label: 'Multiplayer: chat', group: 'Other' },
   { id: 'quickChat', label: 'Multiplayer: quick chat (hold, then 1 to 8)', group: 'Other' },
@@ -53,6 +54,7 @@ export const DEFAULT_BINDINGS = {
   help: ['KeyH'],
   pause: ['Escape'],
   photo: ['KeyP'],
+  photoMode: ['KeyO'],
 };
 
 // Gamepad (standard mapping): fixed layout, shown on the controls screen.
@@ -71,6 +73,7 @@ export const PAD = {
   help: -1,     // the pause menu has it
   scan: 12,     // D-pad up (Kraven and Mysterio need the scan: a pad once could not)
   photo: 14,    // D-pad left
+  photoMode: -1, // from the pause menu on a pad
   trick: 15,    // D-pad right (D-pad down advances the radio)
   emote: 13,    // D-pad down held: the emote wheel (a tap still advances the radio)
   pause: 9,     // Start / Options

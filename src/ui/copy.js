@@ -15,7 +15,7 @@ export const COPY = {
     chatPh: 'Say something (Enter to send)',
     quick: ['On my way!', 'Over here!', 'Need a hand!', 'Nice one!', 'Race you there!', 'Watch out!', 'Wait for me!', 'Thwip!'],
   },
-  buttons: { multiplayer: 'MULTIPLAYER', roster: 'CHARACTERS', progress: 'SKILLS AND SUITS', play: 'FREE SWING', story: 'STORY', tracker: 'CITY PROGRESS', gauntlet: 'VILLAIN GAUNTLET', nights: 'CRIME NIGHTS', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
+  buttons: { multiplayer: 'MULTIPLAYER', roster: 'CHARACTERS', progress: 'SKILLS AND SUITS', play: 'FREE SWING', story: 'STORY', tracker: 'CITY PROGRESS', photo: 'PHOTO MODE', gauntlet: 'VILLAIN GAUNTLET', nights: 'CRIME NIGHTS', settings: 'SETTINGS', controls: 'CONTROLS', resume: 'RESUME', restart: 'BACK TO THE ROOFTOP', quit: 'QUIT TO TITLE', back: 'BACK', reset: 'RESET TO DEFAULTS' },
   pause: 'PAUSED',
   story: {
     comicHelp: 'Click or press Space to read on. Esc skips the scene.',
