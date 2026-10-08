@@ -83,6 +83,52 @@ function hydrantGeometry() {
   ]);
 }
 
+// Sidewalk clutter shapes (streetProps.js buildClutter), facing +z (the road).
+function newsGeometry() {
+  return merge([
+    [box(0.5, 0.95, 0.42, 0, 0.48, 0), 0xffffff],
+    [box(0.36, 0.3, 0.02, 0, 0.72, 0.22), 0x1d1d22],
+    [box(0.52, 0.06, 0.44, 0, 0.98, 0), 0xffffff],
+  ]);
+}
+function canGeometry() {
+  return merge([
+    [cyl(0.3, 0.26, 0.9, 0, 0.45, 0, 10), 0x2e4a3a],
+    [cyl(0.33, 0.33, 0.06, 0, 0.9, 0, 10), 0x1d2a22],
+  ]);
+}
+function bagsGeometry() {
+  const a = new THREE.SphereGeometry(0.34, 8, 6); a.scale(1, 0.85, 1); a.translate(0, 0.28, 0);
+  const b = new THREE.SphereGeometry(0.28, 8, 6); b.translate(0.42, 0.24, 0.15);
+  const c = new THREE.SphereGeometry(0.24, 8, 6); c.translate(0.18, 0.55, -0.1);
+  return merge([[a, 0x1a1a1e], [b, 0x2a3a2a], [c, 0x1a1a1e]]);
+}
+function mailGeometry() {
+  const top = new THREE.CylinderGeometry(0.26, 0.26, 0.5, 10, 1, false, 0, Math.PI); top.rotateZ(Math.PI / 2); top.rotateY(Math.PI / 2); top.translate(0, 1.05, 0);
+  return merge([
+    [box(0.52, 0.9, 0.5, 0, 0.6, 0), 0x2a4f9a],
+    [top, 0x2a4f9a],
+    [box(0.36, 0.06, 0.04, 0, 0.92, 0.26), 0xd8d8de],
+    ...[[-0.2, -0.18], [0.2, -0.18], [-0.2, 0.18], [0.2, 0.18]].map(([x, z]) => [box(0.05, 0.16, 0.05, x, 0.08, z), 0x1d1d22]),
+  ]);
+}
+function benchGeometry() {
+  return merge([
+    ...[0, 1, 2].map((i) => [box(1.9, 0.05, 0.12, 0, 0.45, -0.18 + i * 0.16), 0x8a5a3a]),
+    ...[0, 1].map((i) => [box(1.9, 0.12, 0.04, 0, 0.66 + i * 0.16, -0.26), 0x8a5a3a]),
+    ...[-0.8, 0.8].map((x) => [box(0.06, 0.45, 0.45, x, 0.22, -0.05), 0x2c2c32]),
+  ]);
+}
+function boothGeometry() {
+  return merge([
+    [box(0.9, 0.12, 0.9, 0, 2.3, 0), 0x2a4f9a],
+    [box(0.9, 0.3, 0.9, 0, 2.08, 0), 0xd8d8de],
+    ...[[-0.42, -0.42], [0.42, -0.42], [-0.42, 0.42], [0.42, 0.42]].map(([x, z]) => [box(0.08, 2.0, 0.08, x, 1.0, z), 0x2a4f9a]),
+    [box(0.8, 1.6, 0.03, 0, 1.1, -0.42), 0x9ab4c8],
+    [box(0.3, 0.45, 0.2, 0, 1.35, -0.3), 0x3a3a40],
+  ]);
+}
+
 export function buildStreetMeshes(props, scene, quality) {
   const group = new THREE.Group();
   group.name = 'street';
@@ -135,6 +181,17 @@ export function buildStreetMeshes(props, scene, quality) {
   }
   add(treeGeometry(), props.trees, (t) => { p.set(t.x, 0, t.z); q.setFromAxisAngle(up, t.x * 0.37); s.setScalar(t.s); }, null, true);
   add(hydrantGeometry(), props.hydrants, (h) => { p.set(h.x, 0, h.z); q.identity(); s.set(1, 1, 1); });
+  const cl = props.clutter;
+  if (cl) {
+    const at = (o, sc = 1) => { p.set(o.x, 0, o.z); q.setFromAxisAngle(up, o.yaw); s.set(sc, sc, sc); };
+    add(newsGeometry(), cl.news, (o) => at(o), (o) => o.color);
+    add(canGeometry(), cl.cans, (o) => at(o));
+    add(bagsGeometry(), cl.bags, (o) => at(o, o.s));
+    add(mailGeometry(), cl.mail, (o) => at(o));
+    add(benchGeometry(), cl.benches, (o) => at(o));
+    add(boothGeometry(), cl.booths, (o) => at(o));
+    s.set(1, 1, 1);
+  }
   // Night: bulbs light up and throw a comic cone of light (additive, no real light: cheap).
   const glow = { value: 0 };
   if (props.lamps.length) {

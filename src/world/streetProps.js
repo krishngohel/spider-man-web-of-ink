@@ -9,6 +9,35 @@ import { LAND } from './city.js';
 
 export const CAR_COLORS = [0xf2c230, 0xf2c230, 0xd8392b, 0x2a5fb0, 0xeeeeea, 0x2b2b33, 0x3f8f5a, 0xf2c230];
 
+// Sidewalk clutter (looks only, nothing to collide with): newspaper boxes in little rows, trash
+// cans and piles of bags, mailboxes, benches and the odd phone booth, along the lamp line between
+// the lamps, trees and hydrants. Its own generator, so the furniture above never re-rolls.
+const NEWS = [0x2a5fb0, 0xd8392b, 0xf2c230, 0x3f8f5a, 0xeeeeea, 0x7a3a8a];
+function buildClutter(lamps, seed) {
+  const rng = createRng(seed);
+  const out = { news: [], cans: [], bags: [], mail: [], benches: [], booths: [] };
+  for (const l of lamps) {
+    // Two free spots per lamp gap: 3.5 m and 15 m past the lamp (trees stand near 9, hydrants at -6).
+    for (const dz of [3.5, 15]) {
+      const r = rng.next();
+      const x = l.x - l.facing * 0.2, z = l.z + dz + rng.range(-0.8, 0.8);
+      // facing points from the sidewalk toward the road: things face the road.
+      const yaw = l.facing > 0 ? Math.PI / 2 : -Math.PI / 2;
+      if (r < 0.2) {
+        const n = rng.int(2, 4);
+        for (let i = 0; i < n; i++) out.news.push({ x, z: z + i * 0.62, yaw, color: NEWS[rng.int(0, NEWS.length - 1)] });
+      } else if (r < 0.42) {
+        out.cans.push({ x, z, yaw });
+        if (rng.chance(0.55)) out.bags.push({ x: x + l.facing * -0.1, z: z + 0.8, yaw: rng.range(0, 6.28), s: rng.range(0.8, 1.2) });
+      } else if (r < 0.5) out.mail.push({ x, z, yaw });
+      else if (r < 0.64) out.benches.push({ x: x - l.facing * 0.3, z, yaw });
+      else if (r < 0.67) out.booths.push({ x: x - l.facing * 0.2, z, yaw });
+      else if (r < 0.75) out.bags.push({ x, z, yaw: rng.range(0, 6.28), s: rng.range(0.9, 1.3) });
+    }
+  }
+  return out;
+}
+
 export function buildStreetProps(city, seed = 9001) {
   const rng = createRng(seed);
   const lamps = [], lights = [], cars = [], trees = [], hydrants = [];
@@ -48,7 +77,7 @@ export function buildStreetProps(city, seed = 9001) {
       if (isCity(x, z) && isCity(x + 6, z + 6)) lights.push({ x, z });
     }
   }
-  return { lamps, lights, cars, trees, hydrants };
+  return { lamps, lights, cars, trees, hydrants, clutter: buildClutter(lamps, seed + 77) };
 }
 
 // Collision boxes for the cars (body and cabin as one box).
