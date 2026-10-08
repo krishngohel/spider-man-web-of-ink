@@ -131,7 +131,8 @@ export function createPoser(heroModel) {
     if (trick || shot || b.v.y > -4 || (hero.toGround ?? 9) < 0.6) return null;
     const level = Math.hypot(b.v.x, b.v.z);
     if (level > 18 && level > -b.v.y * 1.2) return null;
-    if (b.v.y < -24 && (hero.toGround ?? 99) > 25 && animator.has('Falling')) return 'Falling';
+    // toGround is in seconds: a long way still to fall.
+    if (b.v.y < -24 && (hero.toGround ?? 99) > 1.6 && animator.has('Falling')) return 'Falling';
     return animator.has('Falling_Idle') ? 'Falling_Idle' : null;
   };
   const shoulderOf = () => model.getObjectByName(webSide === 'r' ? 'upperarm_r' : 'upperarm_l').getWorldPosition(shoulder);
@@ -210,7 +211,8 @@ export function createPoser(heroModel) {
         else if (e.type === 'heroHurt') {
           combatAnim.stop();
           if (hero.state === 'ground') {
-            const big = (e.dmg ?? 1) >= 2 || e.unblockable;
+            // Damage is in health points (a brawler's blow about 12, a brute's 18).
+            const big = (e.dmg ?? 0) >= 15 || e.unblockable;
             const pool = (big ? HURT_BIG : HURT).filter((c) => animator.has(c));
             const clip = pool.length ? pool[hurtN++ % pool.length] : 'Hit_Chest';
             once = clip; onceT = pool.length ? (big ? 0.7 : 0.45) : 0.3;

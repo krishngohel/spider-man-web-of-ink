@@ -12,13 +12,25 @@ import { CAST } from './cast.js';
 // prop: 'bench' | 'chair' | 'desk' | 'table' | 'stool' set under or before them. who: a cast id, a
 // roster id, or a crowd id (cast.js CROWD) for students, volunteers, passers-by.
 const UP = new THREE.Vector3(0, 1, 0);
+// Gear that sways reads the wearer's body; a standing NPC lends it a still one.
+const STILL = { body: { p: { x: 0, y: 0, z: 0 }, v: { x: 0, y: 0, z: 0 } }, state: 'ground', facing: { x: 0, z: 1 }, speed: 0 };
+// A model's materials and its own geometry (not the shared skinned body) go when it leaves.
+function disposeModel(m) {
+  m.root.traverse((o) => {
+    if (!o.isMesh) return;
+    for (const mt of [].concat(o.material)) mt?.dispose?.();
+    if (!o.isSkinnedMesh) o.geometry?.dispose?.();
+  });
+}
 const TALK_R = 2.6, WALK_MAX = 3.6;
 const SEATED = /^Sit_|^Gaming$|^Writing$/;
 
 const propMats = { wood: comicToon({ color: 0x8a5a3a }), iron: comicToon({ color: 0x2c2c32 }), top: comicToon({ color: 0xd9cfb8 }), cloth: comicToon({ color: 0x7a2a2a }) };
+// One unit cube shared by every prop part (scaled), so props made per scene or panel leak nothing.
+const UNIT = new THREE.BoxGeometry(1, 1, 1);
 export function propMesh(kind) {
   const g = new THREE.Group();
-  const box = (w, h, d, x, y, z, m) => { const b = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); b.position.set(x, y, z); b.castShadow = true; b.receiveShadow = true; g.add(b); };
+  const box = (w, h, d, x, y, z, m) => { const b = new THREE.Mesh(UNIT, m); b.scale.set(w, h, d); b.position.set(x, y, z); b.castShadow = true; b.receiveShadow = true; g.add(b); };
   if (kind === 'bench') {
     box(2.0, 0.08, 0.5, 0, 0.45, 0, propMats.wood); box(2.0, 0.42, 0.06, 0, 0.72, -0.24, propMats.wood);
     for (const x of [-0.85, 0.85]) box(0.08, 0.45, 0.45, x, 0.22, 0, propMats.iron);
@@ -69,25 +81,32 @@ export function createStroll(g, { scene, hero, ui, say, site, step, crowd }) {
     }
     return best;
   }
+  // Plays a clip if it has loaded (the acting clips load after the game is up), else stands idle.
+  const act = (q, name, fade) => q.m.animator.play(name && q.m.animator.has(name) ? name : 'Idle_Loop', { fade });
   function talkTo(q) {
+    // Peter stops to talk (his talking gesture needs him standing still).
+    hero.body.v.x = 0; hero.body.v.z = 0;
+    // They look up from what they were doing; a standing one talks with their hands.
+    if (!q.seated && q.n.talkClip !== null) act(q, q.n.talkClip ?? 'Talking', 0.4);
     talking = q;
     q.talked = true;
-    // They look up from what they were doing; a standing one talks with their hands.
-    if (!q.seated && q.n.talkClip !== null) q.m.animator.play(q.n.talkClip ?? 'Talking', { fade: 0.4 });
     g.heroEmote?.({ clip: 'Talking', loop: true });
     const ep = talking;
     say(q.n.talk).then(() => {
       if (talking !== ep) return;
       talking = null;
       g.heroEmote?.(null);
-      if (!q.seated) q.m.animator.play(q.n.after ?? q.n.clip ?? 'Idle_Loop', { fade: 0.5 });
+      if (!q.seated) act(q, q.n.after ?? q.n.clip, 0.5);
       check();
     });
   }
+  const need = () => people.filter((q) => q.n.talk && (q.n.need ?? true));
+  let needList = null;
   function check() {
-    const need = people.filter((q) => q.n.talk && (q.n.need ?? true));
+    needList ??= need();
+    const needL = needList;
     const reached = step.reach && Math.hypot(hero.body.p.x - (base.x + step.reach[0]), hero.body.p.z - (base.z + step.reach[2])) < (step.reachR ?? 3);
-    if ((need.length && need.every((q) => q.talked)) || (!need.length && reached)) doneFlag = true;
+    if ((needL.length && needL.every((q) => q.talked)) || (!needL.length && reached)) doneFlag = true;
   }
 
   return {
@@ -107,6 +126,16 @@ export function createStroll(g, { scene, hero, ui, say, site, step, crowd }) {
       // A walk, not a superhero sprint.
       const v = hero.body.v, hs = Math.hypot(v.x, v.z);
       if (hs > WALK_MAX && hero.state === 'ground') { v.x *= WALK_MAX / hs; v.z *= WALK_MAX / hs; }
+      if (talking) { v.x = 0; v.z = 0; }
+      // On a roof the parapet is only painted: keep Peter on it (he cannot jump or swing back up).
+      const ar = site.arena;
+      if (ar && !site.ground) {
+        const p = hero.body.p, m = 0.8;
+        if (p.x < ar.minX + m) { p.x = ar.minX + m; v.x = Math.max(0, v.x); }
+        if (p.x > ar.maxX - m) { p.x = ar.maxX - m; v.x = Math.min(0, v.x); }
+        if (p.z < ar.minZ + m) { p.z = ar.minZ + m; v.z = Math.max(0, v.z); }
+        if (p.z > ar.maxZ - m) { p.z = ar.maxZ - m; v.z = Math.min(0, v.z); }
+      }
       near = nearest();
       for (const q of people) {
         // Whoever Peter talks to turns to him (seated people only turn their heads a little).
@@ -115,7 +144,7 @@ export function createStroll(g, { scene, hero, ui, say, site, step, crowd }) {
         q.face += d * Math.min(1, dt * 5);
         q.m.orient.quaternion.setFromAxisAngle(UP, q.face);
         q.m.animator.update(dt);
-        q.m.updateGear?.(dt, null);
+        q.m.updateGear?.(dt, STILL);
       }
       if (talking) {
         // Peter faces whoever he is talking to.
@@ -126,7 +155,7 @@ export function createStroll(g, { scene, hero, ui, say, site, step, crowd }) {
       if (!doneFlag) check();
     },
     dispose() {
-      for (const q of people) scene.remove(q.m.root);
+      for (const q of people) { scene.remove(q.m.root); disposeModel(q.m); }
       for (const pm of props) scene.remove(pm);
       people.length = 0; props.length = 0;
       g.heroEmote?.(null);

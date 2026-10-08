@@ -289,7 +289,7 @@ async function retargetClip({ name, file, limb, contactAt, noaim, mirror, loop, 
   // Contact: the striking limb's highest frame (kicks and knees peak at full extension).
   // With no limb given, the foot that goes highest is the kicking one.
   // Punches (:hand) land at the hand's farthest reach from the hips (a lunging punch included).
-  const byReach = limb.startsWith('hand');
+  const byReach = limb.startsWith('hand') || limb === 'Head';
   const candidates = limb === 'auto' ? ['ball_l', 'ball_r'] : limb === 'hand' ? ['hand_l', 'hand_r'] : [limb];
   let contactIdx = 0, best = -Infinity;
   const travelled = (i) => { const p = targetPositions(raw[i].locals, pelvisLocalAt(raw[i].hips, 0, !loop)); return p; };

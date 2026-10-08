@@ -116,6 +116,9 @@ vec3 glassColor(vec2 id, float seed, float u, float v) {
 vec3 facade(vec3 base, float style, float seed) {
   bool xFace = abs(vWNrm.x) > 0.5;
   float u = xFace ? vWPos.z : vWPos.x;
+  // Screen derivatives of the wall coordinates, taken up front (the sign lookups below sit in
+  // branches, where implicit texture LOD is undefined): textureGrad scales them per atlas tile.
+  vec2 gDx = vec2(dFdx(u), dFdx(vWPos.y)), gDy = vec2(dFdy(u), dFdy(vWPos.y));
   float v = vWPos.y;
   float u0 = vBox.x, u1 = vBox.y, y0 = vBox.z, y1 = vBox.w;
   float pw = max(length(fwidth(vec2(u, v))), 1e-4);  // metres per pixel here
@@ -136,13 +139,15 @@ vec3 facade(vec3 base, float style, float seed) {
     // Read left to right from in front, whichever way the face points.
     if ((xFace && vWNrm.x > 0.0) || (!xFace && vWNrm.z < 0.0)) sp.x = 1.0 - sp.x;
     vec2 st = vec2(sp.x, 1.0 - sp.y);
-    float asp = (u1 - u0) / max(y1 - y0, 0.1);
-    if (asp < 0.6) {
+    // Neon blades stick 2 m out from the wall; billboards are 10 m and wider.
+    if (u1 - u0 < 4.0) {
       float i = floor(h * 8.0);
-      col = texture2D(uWords, vec2(1536.0 + mod(i, 4.0) * 128.0 + 4.0 + st.x * 120.0, 1024.0 + floor(i / 4.0) * 512.0 + 4.0 + st.y * 504.0) / 2048.0).rgb;
+      vec2 sc2 = vec2(120.0 / (u1 - u0), 504.0 / max(y1 - y0, 0.1)) / 2048.0;
+      col = textureGrad(uWords, vec2(1536.0 + mod(i, 4.0) * 128.0 + 4.0 + st.x * 120.0, 1024.0 + floor(i / 4.0) * 512.0 + 4.0 + st.y * 504.0) / 2048.0, gDx * sc2, gDy * sc2).rgb;
     } else {
       float i = y0 > 110.0 ? 11.0 : floor(h * 11.0);
-      col = texture2D(uWords, vec2(mod(i, 3.0) * 512.0 + 2.0 + st.x * 508.0, 1024.0 + floor(i / 3.0) * 256.0 + 2.0 + st.y * 252.0) / 2048.0).rgb;
+      vec2 sc2 = vec2(508.0 / (u1 - u0), 252.0 / max(y1 - y0, 0.1)) / 2048.0;
+      col = textureGrad(uWords, vec2(mod(i, 3.0) * 512.0 + 2.0 + st.x * 508.0, 1024.0 + floor(i / 3.0) * 256.0 + 2.0 + st.y * 252.0) / 2048.0, gDx * sc2, gDy * sc2).rgb;
     }
     // A neon flicker now and then on some signs.
     gEmit = max(gEmit, 0.25 + 0.75 * uNight);
@@ -258,7 +263,8 @@ vec3 facade(vec3 base, float style, float seed) {
       vec2 sb = vec2((fx - 0.04) / 0.92, (sv - 3.4) / 1.15);
       if ((xFace && vWNrm.x > 0.0) || (!xFace && vWNrm.z < 0.0)) sb.x = 1.0 - sb.x;
       float ti = floor(h21(vec2(shopN, seed * 3.7)) * 64.0);
-      col = texture2D(uWords, vec2(mod(ti, 4.0) * 512.0 + 2.0 + sb.x * 508.0, floor(ti / 4.0) * 64.0 + 2.0 + (1.0 - sb.y) * 60.0) / 2048.0).rgb;
+      vec2 sc3 = vec2(508.0 / (bay * 0.92), 60.0 / 1.15) / 2048.0;
+      col = textureGrad(uWords, vec2(mod(ti, 4.0) * 512.0 + 2.0 + sb.x * 508.0, floor(ti / 4.0) * 64.0 + 2.0 + (1.0 - sb.y) * 60.0) / 2048.0, gDx * sc3, gDy * sc3).rgb;
       // Lit from the shop below at night.
       gEmit = max(gEmit, 0.55 * uNight);
       gEmitCol = col * 1.1;
@@ -442,7 +448,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v16';
+  mat.customProgramCacheKey = () => 'city-building-v17';
   return mat;
 }
 

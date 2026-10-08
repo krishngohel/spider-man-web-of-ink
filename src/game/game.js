@@ -22,6 +22,14 @@ import { createRain } from '../world/rain.js';
 import { createCityLife } from '../world/cityLife.js';
 import { createHalos, HALO } from '../render/halos.js';
 const CAR_HEAD = [1.0, 0.88, 0.6], CAR_TAIL = [1.0, 0.1, 0.08];
+let carHalos = null;
+// Two white heads in front and two red tails behind a moving car.
+function carLamps(x, z, dx, dz) {
+  for (let s = -0.75; s <= 0.75; s += 1.5) {
+    carHalos.addDynamic(x + dx * 2.3 - dz * s, 0.75, z + dz * 2.3 + dx * s, CAR_HEAD, 1.0);
+    carHalos.addDynamic(x - dx * 2.3 - dz * s, 0.8, z - dz * 2.3 + dx * s, CAR_TAIL, 0.9);
+  }
+}
 import { SHADE_UNIFORMS, setShadowVolume } from '../render/comicShade.js';
 import { buildStreetProps, carBoxes } from '../world/streetProps.js';
 import { buildStreetMeshes } from '../world/streetMesh.js';
@@ -127,6 +135,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const life = createCityLife(scene, city, quality);
   // Halos for the city's small lights at night (render/halos.js): lamps, signals, beacons, cars.
   const halos = createHalos();
+  carHalos = halos;
   scene.add(halos.points);
   {
     const LAMP = [1.0, 0.72, 0.36], RED = [1.0, 0.16, 0.12], AMBER = [1.0, 0.62, 0.12], GREEN = [0.25, 1.0, 0.45];
@@ -499,7 +508,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     content.stop(); storyEnv = null;
     if (storyOn) {
       director.stop(); storyOn = false; combat.setOccupation(null); content.stop();
-      if (character.id !== 'peter' && !rosterOpen()) switchCharacter('peter');
+      if (character.id !== 'peter' && (!rosterOpen() || character.kind === 'civilian')) switchCharacter('peter');
       // A dev or test story never had a slot: free swing goes back to the real save.
       if (save.slot > 3) loadInto(loadSlot(window.localStorage, lastSlot(window.localStorage) ?? 1) ?? newSave(1));
     }
@@ -901,7 +910,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         social.toggleQuick(input.down('quickChat'));
         if (input.pressed('scan') && modes.ping()) hud.caption('SPIDER-SENSE!', 1);
       }
-      if (input.pressed('suitPower')) progress.usePower();
+      if (input.pressed('suitPower') && character.kind !== 'civilian') progress.usePower();
       if (storyOn && !session.active && input.pressed('scan')) director.scan();
       if (input.pressed('photo') && !session.active) takePhoto();
       content.update(gdt, { active: !session.active && !(storyOn && director.quiet) && !storyUi.cardOpen && !storyUi.comicOpen });
@@ -1041,12 +1050,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (nightNow > 0.02) {
       // Car lamps: two white heads in front, two red tails behind.
       halos.beginDynamic();
-      life.eachCar((x, z, dx, dz) => {
-        for (const s of [-0.75, 0.75]) {
-          halos.addDynamic(x + dx * 2.3 - dz * s, 0.75, z + dz * 2.3 + dx * s, CAR_HEAD, 1.0);
-          halos.addDynamic(x - dx * 2.3 - dz * s, 0.8, z - dz * 2.3 + dx * s, CAR_TAIL, 0.9);
-        }
-      });
+      life.eachCar(carLamps);
       halos.endDynamic();
     }
     combatHud.update(dt, camera);

@@ -78,7 +78,8 @@ export function createDirector(g) {
     // The Gauntlet starts each fight at its arena (a post-game mode, not a story beat).
     if (gauntlet && site) g.placeHero(site.x, site.y + 0.2, site.z + (site.ground ? 8 : 0));
     const who = step.char ?? 'peter';
-    if (g.character && g.character() !== who) g.setCharacter(who);
+    // A stroll changes clothes behind its fade (enterStroll), not in view as the comic closes.
+    if (step.type !== 'stroll' && g.character && g.character() !== who) g.setCharacter(who);
     g.setSuit?.(step.suit ?? null);
     g.setOccupation?.(step.act === 'act4' && !save.story.done.includes('act4.epilogue') ? 'sable' : null);
     if (step.env) setEnv(step.env);
@@ -118,6 +119,7 @@ export function createDirector(g) {
     cur.enterT += dt;
     if (cur.enterT < 0.6) return;
     const { step, site } = cur;
+    if (step.char && g.character && g.character() !== step.char) g.setCharacter(step.char);
     const sp = step.spawn ?? [0, 0, 6, 180];
     g.placeHero(site.x + sp[0], site.y + (sp[1] ?? 0) + 0.2, site.z + sp[2], 'ground');
     g.faceYaw?.(((sp[3] ?? 180) * Math.PI) / 180);
@@ -126,7 +128,14 @@ export function createDirector(g) {
     cur.phase = 'stroll';
     g.fade(false);
   }
-  function endStroll() { if (cur?.stroll) g.quietTraffic?.(null); cur?.stroll?.dispose(); if (cur) cur.stroll = null; ui.talkPrompt?.(null); }
+  function endStroll() {
+    // Stopped or skipped while fading in: the screen comes back.
+    if (cur?.step?.type === 'stroll' && cur.phase === 'enter') g.fade(false);
+    if (cur?.stroll) g.quietTraffic?.(null);
+    cur?.stroll?.dispose();
+    if (cur) cur.stroll = null;
+    ui.talkPrompt?.(null);
+  }
 
   function complete(id) {
     const step = runner.step;
@@ -281,7 +290,7 @@ export function createDirector(g) {
         s.update(dt);
         // The beacon leads the way to the next person; close up, the talk prompt takes over.
         const t = s.target, far = t && Math.hypot(hero.body.p.x - t.x, hero.body.p.z - t.z) > 12;
-        marker.show(far ? { x: t.x, y: t.y - 2.4, z: t.z } : null);
+        marker.show(far ? { x: t.x, y: t.y - 1.5, z: t.z } : null);
         markerOn = !!far;
         const pr = s.prompt;
         ui.talkPrompt?.(pr ? { p: pr.p, name: pr.n.name ?? speakerName(pr.n.who) } : null, g.screen);
@@ -446,7 +455,12 @@ export function createDirector(g) {
     // Before combat reads the intent: a yank aimed at a loose crate throws it at the boss.
     preStep(intent, cam) {
       if (cur?.stroll) { cur.stroll.preStep(intent); return; }
-      if (cur?.step.type === 'stroll') { intent.moveX = intent.moveZ = 0; return; }
+      if (cur?.step.type === 'stroll') {
+        // Fading into the scene: nothing at all.
+        for (const k of Object.keys(intent)) if (typeof intent[k] === 'boolean') intent[k] = false;
+        intent.moveX = intent.moveZ = 0;
+        return;
+      }
       if (!boss) return;
       // A boss's own melee target first (Electro's roof relays): the blow goes there.
       if (intent.attackPressed && boss.attackAt?.(hero.body.p)) { intent.attackPressed = false; g.sfx.event({ type: 'punch', heavy: true }); return; }
