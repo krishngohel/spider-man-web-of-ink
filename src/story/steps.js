@@ -102,7 +102,7 @@ export const STEPS = spliceScenes([
 
   // ------------------------------------------------------------------ Act 1: The Bird and the Bull
   { id: 'act1.title', act: 'act1', type: 'title', card: 'act' },
-  { id: 'act1.bankStart', act: 'act1', type: 'start', site: 'exchangeFront', text: 'Trouble on Exchange Street. Head to the Financial District.' },
+  { id: 'act1.bankStart', act: 'act1', type: 'start', site: 'exchangeFront', text: 'Trouble on Exchange Street. Head to the Financial District.', tutorial: ['freeroam', 'requests'] },
   {
     id: 'act1.bankRadio', act: 'act1', type: 'radio',
     lines: [

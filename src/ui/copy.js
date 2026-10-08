@@ -67,6 +67,8 @@ export const COPY = {
       attack: 'Press {attack} to punch. Keep hitting to build a combo.',
       dodge: 'When your spider-sense flashes, press {dive} to dodge.',
       web: 'Press {web} to web up enemies. Webbed enemies are out of the fight.',
+      freeroam: 'Hold {emote} for the emote wheel. Press {photoMode} for photo mode.',
+      requests: 'New Yorkers with a ! over them need a hand. Walk up and press {hang} to talk.',
       yank: '{hang} on a target to web yank it.',
       finisher: 'With full focus, tap {finisher} for a finisher. Hold it to heal.',
       cover: "Shocker's blasts cannot go through buildings. Use them as cover.",

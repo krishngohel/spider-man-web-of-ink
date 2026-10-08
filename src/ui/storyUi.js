@@ -97,7 +97,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {}, canAdvanc
   const keys = () => {
     const b = getSettings().bindings;
     const out = {};
-    for (const a of ['swing', 'jump', 'zip', 'dive', 'attack', 'web', 'hang', 'finisher', 'map', 'gadget', 'scan']) out[a] = bindingLabel(b, a);
+    for (const a of ['swing', 'jump', 'zip', 'dive', 'attack', 'web', 'hang', 'finisher', 'map', 'gadget', 'scan', 'emote', 'photoMode', 'photo']) out[a] = bindingLabel(b, a);
     return out;
   };
   const fill = (s) => { const k = keys(); return esc(s).replace(/\{(\w+)\}/g, (_, n) => `<kbd>${esc(k[n] ?? n)}</kbd>`); };
