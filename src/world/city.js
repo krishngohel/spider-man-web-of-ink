@@ -196,10 +196,38 @@ function buildBlock(b, d, rng, add) {
       const ix = (lx1 - lx0) * rng.range(0.12, 0.2), iz = (z1 - z0) * rng.range(0.12, 0.2);
       add([lx0 + ix, base, z0 + iz], [lx1 - ix, h, z1 - iz], 'building', d.id, style);
       roofProp(lx0 + ix, lx1 - ix, z0 + iz, z1 - iz, h, d, rng, add);
+      crown(lx0 + ix, lx1 - ix, z0 + iz, z1 - iz, h, style, d, add);
     } else {
       add([lx0, 0, z0], [lx1, h, z1], 'building', d.id, style);
       roofProp(lx0, lx1, z0, z1, h, d, rng, add);
+      crown(lx0, lx1, z0, z1, h, style, d, add);
     }
+  }
+}
+
+// The crown of a tall tower (over 110 m, so the free-roam spawn roof never gets one), so the
+// skyline has silhouettes, not prisms: deco towers step back in tiers to a needle, stone ones in
+// two tiers, glass and office towers get a penthouse and a mast. Its own generator per tower, so
+// nothing else in the city moves.
+function crown(x0, x1, z0, z1, h, style, d, add) {
+  if (h <= 110 || x1 - x0 < 14 || z1 - z0 < 14) return;
+  const rng = createRng(((Math.round(x0) * 92821) ^ (Math.round(z0) * 68917) ^ h) >>> 0);
+  if (!rng.chance(0.75)) return;
+  const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, dd = z1 - z0;
+  const tier = (k, y, th, st = style) => { add([cx - (w * k) / 2, y, cz - (dd * k) / 2], [cx + (w * k) / 2, y + th, cz + (dd * k) / 2], 'building', d.id, st); return y + th; };
+  const needle = (y, len) => add([cx - 0.3, y, cz - 0.3], [cx + 0.3, y + len, cz + 0.3], 'prop', d.id, 16);
+  if (style === 7 || style === 8) {
+    let y = tier(0.7, h, rng.range(7, 10));
+    y = tier(0.48, y, rng.range(6, 8));
+    y = tier(0.3, y, rng.range(5, 7));
+    needle(y, rng.range(12, 26));
+  } else if (style === 0 || style === 1) {
+    let y = tier(0.62, h, rng.range(6, 9));
+    y = tier(0.36, y, rng.range(5, 7));
+    if (rng.chance(0.5)) needle(y, rng.range(6, 10));
+  } else {
+    const y = tier(0.45, h, rng.range(4, 6), 13);
+    if (rng.chance(0.6)) needle(y, rng.range(14, 30));
   }
 }
 
