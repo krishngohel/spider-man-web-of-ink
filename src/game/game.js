@@ -246,7 +246,15 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     event: (e) => combatEvent(e),
   } });
   const spawn = city.spawn;
+  // The title shot: Spider-Man perched on the west edge of the spawn roof at golden hour, looking
+  // out over the city toward Fisk Tower, the camera drifting slowly behind his shoulder.
+  const ledge = resolveSite(city, 'peterRoof');
+  function placeTitle() {
+    hero.place(ledge.x + 0.3, ledge.y, ledge.z, 0, 0, 0, 'ground');
+    hero.facing.x = -1; hero.facing.z = 0;
+  }
   hero.place(spawn.x, spawn.y, spawn.z, 0, 0, 0, 'ground');
+  if (!params.has('at')) placeTitle();
   const rig = createCameraRig();
   rig.yaw = 0; rig.pitch = 0.15;
 
@@ -537,7 +545,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     mode = 'title';
     hud.show(false);
     input.setEnabled(false);
-    hero.place(spawn.x, spawn.y, spawn.z, 0, 0, 0, 'ground');
+    placeTitle();
     if (locked()) document.exitPointerLock();
     menus.showTitle();
   }
@@ -976,9 +984,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     } else {
       fixed.reset();
       if (mode === 'title') {
-        // Slow orbit around the spawn roof behind the title card.
-        rig.yaw = time * 0.05;
-        rig.pitch = 0.22;
+        // The hero holds his perch on the ledge (the poser crouches on a perch event).
+        events.push({ type: 'perch' });
+        hero.facing.x = -1; hero.facing.z = 0;
         interpolate();
         rig.update(dt, NO_LOOK, view, world, settings);
       }
@@ -1032,6 +1040,13 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       camera.lookAt(renderP.x, renderP.y, renderP.z);
       if (camera.fov !== o.fov) { camera.fov = o.fov; camera.updateProjectionMatrix(); }
       }
+    } else if (mode === 'title') {
+      // Out past the ledge and a little below him, looking up: the hero against the sky, the
+      // camera drifting slowly.
+      const s = Math.sin(time * 0.06), c = Math.cos(time * 0.045);
+      camera.position.set(renderP.x - 3.2 + c * 0.3, renderP.y - 0.7 + s * 0.2, renderP.z + 2.2 + s * 0.7);
+      camera.lookAt(renderP.x + 0.8, renderP.y + 1.1, renderP.z - 2.6);
+      if (camera.fov !== 46) { camera.fov = 46; camera.updateProjectionMatrix(); }
     } else {
       camera.position.set(rig.pos.x, rig.pos.y, rig.pos.z);
       camera.lookAt(rig.pos.x + rig.fwd.x, rig.pos.y + rig.fwd.y, rig.pos.z + rig.fwd.z);
