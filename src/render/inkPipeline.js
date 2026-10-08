@@ -175,6 +175,9 @@ void main() {
     fog *= mix(0.7, 1.0, exp(-max(wp.y, 0.0) / 160.0));
     // Past the fog's far distance everything is fog (tall towers too), so the far clip never shows.
     fog = max(fog, smoothstep(uFogFar * 0.95, uFogFar * 1.1, dist));
+    // Ground haze: the street level far off sinks into the air sooner than the rooftops, so the
+    // distance reads as stacked printed planes.
+    fog = max(fog, (1.0 - smoothstep(0.0, 40.0, wp.y)) * smoothstep(200.0, 900.0, dist) * 0.35);
     vec3 skyCol = mix(uSkyHorizon, uSkyMid, smoothstep(0.0, 0.16, dir.y));
     skyCol = mix(skyCol, uSkyTop, smoothstep(0.22, 0.6, dir.y));
     col = mix(col, mix(uFogColor, skyCol, 0.55), fog);

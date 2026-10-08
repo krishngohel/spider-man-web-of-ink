@@ -21,9 +21,11 @@ const STYLE_COLORS = {
   23: PALETTE.industrial, 24: PALETTE.darkGlass, 25: PALETTE.steel, 26: PALETTE.container, 27: PALETTE.kiosk,
 };
 
-const shared = { night: { value: 0 } };
+const shared = { night: { value: 0 }, wet: { value: 0 } };
 
 export function setNight(v) { shared.night.value = v; }
+// How wet the streets are (rain): darker asphalt and puddles.
+export function setWet(v) { shared.wet.value = v; }
 
 function buildingMaterial() {
   const mat = new THREE.MeshToonMaterial({ vertexColors: true, gradientMap: toonGradient() });
@@ -603,6 +605,7 @@ function buildGround(city) {
       uLandBox: { value: new THREE.Vector4(L.minX, L.minZ, L.w * L.cell, L.h * L.cell) },
       uInkG: { value: c(PALETTE.ink) },
       uNightG: shared.night,
+      uWetG: shared.wet,
     });
     shader.vertexShader = shader.vertexShader
       .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;')
@@ -612,7 +615,7 @@ function buildGround(city) {
 uniform vec3 uAsphalt, uSidewalk, uLane, uCross, uGrass, uGrassDark, uPath, uWater, uPier, uPlaza, uInkG;
 uniform vec4 uGrid, uIsland, uQueens, uRes, uLandBox;
 uniform vec2 uCorners;
-uniform float uNightG;
+uniform float uNightG, uWetG;
 uniform sampler2D uLand;
 float gInkG = 0.0;
 float gPoolG = 0.0;   // a street lamp's pool of light on the ground (lit at night, after shading)
@@ -703,6 +706,22 @@ ${COMIC_SHADE}`)
       }
       float wear = hash12(floor(w / 5.0));
       col *= 0.94 + 0.08 * step(0.7, wear);
+      // Rain: the road darkens and puddles stand in some 6 m cells: dark water with a cool sheen
+      // and a couple of hard paper-white slivers of reflected sky.
+      if (uWetG > 0.01) {
+        col *= 1.0 - 0.2 * uWetG;
+        vec2 pc = floor(w / 6.0);
+        float ph = hash12(pc + 17.0);
+        if (ph < 0.38) {
+          vec2 c0 = (pc + 0.5 + (vec2(hash12(pc + 3.1), hash12(pc + 9.7)) - 0.5) * 0.9) * 6.0;
+          vec2 d0 = (w - c0) / vec2(1.3 + 1.2 * ph * 2.6, 0.9 + 0.8 * hash12(pc + 5.0));
+          float pr = length(d0) + 0.12 * sin(atan(d0.y, d0.x) * 3.0 + ph * 40.0);
+          float inP = (1.0 - step(1.0, pr)) * uWetG;
+          float sliver = step(0.86, fract(dot(w, vec2(0.35, 1.0)) * 0.9)) * step(pr, 0.75) * near;
+          col = mix(col, mix(col * 0.5 + vec3(0.03, 0.045, 0.07), vec3(0.85, 0.88, 0.95), sliver * 0.8), inP);
+          gInkG = max(gInkG, inkAt(pr - 1.0, pw, 1.0) * inP * near * 0.6);
+        }
+      }
       if (avenue && !street) {
         vec2 mh = vec2(da - 7.0, mod(w.y, 37.0) - 18.5);
         float r = length(mh);
@@ -752,7 +771,7 @@ ${COMIC_SHADE}`)
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-ground-v8';
+  mat.customProgramCacheKey = () => 'city-ground-v9';
   const mesh = new THREE.Mesh(geo, mat);
   mesh.receiveShadow = true;
   mesh.name = 'ground';

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { STEPS, actById } from './steps.js';
+import { STEPS, actById, SPEAKERS } from './steps.js';
+const speakerName = (who) => SPEAKERS[who] ?? 'Them';
 import { createStoryRunner } from './runner.js';
 import { resolveSite } from './sites.js';
 import { BOSSES } from './bosses/index.js';
@@ -10,6 +11,8 @@ import { createProps } from './props.js';
 const BOSS_PHASES = { electro: 2, goblin: 2, kingpin: 3, kraven: 2, lizard: 3, mysterio: 3, ock: 3, rhino: 3, sandman: 3, scorpion: 2, shocker: 3, venom: 2, vulture: 2 };
 import { createStoryFx, buildMarker } from './storyFx.js';
 import { createActors } from './actors.js';
+import { createStroll } from './stroll.js';
+import { CROWD } from './cast.js';
 import { LAYER_FX } from '../render/layers.js';
 import { COPY } from '../ui/copy.js';
 import { comicToon } from '../render/comicShade.js';
@@ -100,10 +103,29 @@ export function createDirector(g) {
       case 'credits': setBlock(true); ui.credits(COPY.story.credits).then(() => { if (ep === epoch) { setBlock(false); complete(step.id); } }); break;
       case 'panels': cur.phase = 'draw'; cur.drawIn = 2; setBlock(true); break;
       case 'fight': case 'defend': case 'stealth': case 'boss': case 'chase': cur.phase = 'arrive'; break;
+      case 'stroll': {
+        // A new scene: a moment of black, Peter at the scene's spot, its people placed.
+        g.fade(true);
+        cur.phase = 'enter'; cur.enterT = 0;
+        break;
+      }
       default: break;
     }
     g.persist();
   }
+  // A stroll's scene is set up behind the fade, then it fades up.
+  function enterStroll(dt) {
+    cur.enterT += dt;
+    if (cur.enterT < 0.6) return;
+    const { step, site } = cur;
+    const sp = step.spawn ?? [0, 0, 6, 180];
+    g.placeHero(site.x + sp[0], site.y + (sp[1] ?? 0) + 0.2, site.z + sp[2], 'ground');
+    g.faceYaw?.(((sp[3] ?? 180) * Math.PI) / 180);
+    cur.stroll = createStroll(g, { scene, hero, ui, say, site, step, crowd: CROWD });
+    cur.phase = 'stroll';
+    g.fade(false);
+  }
+  function endStroll() { cur?.stroll?.dispose(); if (cur) cur.stroll = null; ui.talkPrompt?.(null); }
 
   function complete(id) {
     const step = runner.step;
@@ -113,6 +135,7 @@ export function createDirector(g) {
     if (['fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type) && !gauntlet) combat.heroCombat.revive();
     if (step.type === 'stealth' && !cur?.alarm) { g.reward('storyStep'); ui.stamp(COPY.story.ghost); }
     dropGenerator();
+    endStroll();
     if (step.type === 'boss' && !gauntlet) g.reward('bossDefeated');
     if (step.type === 'start') combat.clear(); // the mission begins: free-roam gangs clear off
     runner.complete(id);
@@ -157,7 +180,7 @@ export function createDirector(g) {
             let d = toCam - toWho; while (d > 180) d -= 360; while (d < -180) d += 360;
             yaw = kind === 'to' ? toWho : toWho + d * 0.5;
           }
-          actors.place(c.who, { x: base.x + c.p[0], y: base.y + c.p[1], z: base.z + c.p[2] }, yaw, c.pose, c.who === 'hero' ? s.suit : null);
+          actors.place(c.who, { x: base.x + c.p[0], y: base.y + c.p[1], z: base.z + c.p[2] }, yaw, c.pose, c.who === 'hero' ? s.suit : null, c.t ?? 0.5, c.prop ?? null);
         }
         shotCam.fov = s.fov ?? 45;
         shotCam.aspect = g.aspect();
@@ -248,6 +271,19 @@ export function createDirector(g) {
         const h = heroD(site);
         const near = step.type === 'start' ? h.d < 18 && Math.abs(h.dy) < 30 : h.d < (step.radius ?? 25) && (step.minY == null || h.dy > step.minY);
         if (near) complete(step.id);
+        break;
+      }
+      case 'stroll': {
+        if (cur.phase === 'enter') { enterStroll(dt); break; }
+        const s = cur.stroll;
+        if (!s) break;
+        s.update(dt);
+        const t = s.target;
+        marker.show(t ? { x: t.x, y: t.y - 0.9, z: t.z } : null);
+        markerOn = !!t;
+        const pr = s.prompt;
+        ui.talkPrompt?.(pr ? { p: pr.p, name: pr.n.name ?? speakerName(pr.n.who) } : null, g.screen);
+        if (s.done) complete(step.id);
         break;
       }
       case 'panels':
@@ -395,7 +431,7 @@ export function createDirector(g) {
     get marker() { const s = runner.step; return s && s.type === 'start' && cur?.site ? { x: cur.site.x, z: cur.site.z } : null; },
     // From the save's step, or from a given step (chapter select, ?at=).
     start(at = null) { if (!started) { started = true; retries = 0; runner = createStoryRunner(STEPS, save.story); if (at) runner.jump(at); begin(); } },
-    stop() { g.setOccupation?.(null); if (gauntlet) { gauntlet = null; ui.timer(null); runner = createStoryRunner(STEPS, save.story); } epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); markerOn = false; marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
+    stop() { endStroll(); g.setOccupation?.(null); if (gauntlet) { gauntlet = null; ui.timer(null); runner = createStoryRunner(STEPS, save.story); } epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); markerOn = false; marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
     update(dt) { if (gauntlet && retryT < 0) { gauntlet.t += dt; ui.timer('GAUNTLET', gauntlet.t); } update(dt); },
     get gauntlet() { return gauntlet ? { t: gauntlet.t, step: runner.step?.id ?? null, index: runner.index } : null; },
     startGauntlet(from = 0) {
@@ -407,6 +443,8 @@ export function createDirector(g) {
     },
     // Before combat reads the intent: a yank aimed at a loose crate throws it at the boss.
     preStep(intent, cam) {
+      if (cur?.stroll) { cur.stroll.preStep(intent); return; }
+      if (cur?.step.type === 'stroll') { intent.moveX = intent.moveZ = 0; return; }
       if (!boss) return;
       // A boss's own melee target first (Electro's roof relays): the blow goes there.
       if (intent.attackPressed && boss.attackAt?.(hero.body.p)) { intent.attackPressed = false; g.sfx.event({ type: 'punch', heavy: true }); return; }
@@ -452,7 +490,7 @@ export function createDirector(g) {
       endBoss(); combat.clear();
       complete(s.id);
     },
-    jump(id) { epoch++; if (retryT >= 0) { retryT = -1; g.fade(false); } endBoss(); dropGenerator(); combat.clear(); ui.clear(); setBlock(false); if (runner.jump(id)) { started = true; retries = 0; begin(); return true; } return false; },
+    jump(id) { epoch++; endStroll(); if (retryT >= 0) { retryT = -1; g.fade(false); } endBoss(); dropGenerator(); combat.clear(); ui.clear(); setBlock(false); if (runner.jump(id)) { started = true; retries = 0; begin(); return true; } return false; },
     bossPhase(n) { boss?.setPhase(n); },
     get boss() { return boss; },
     props, fx,

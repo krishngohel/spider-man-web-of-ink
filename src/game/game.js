@@ -14,7 +14,8 @@ import { STEP, MAX_SUBSTEPS, G, tune } from '../physics/constants.js';
 import { createWorld } from '../physics/world.js';
 import { findAimPoint, findZipPoint, findAnchor } from '../physics/anchors.js';
 import { buildCity } from '../world/city.js';
-import { buildCityMeshes, setNight } from '../world/cityMesh.js';
+import { buildCityMeshes, setNight, setWet } from '../world/cityMesh.js';
+import { createWetStreaks } from '../world/wetStreaks.js';
 import { createSky, createSkyline } from '../world/sky.js';
 import { env as envAt, createClock, PRESETS, WEATHERS } from '../world/timeWeather.js';
 import { createRain } from '../world/rain.js';
@@ -48,6 +49,7 @@ import { createCombatHud } from '../ui/combatHud.js';
 import { createProgressRuntime } from '../progress/runtime.js';
 import { createProgressMenu } from '../ui/progressMenu.js';
 import { ROSTER, characterById } from '../roster/characters.js';
+import { CAST } from '../story/cast.js';
 import { buildCharacter } from '../roster/build.js';
 import { makeSpecial } from '../roster/specials.js';
 import { MOVERS } from '../movers/movers.js';
@@ -143,7 +145,16 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       else if (b.kind === 'building' && h > 150) halos.add(cx, h + 1.5, cz, RED, 7, HALO.BLINK, (k++ * 0.61) % 1);
     }
   }
-  let nightNow = 0;
+  let nightNow = 0, rainNow = 0;
+  // Reflections on the wet street: every lamp, and the neon blades over the sidewalks.
+  const wetStreaks = createWetStreaks([
+    ...street.lamps.map((l) => ({ x: l.x + (l.facing > 0 ? 1.5 : -1.5), z: l.z, color: [1.0, 0.62, 0.26], w: 0.7, len: 9, k: 0.55, h: 5.9 })),
+    ...city.boxes.filter((b) => b.kind === 'sign' && b.min[1] < 16).map((b, i) => ({
+      x: (b.min[0] + b.max[0]) / 2, z: (b.min[2] + b.max[2]) / 2,
+      color: [[1, 0.24, 0.48], [0.24, 0.98, 1], [1, 0.88, 0.24], [0.5, 1, 0.36], [1, 0.48, 0.16], [0.72, 0.5, 1]][i % 6], w: 0.9, len: 12, k: 0.7, h: b.min[1] + 2,
+    })),
+  ]);
+  scene.add(wetStreaks);
   let scare = null;
   // Time of day and weather: free roam cycles unless the settings (or a mission) hold them.
   // Free roam opens at golden hour (spec G5), then the day cycles as before.
@@ -180,6 +191,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     streetGroup.userData.setNight?.(a.night);
     lanterns.userData.setNight(a.night);
     rain.setAmount(a.rain + (b.rain - a.rain) * t);
+    rainNow = a.rain + (b.rain - a.rain) * t;
+    setWet(Math.min(1, rainNow * 1.4));
+    wetStreaks.userData.setWet(Math.max(Math.min(1, rainNow * 1.4), 0.3 * a.night));
     // The light of the hour for the comic shading: its level and its colour.
     // Only partly lifted: a night stays mostly in shade, just not all of it.
     const lvl = Math.max(0.55, (sun.intensity * 0.55 + hemi.intensity * 0.45) / (1.9 * 0.55 + 1.25 * 0.45));
@@ -318,7 +332,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     ...city.boxes.filter((b) => b.style === 16 || b.style === 10 || b.style === 25).map((b) => ({ x: (b.min[0] + b.max[0]) / 2, y: b.max[1], z: (b.min[2] + b.max[2]) / 2 })),
   ];
   function switchCharacter(id) {
-    const def = characterById(id);
+    // Peter out of the suit (a stroll) is a cast look, not a roster character.
+    const def = !ROSTER.some((c) => c.id === id) && CAST[id] ? { ...CAST[id], kind: 'civilian' } : characterById(id);
     scene.remove(heroModel.root);
     heroModel = buildCharacter(assets, def);
     scene.add(heroModel.root);
@@ -1022,6 +1037,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     fx.update(dt);
     life.update(mode === 'play' ? gdt : dt * 0.5, renderP, scare);
     halos.update(performance.now() / 1000, life.lightT, nightNow);
+    skyline.setNight?.(nightNow, performance.now() / 1000);
     if (nightNow > 0.02) {
       // Car lamps: two white heads in front, two red tails behind.
       halos.beginDynamic();
@@ -1098,7 +1114,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     shake: (k) => { if (settings.cameraShake) rig.shake = Math.max(rig.shake, k); },
     sfx, reward: (k, o) => progress.reward(k, o), caption: (t) => hud.caption(t), fade: (on) => hud.fade(on), persist: () => persist(),
     setEnv: (e) => { storyEnv = e; }, setWaypoint: (w) => { waypoint = w; },
-    placeHero: (x, y, z) => placeHeroAt(x, y, z, 0, 0, 0, 'air'),
+    placeHero: (x, y, z, st = 'air') => placeHeroAt(x, y, z, 0, 0, 0, st),
     hideHero: (on) => { heroModel.root.visible = !on; },
     // A boss fight opens with letterbox bars and a push-in; a boss going down gets a beat of slow
     // motion (spec 1.10).
@@ -1122,6 +1138,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     },
     character: () => character.id,
     setCharacter: (id) => switchCharacter(id),
+    // Peter in a stroll: talk with his hands (an emote clip on the poser), or stop.
+    heroEmote: (e) => { if (e) poser.playEmote(e); else poser.stopEmote(); },
+    faceYaw: (y) => { hero.facing.x = Math.sin(y); hero.facing.z = Math.cos(y); rig.faceYaw(y); },
     setSuit: (id) => progress.setSuitOverride?.(id),
     setOccupation: (f) => combat.setOccupation(f),
     screen: (x, y, z) => screenOf(x, y, z),

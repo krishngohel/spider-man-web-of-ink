@@ -113,18 +113,19 @@ export function createSky(scene, radius = 1900) {
 export function createSkyline(scene, skyUniforms, fogColor) {
   const group = new THREE.Group();
   const rings = [[1500, 150, 0.15], [1650, 210, 0.45], [1800, 280, 0.75]];
+  const night = { value: 0 }, time = { value: 0 };
   rings.forEach(([r, h, k], i) => {
     const geo = new THREE.CylinderGeometry(r, r, h, 160, 1, true);
     geo.translate(0, h / 2, 0);
     const mat = new THREE.ShaderMaterial({
       side: THREE.BackSide, depthWrite: false, transparent: false, fog: false,
-      uniforms: { uFog: { value: fogColor }, uHorizon: skyUniforms.uHorizon, uMid: skyUniforms.uMid, uK: { value: k }, uSeed: { value: i * 17.3 }, uH: { value: h } },
+      uniforms: { uFog: { value: fogColor }, uHorizon: skyUniforms.uHorizon, uMid: skyUniforms.uMid, uK: { value: k }, uSeed: { value: i * 17.3 }, uH: { value: h }, uNight: night, uTime: time },
       vertexShader: /* glsl */ `
         varying vec2 vUv;
         void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
       fragmentShader: /* glsl */ `
         uniform vec3 uFog, uHorizon, uMid;
-        uniform float uK, uSeed, uH;
+        uniform float uK, uSeed, uH, uNight, uTime;
         varying vec2 vUv;
         ${AUX_DECL}
         float hsh(float x) { return fract(sin(x * 12.9898 + uSeed) * 43758.5453); }
@@ -141,6 +142,20 @@ export function createSkyline(scene, skyUniforms, fogColor) {
           // An inked roofline, a couple of pixels thick.
           float fw = fwidth(y);
           col = mix(col, col * 0.55, 1.0 - smoothstep(fw * 1.5, fw * 3.0, hgt - y));
+          // Ground mist swallowing the feet of the far towers (stacked printed planes).
+          col = mix(col, uFog * 1.08, (1.0 - smoothstep(0.0, 0.24, y)) * 0.55);
+          // Night: some windows awake (fewer on the farther rings), and a red beacon blinking on
+          // top of the tall ones.
+          if (uNight > 0.01) {
+            vec2 wc = vec2(floor(vUv.x * cols * 5.0), floor(y * uH / 4.2));
+            vec2 wf = vec2(fract(vUv.x * cols * 5.0), fract(y * uH / 4.2));
+            float awake = step(hsh(wc.x * 0.37 + wc.y * 7.13), 0.3 - 0.08 * uK) * step(0.25, wf.x) * step(wf.x, 0.75) * step(0.3, wf.y) * step(wf.y, 0.8);
+            awake *= step(0.2, y) * step(y, hgt - 0.02);
+            col = mix(col, mix(vec3(1.0, 0.7, 0.32), vec3(0.75, 0.85, 1.0), step(0.8, hsh(wc.y + wc.x * 3.1))) * (0.7 - 0.25 * uK), awake * uNight);
+            float tall = step(0.93, hsh(c + 0.5));
+            float beacon = tall * step(abs(f - 0.5), 0.12) * step(hgt - 0.025, y) * step(0.5, sin(uTime * 2.4 + c));
+            col = mix(col, vec3(1.0, 0.15, 0.1), beacon * uNight);
+          }
           gl_FragColor = vec4(col, 1.0);
           ${AUX_WRITE_FLAT}
           #include <colorspace_fragment>
@@ -153,5 +168,5 @@ export function createSkyline(scene, skyUniforms, fogColor) {
     group.add(m);
   });
   scene.add(group);
-  return { group, follow(camera) { group.position.set(camera.position.x, 0, camera.position.z); } };
+  return { group, follow(camera) { group.position.set(camera.position.x, 0, camera.position.z); }, setNight(v, t) { night.value = v; time.value = t; } };
 }
