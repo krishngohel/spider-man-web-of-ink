@@ -328,6 +328,23 @@ vec3 facade(vec3 base, float style, float seed) {
     gInk = max(gInk, max(max(rail, bars), stair) * escK);
     gInk = max(gInk, hline(fy, 0.38, pw, 1.6) * escK);
   }
+  // A building in three parts (masonry): the top two floors get arched windows under a stone
+  // ring; the floors below get a stone lintel with a keystone and an ink shadow under each sill.
+  bool masonryW = style < 1.5 || (style > 16.5 && style < 17.5) || (style > 21.5 && style < 22.5);
+  float nFloors = floor((y1 - vStart) / floorH);
+  bool crown = masonryW && nFloors >= 5.0 && id.y >= nFloors - 2.0 && lineK > 0.02;
+  float archRing = 0.0;
+  if (crown) {
+    float hw = (hi.x - lo.x) * 0.5;
+    vec2 cc = vec2((lo.x + hi.x) * 0.5, hi.y - hw);
+    float dA = length(fp - cc);
+    if (fp.y > cc.y && dA > hw) {
+      inWin = 0.0;
+      // The voussoirs: a stone ring round the arch, inked on both edges.
+      if (dA < hw + 0.2 && fp.y < hi.y + 0.2) archRing = 1.0;
+      gInk = max(gInk, max(hline(dA, hw, pw, 1.3), hline(dA, hw + 0.2, pw, 1.0) * archRing) * lineK);
+    }
+  }
   if (inWin > 0.5) {
     gPane = (fp - lo) / max(hi - lo, vec2(1e-3));
     col = glassColor(id, seed, u, v);
@@ -348,8 +365,16 @@ vec3 facade(vec3 base, float style, float seed) {
     if (style > 6.5) col = mix(base, base * 1.12, step(0.86, f.x) + step(f.x, 0.14));
     // Brick coursing, up close only (brick, brownstone, industrial).
     if (style < 0.5 || (style > 16.5 && style < 17.5) || style > 22.5) col = mix(col, col * 0.82, (1.0 - smoothstep(0.0, fwidth(v / 0.3) * 1.2, min(fract(v / 0.3), 1.0 - fract(v / 0.3)))) * gNear * 0.6);
-    // Sill under each window.
+    // Sill under each window, with its cast shadow on the wall just below.
     if (fp.y < lo.y && fp.y > lo.y - 0.22 && fp.x > lo.x - 0.1 && fp.x < hi.x + 0.1) col = mix(col, uStone, 0.75);
+    if (masonryW && fp.y < lo.y - 0.22 && fp.y > lo.y - 0.36 && fp.x > lo.x - 0.06 && fp.x < hi.x + 0.06) col *= 0.55;
+    // Stone lintel over the window with a keystone (below the arched crown floors).
+    if (masonryW && !crown && fp.y > hi.y && fp.y < hi.y + 0.24 && fp.x > lo.x - 0.12 && fp.x < hi.x + 0.12) {
+      float key = step(abs(fp.x - (lo.x + hi.x) * 0.5), 0.13);
+      col = mix(col, uStone * (key > 0.5 ? 0.9 : 1.0), 0.8);
+      gInk = max(gInk, max(hline(fp.y, hi.y + 0.24, pw, 1.0), key * max(hline(fp.x, (lo.x + hi.x) * 0.5 - 0.13, pw, 1.0), hline(fp.x, (lo.x + hi.x) * 0.5 + 0.13, pw, 1.0))) * lineK);
+    }
+    if (archRing > 0.5) col = mix(col, uStone, 0.8);
   }
   // The fire escape hangs in front of windows and wall alike.
   col = mix(col, IRON * 1.2, escFill);
@@ -417,7 +442,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v15';
+  mat.customProgramCacheKey = () => 'city-building-v16';
   return mat;
 }
 
