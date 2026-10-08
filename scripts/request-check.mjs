@@ -15,6 +15,8 @@ p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await p.goto(url + '?at=swing');
 await p.waitForFunction(() => window.__game?.state?.ready, null, { timeout: 120000 });
 await sleep(4000);
+// No random street crimes mid-test (a crime pauses the requests by design).
+await p.evaluate(() => window.__game.setSetting('crimes', false));
 const spots = await p.evaluate(() => window.__game.requestSpots());
 const tp = (x, y, z) => p.evaluate(([x, y, z]) => window.__game.teleport(x, y, z, 0, 0, 0, 'ground', 0), [x, y, z]);
 const talk = async () => {

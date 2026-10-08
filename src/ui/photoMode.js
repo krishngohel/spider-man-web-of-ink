@@ -111,24 +111,29 @@ export function createPhotoMode(root, { capture, setFilter, getHour, setHour, pl
         }
         resolve(cv.toDataURL('image/png'));
       };
+      img.onerror = () => resolve(src);
       img.src = src;
     });
   }
+  let busy = false;
   async function shot() {
+    if (busy) return;
+    busy = true;
     card.classList.add('hidden');
     await new Promise((r) => requestAnimationFrame(() => r()));
-    const url = await compose(capture());
-    thumb.src = url; thumb.classList.remove('hidden');
-    save.href = url; save.classList.remove('hidden');
-    card.classList.toggle('hidden', hidden);
-    onShot?.();
+    try {
+      const url = await compose(capture());
+      thumb.src = url; thumb.classList.remove('hidden');
+      save.href = url; save.classList.remove('hidden');
+      onShot?.();
+    } finally { card.classList.toggle('hidden', hidden); busy = false; }
   }
   function leave() { if (open) { open = false; wrap.classList.add('hidden'); setFilter('restore'); playPose(null); onExit?.(); } }
   addEventListener('keydown', (e) => {
     if (!open) return;
     keys.add(e.code);
     if (e.code === 'Escape' || e.code === 'KeyO') { leave(); e.preventDefault(); }
-    else if (e.code === 'Space' || e.code === 'Enter') { shot(); e.preventDefault(); }
+    else if ((e.code === 'Space' || e.code === 'Enter') && !e.repeat) { shot(); e.preventDefault(); }
     else if (e.code === 'KeyH') { hidden = !hidden; render(); }
     else if (/Digit[1-4]/.test(e.code)) { filter = Number(e.code.slice(5)) - 1; setFilter(FILTERS[filter][0]); render(); }
   });
@@ -146,10 +151,12 @@ export function createPhotoMode(root, { capture, setFilter, getHour, setHour, pl
     get cam() { return cam; },
     show(startYaw) {
       open = true; hidden = false; cam.yaw = startYaw + Math.PI; cam.pitch = 0.15; cam.dist = 4.5; cam.up = 0; cam.fov = 50;
+      filter = 0; pose = 0; frame = 0;
       thumb.classList.add('hidden'); save.classList.add('hidden');
       wrap.classList.remove('hidden'); render();
     },
     hide: leave,
+    shot,
     // Keys held and a pad's left stick move the camera.
     update(dt, input) {
       const k = (c) => keys.has(c);

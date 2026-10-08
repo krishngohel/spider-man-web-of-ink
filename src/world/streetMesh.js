@@ -167,7 +167,8 @@ export function buildStreetMeshes(props, scene, quality) {
       for (let i = 0; i < b.xs.length; i++) {
         const dx = b.xs[i] - cam.x, dz = b.zs[i] - cam.z;
         if (dx * dx + dz * dz > b.R2) continue;
-        if (n !== i) { m.set(b.all.subarray(i * 16, i * 16 + 16), n * 16); if (c) c.set(b.allCol.subarray(i * 3, i * 3 + 3), n * 3); }
+        // Always copy: after an earlier pack, slot i no longer holds instance i.
+        m.set(b.all.subarray(i * 16, i * 16 + 16), n * 16); if (c) c.set(b.allCol.subarray(i * 3, i * 3 + 3), n * 3);
         n++;
       }
       b.mesh.count = n;
@@ -207,7 +208,8 @@ export function buildStreetMeshes(props, scene, quality) {
     group.userData.updateCars({ x: 1e9, z: 1e9 }, 1);
     group.add(nearCars, farCars);
   }
-  add(treeGeometry(), props.trees, (t) => { p.set(t.x, 0, t.z); q.setFromAxisAngle(up, t.x * 0.37); s.setScalar(t.s); }, null, true);
+  // Trees read from far off (the park from a roof): they reach most of the view distance.
+  add(treeGeometry(), props.trees, (t) => { p.set(t.x, 0, t.z); q.setFromAxisAngle(up, t.x * 0.37); s.setScalar(t.s); }, null, true, Math.max(260, (quality.viewDistance ?? 1400) * 0.5));
   add(hydrantGeometry(), props.hydrants, (h) => { p.set(h.x, 0, h.z); q.identity(); s.set(1, 1, 1); }, null, false, 140);
   const cl = props.clutter;
   if (cl) {

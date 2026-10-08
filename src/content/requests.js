@@ -14,21 +14,53 @@ function hash(s) { let h = 2166136261; for (const c of s) { h ^= c.charCodeAt(0)
 // Where a request happens: its giver on a sidewalk of the district (by a lamp), the crew's corner
 // down the block, and the roof (one of the low buildings nearby) for a fetch.
 export function placeRequests(city, lamps, list = REQUESTS) {
+  const g = city.grid;
+  const insideBox = (x, z) => city.boxes.some((b) => b.kind !== 'tree' && x > b.min[0] - 0.3 && x < b.max[0] + 0.3 && z > b.min[2] - 0.3 && z < b.max[2] + 0.3 && b.min[1] < 3);
+  // A district with no street lamps (the park, Queens): its avenue sidewalks, on land.
+  const walks = (d) => {
+    const out = [];
+    for (let ax = g.minX; ax <= g.maxX + 1200; ax += g.avenueEvery) {
+      for (const side of [-1, 1]) {
+        const x = ax + side * (g.avenueWidth / 2 + 0.9);
+        if (x < d.minX + 20 || x > d.maxX - 20) continue;
+        for (let z = d.minZ + 30; z < d.maxZ - 30; z += 28) {
+          const land = city.landAt(x, z);
+          if (land !== 0 && !insideBox(x, z)) out.push({ x, z, facing: -side });
+        }
+      }
+    }
+    return out;
+  };
   return list.map((r) => {
     const d = city.districts.find((q) => q.id === r.district);
-    const inD = lamps.filter((l) => d && l.x >= d.minX + 40 && l.x < d.maxX - 40 && l.z >= d.minZ + 40 && l.z < d.maxZ - 40);
-    const pool = inD.length ? inD : lamps;
+    let pool = lamps.filter((l) => d && l.x >= d.minX + 40 && l.x < d.maxX - 40 && l.z >= d.minZ + 40 && l.z < d.maxZ - 40);
+    if (!pool.length && d) pool = lamps.filter((l) => l.x >= d.minX && l.x < d.maxX && l.z >= d.minZ && l.z < d.maxZ);
+    if (!pool.length && d) pool = walks(d);
+    if (!pool.length) pool = lamps;
     const l = pool[Math.floor(hash(r.id) * pool.length)];
     const giver = { x: l.x - l.facing * 1.4, z: l.z + 3 };
     const yaw = l.facing > 0 ? Math.PI / 2 : -Math.PI / 2; // facing the road
     const corner = { x: l.x + l.facing * 8, z: l.z + (hash(r.id + 'c') < 0.5 ? -48 : 48) };
     let roof = null;
     if (r.task.kind === 'fetch') {
-      const near = city.boxes.filter((b) => b.kind === 'building' && !b.landmark && b.max[1] > 10 && b.max[1] < 70 && b.max[0] - b.min[0] > 9 && b.max[2] - b.min[2] > 9)
+      // An open roof: nothing stacked on it (a setback tower's base has the shaft on its middle).
+      const covered = (b) => city.boxes.some((t) => t !== b && t.kind === 'building' && t.min[1] >= b.max[1] - 0.01 && t.min[1] < b.max[1] + 1 && t.min[0] < b.max[0] && t.max[0] > b.min[0] && t.min[2] < b.max[2] && t.max[2] > b.min[2]);
+      const near = city.boxes.filter((b) => b.kind === 'building' && !b.landmark && b.max[1] > 5 && b.max[1] < 70 && b.max[0] - b.min[0] > 6 && b.max[2] - b.min[2] > 6 && !covered(b))
         .map((b) => ({ b, dd: Math.hypot((b.min[0] + b.max[0]) / 2 - giver.x, (b.min[2] + b.max[2]) / 2 - giver.z) }))
-        .filter((q) => q.dd > 25 && q.dd < 160).sort((a, b) => a.dd - b.dd).slice(0, 6);
+        .filter((q) => q.dd > 15 && q.dd < 160).sort((a, b) => a.dd - b.dd).slice(0, 6);
       const pick = near[Math.floor(hash(r.id + 'r') * near.length)]?.b;
-      if (pick) roof = { x: (pick.min[0] + pick.max[0]) / 2 + 1.5, y: pick.max[1] + 0.35, z: (pick.min[2] + pick.max[2]) / 2 - 1 };
+      if (pick) {
+        // A clear spot on the roof (not under an AC unit, a hut or a water tower), nearest its middle.
+        const cx = (pick.min[0] + pick.max[0]) / 2, cz = (pick.min[2] + pick.max[2]) / 2, y = pick.max[1] + 0.35;
+        const clear = (x, z) => !city.boxes.some((b) => b !== pick && x > b.min[0] - 0.8 && x < b.max[0] + 0.8 && z > b.min[2] - 0.8 && z < b.max[2] + 0.8 && y + 1 > b.min[1] && y - 0.3 < b.max[1]);
+        const cands = [];
+        for (let dx = -4; dx <= 4; dx++) for (let dz = -4; dz <= 4; dz++) {
+          const x = cx + dx * 1.5, z = cz + dz * 1.5;
+          if (x > pick.min[0] + 1 && x < pick.max[0] - 1 && z > pick.min[2] + 1 && z < pick.max[2] - 1 && clear(x, z)) cands.push({ x, z, d: dx * dx + dz * dz });
+        }
+        cands.sort((a, b) => a.d - b.d);
+        if (cands.length) roof = { x: cands[0].x, y, z: cands[0].z };
+      }
     }
     return { r, giver, yaw, corner, roof };
   });
@@ -84,7 +116,7 @@ export function createRequests(g) {
   const done = () => (save.activities.requests ??= []);
   let giver = null;      // { s, m } the NPC drawn now
   let active = null;     // { s, phase: 'task' | 'return', list?, item? }
-  let talking = false, near = false;
+  let talking = false, near = false, epoch = 0, awayT = 0;
   const bubble = typeof document !== 'undefined' ? bubbleMesh() : null;
   if (bubble) { bubble.visible = false; scene.add(bubble); }
 
@@ -103,15 +135,32 @@ export function createRequests(g) {
   function hideGiver() {
     if (!giver) return;
     scene.remove(giver.m.root);
-    giver.m.root.traverse((o) => { if (o.isMesh) { for (const mt of [].concat(o.material)) mt?.dispose?.(); } });
+    giver.m.root.traverse((o) => { if (o.isMesh) { for (const mt of [].concat(o.material)) mt?.dispose?.(); if (!o.isSkinnedMesh) o.geometry?.dispose?.(); } });
     giver = null;
+  }
+  function dropItem() {
+    if (!active?.item) return;
+    scene.remove(active.item);
+    active.item.traverse((o) => { if (o.isMesh) o.geometry.dispose(); });
+    active.item = null;
+  }
+  // The request lets go (the crew got away, Spider-Man left): back to waiting for him.
+  function abandon(why) {
+    if (active?.list) { for (const e of active.list) combat.enemies.remove(e); if (combat.encounter?.list === active.list) combat.clearEncounter(); }
+    dropItem();
+    if (active) g.waypoint(null);
+    if (why) g.alert?.(why, 4);
+    active = null;
   }
   function startTask(s) {
     const t = s.r.task;
     active = { s, phase: 'task' };
     if (t.kind === 'gang') {
       const d = city.districts.find((q) => q.id === s.r.district);
-      active.list = combat.spawnGang(s.corner.x, s.corner.z, d?.id ?? 'midtown', { faction: t.faction, mix: t.mix, alert: false, kind: 'story' }).list;
+      // A street gang waiting nearby is sent home first (one encounter at a time).
+      const enc = combat.encounter;
+      if (enc && enc.kind === 'gang') { for (const e of enc.list) combat.enemies.remove(e); combat.clearEncounter(); }
+      active.list = combat.spawnGang(s.corner.x, s.corner.z, d?.id ?? 'midtown', { faction: t.faction, mix: t.mix, alert: false, kind: 'request' }).list;
       g.waypoint({ x: s.corner.x, z: s.corner.z });
     } else {
       const at = s.roof ?? { x: s.giver.x + 30, y: 0.4, z: s.giver.z };
@@ -125,7 +174,7 @@ export function createRequests(g) {
   }
   function toReturn() {
     active.phase = 'return';
-    if (active.item) { scene.remove(active.item); active.item = null; }
+    dropItem();
     g.waypoint({ x: active.s.giver.x, z: active.s.giver.z });
     g.alert?.(`Head back to ${active.s.r.name}.`, 6);
   }
@@ -152,22 +201,29 @@ export function createRequests(g) {
       const after = !active ? () => startTask(s) : active.phase === 'return' && active.s === s ? finish : null;
       const lines = (!active ? s.r.ask : s.r.thanks).map(nameLine(s));
       giver.m.animator.play(giver.m.animator.has('Talking') ? 'Talking' : 'Idle_Loop', { fade: 0.3 });
+      const ep = epoch;
       ui.say(lines).then(() => {
         talking = false;
+        if (ep !== epoch) return; // stopped (or gone quiet) while they talked
         if (giver?.s === s) giver.m.animator.play(giver.m.animator.has(after === finish ? 'Happy_Idle' : s.r.clip) ? (after === finish ? 'Happy_Idle' : s.r.clip) : 'Idle_Loop', { fade: 0.4 });
         after?.();
       });
     },
     update(dt, { active: on }) {
       const hp = hero.body.p;
-      if (!on) { near = false; if (bubble) bubble.visible = false; if (!active) hideGiver(); return; }
+      if (!on) {
+        // Gone quiet (a mission, a menu): a talk in progress does not start a task afterwards.
+        if (talking) { epoch++; talking = false; }
+        near = false; if (bubble) bubble.visible = false; if (!active) hideGiver(); return;
+      }
       // The giver drawn: the active one, else the nearest open request in range.
       let want = active?.s ?? null;
       if (!want) {
         let bd = SHOW_R;
         for (const s of spots) {
           if (done().includes(s.r.id)) continue;
-          const dd = Math.hypot(hp.x - s.giver.x, hp.z - s.giver.z);
+          // The one drawn now keeps its place unless another is clearly nearer (no flicker).
+          const dd = Math.hypot(hp.x - s.giver.x, hp.z - s.giver.z) - (giver?.s === s ? 25 : 0);
           if (dd < bd) { bd = dd; want = s; }
         }
       }
@@ -189,7 +245,18 @@ export function createRequests(g) {
         }
       }
       if (active?.phase === 'task') {
-        if (active.list && active.list.every((e) => !e.alive || ['out', 'webbed', 'pinned'].includes(e.state))) { g.caption?.('CREW BUSTED!'); toReturn(); }
+        if (active.list) {
+          const down = (e) => ['out', 'webbed', 'pinned'].includes(e.state);
+          // Beaten: every one down (not merely removed by the city or a reset).
+          if (active.list.some((e) => down(e)) && active.list.every((e) => !e.alive || down(e))) { g.caption?.('CREW BUSTED!'); toReturn(); }
+          else if (active.list.every((e) => !e.alive && !down(e))) abandon('The crew got away.');
+        }
+        // Left far behind for a while: the request waits for another day.
+        const tx = active?.at?.x ?? active?.s.corner.x, tz = active?.at?.z ?? active?.s.corner.z;
+        awayT = active && Math.hypot(hp.x - tx, hp.z - tz) > 650 ? awayT + dt : 0;
+        if (awayT > 25) { awayT = 0; abandon('Request on hold.'); }
+      }
+      if (active?.phase === 'task') {
         if (active.item) {
           active.item.rotation.y += dt * 1.2;
           if (Math.hypot(hp.x - active.at.x, hp.y - active.at.y - 0.6, hp.z - active.at.z) < 2.4) {
@@ -205,12 +272,13 @@ export function createRequests(g) {
     count() { return [done().length, spots.length]; },
     // A story mission or quit: the running request lets go (the crew leaves, the item goes home).
     stop() {
-      if (active?.list) for (const e of active.list) combat.enemies.remove(e);
-      if (active?.item) scene.remove(active.item);
-      if (active) g.waypoint(null);
-      active = null; talking = false; hideGiver();
+      epoch++;
+      abandon(null);
+      talking = false; hideGiver();
       if (bubble) bubble.visible = false;
     },
+    // The hero went down in free roam: the request is lost for now.
+    onDefeat() { if (active?.phase === 'task') abandon('Request on hold.'); },
     state() { return { active: active ? { id: active.s.r.id, phase: active.phase } : null, near, giver: giver?.s.r.id ?? null, done: [...done()] }; },
     spots,
   };

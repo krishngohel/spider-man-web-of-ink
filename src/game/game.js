@@ -182,7 +182,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const mixC = (a, b, t, out) => out.setHex(a).lerp(C4.setHex(b), t);
   function applyEnv(dt) {
     // A mission holds its own hour and weather; free roam follows the settings.
-    if (storyEnv) { clock.cycle = false; clock.set(storyEnv.hour); } else if (settings.timeOfDay === 'cycle') { clock.cycle = true; clock.update(dt); } else { clock.cycle = false; clock.set(PRESETS[settings.timeOfDay]); }
+    // Photo mode's hour holds while it is open (it never changes the saved setting).
+    if (photoHour !== null && !storyEnv) { clock.cycle = false; clock.set(photoHour); }
+    else if (storyEnv) { clock.cycle = false; clock.set(storyEnv.hour); } else if (settings.timeOfDay === 'cycle') { clock.cycle = true; clock.update(dt); } else { clock.cycle = false; clock.set(PRESETS[settings.timeOfDay]); }
     const wantW = storyEnv?.weather ?? settings.weather;
     if (wantW === 'cycle') {
       weatherState.next -= dt;
@@ -357,8 +359,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onTracker: () => tracker.show(),
     onPhoto: () => { resume(); enterPhoto(); },
     postGame: () => !session.active && (save.story.done.includes('act4.epilogue') || !!save.story.choices?.completedOnce),
-    onGauntlet: () => { storyOn = true; enterPlay(); director.startGauntlet(); },
-    onNights: () => { if (storyOn) { director.stop(); storyOn = false; } storyEnv = { hour: 23, weather: 'clear' }; enterPlay(); content.startNights(); },
+    onGauntlet: () => { requests.stop(); storyOn = true; enterPlay(); director.startGauntlet(); },
+    onNights: () => { requests.stop(); if (storyOn) { director.stop(); storyOn = false; } storyEnv = { hour: 23, weather: 'clear' }; enterPlay(); content.startNights(); },
   });
   const slots = createSlots(uiRoot, { onPick: (slot, fresh) => enterStory(slot, fresh), onBack: () => menus.showTitle() });
   const storyUi = createStoryUi(uiRoot, { getSettings: () => settings, onSound: (k) => sfx.event({ type: k }), canAdvanceRadio: () => mode === 'play' && !session?.active });
@@ -418,6 +420,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   session.on('status', (kind) => { if (kind === 'closed') { progress.useSave(save); if (mode !== 'title') hud.caption('LEFT THE WORLD', 2); } });
   let mpEntered = false;
   function enterMp() {
+    requests.stop();
     if (!mpEntered) {
       mpEntered = true;
       progress.useSave(mpSave);
@@ -525,12 +528,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   let pausedAt = 0;
   // Photo mode: the world holds, the HUD goes, an orbit camera and a framing card (ui/photoMode.js).
-  let filterWas = 0;
+  let filterWas = 0, photoHour = null;
   const photoMode = createPhotoMode(document.body, {
     capture: () => { ink.render(scene, camera, time); return renderer.domElement.toDataURL('image/png'); },
     setFilter: (n) => { if (n === 'restore') ink.uniforms.uFilter.value = filterWas; else ink.setFilter(n); },
     getHour: () => clock.hour,
-    setHour: (h) => { if (!storyEnv) { settings = { ...settings, timeOfDay: 'cycle' }; clock.set(h); } },
+    setHour: (h) => { if (!storyEnv) photoHour = h; },
     playPose: (e) => { if (e) poser.playEmote(e); else poser.stopEmote(); },
     onShot: () => { content.photo({ x: camera.position.x, y: camera.position.y, z: camera.position.z, fx: -Math.sin(photoMode.cam.yaw), fy: 0, fz: -Math.cos(photoMode.cam.yaw) }); sfx.event({ type: 'stamp' }); },
     onExit: () => exitPhoto(),
@@ -538,6 +541,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   function enterPhoto() {
     if (mode !== 'play') return;
     mode = 'photo';
+    photoHour = null;
     filterWas = ink.uniforms.uFilter.value;
     if (locked()) document.exitPointerLock();
     uiRoot.style.visibility = 'hidden';
@@ -546,6 +550,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   function exitPhoto() {
     if (mode !== 'photo') return;
     mode = 'play';
+    photoHour = null;
     uiRoot.style.visibility = '';
     // The key that closed photo mode must not also pause the game or open it again.
     input.swallowCode('Escape'); input.swallowCode('KeyO');
@@ -783,6 +788,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   let defeatT = 0;
   function defeatStep(dt) {
     if (content.nights) { content.endNights(); storyEnv = null; }
+    if (defeatT === 0) requests.onDefeat();
     if (storyOn && director.onDefeat()) return;
     if (session.active && mpRule.friendlyFire) {
       if (defeatT === 0) session.all({ k: 'ko', by: session.lastHurtBy });
@@ -945,7 +951,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       // A neighbourhood request's giver in reach: E talks.
       requests.preStep(intent);
       // A fist bump with a fan who stopped to cheer (E / pad Y, standing near them, no fight on).
-      if (crowd.bumpable && emoteOk && intent.hangPressed) {
+      if (crowd.bumpable && emoteOk && intent.hangPressed && !(storyOn && director.quiet)) {
         const at = crowd.fistBump();
         if (at) {
           intent.hangPressed = intent.yankPressed = false;
@@ -1019,7 +1025,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       hud.setLockHint(!locked() && input.device !== 'pad');
     } else {
       fixed.reset();
-      if (mode === 'photo') { photoMode.update(dt, input); interpolate(); }
+      if (mode === 'photo') {
+        photoMode.update(dt, input);
+        interpolate();
+        // A pad: A takes the shot, B or Start leaves.
+        if (input.device === 'pad') { if (input.pressed('jump')) photoMode.shot(); if (input.pressed('dive') || input.pressed('pause')) photoMode.hide(); }
+      }
       if (mode === 'title') {
         // The hero holds his perch on the ledge (the poser crouches on a perch event).
         events.push({ type: 'perch' });
@@ -1113,7 +1124,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       }
     }
     fovKick *= Math.exp(-dt * 25);
-    if (!camOverride && Math.abs(camera.fov - (rig.fov + fovKick + rig.fovPop)) > 0.01) { camera.fov = rig.fov + fovKick + rig.fovPop; camera.updateProjectionMatrix(); }
+    if (!camOverride && mode !== 'photo' && mode !== 'title' && Math.abs(camera.fov - (rig.fov + fovKick + rig.fovPop)) > 0.01) { camera.fov = rig.fov + fovKick + rig.fovPop; camera.updateProjectionMatrix(); }
     if (waypoint && mode === 'play') {
       wpV.set(waypoint.x, Math.max(2, hero.body.p.y * 0.5), waypoint.z).project(camera);
       const behind = wpV.z > 1;
@@ -1131,7 +1142,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     rain.update(camera, time);
     // The camera crammed right up against the hero (a tight corner): hide him rather than fill the
     // screen with his back.
-    heroModel.root.visible = camOverride || rig.closeness > 0.9;
+    heroModel.root.visible = camOverride || mode === 'photo' || mode === 'title' || rig.closeness > 0.9;
     const hp = hero.body.p;
     sun.target.position.set(Math.round(hp.x / 8) * 8, 0, Math.round(hp.z / 8) * 8);
     sun.position.copy(sun.target.position).addScaledVector(sunDir, 400);
@@ -1143,7 +1154,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     crowd.update(dt, camera.position, hero, { spidey: character.kind !== 'civilian' && mode === 'play' });
     {
       const b = crowd.bumpable, rq = requests.prompt, inStroll = storyOn && director.step?.type === 'stroll';
-      if (!inStroll) {
+      // Missions own the prompt (strolls, stealth takedowns): no fist bumps or requests then.
+      if (!inStroll && !(storyOn && director.quiet)) {
         if (rq) storyUi.talkPrompt(rq, screenOf);
         else if (b) storyUi.talkPrompt({ p: { x: b.m.root.position.x, y: 0.9, z: b.m.root.position.z }, label: 'FIST BUMP' }, screenOf);
         else storyUi.talkPrompt(null);
@@ -1306,6 +1318,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   function enterStory(slot, fresh) {
     if (session.active) return;
+    requests.stop();
     combat.heroCombat.revive();
     const old = loadSlot(window.localStorage, slot);
     const next = fresh === 'ngplus' && old ? newGamePlus(old, slot, newSave(slot)) : fresh ? newSave(slot) : (old ?? newSave(slot));
@@ -1322,6 +1335,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   // Dev and test entry: ?at=<step id> plays from that step in a scratch save (never written).
   function devStory(id) {
+    requests.stop();
     // The level a player would have at this point (the story's pace), points spent.
     const LEVEL_AT = { prologue: 1, act1: 4, act2: 10, act3: 17, act4: 24 };
     loadInto(autoBuild(newSave(9), LEVEL_AT[stepById(id)?.act] ?? 1));

@@ -28,6 +28,10 @@ export function createMusic(getVolume, base = './') {
   };
   const unlock = () => { unlocked = true; if (want) el(want).a.play().catch(() => {}); };
   addEventListener('pointerdown', unlock, { once: true });
+  // A hidden tab goes quiet (the frame loop stops, so the fades would not run).
+  document.addEventListener('visibilitychange', () => {
+    for (const [name, t] of els) { if (document.hidden) t.a.pause(); else if (name === want && unlocked) t.a.play().catch(() => {}); }
+  });
   addEventListener('keydown', unlock, { once: true });
   return {
     // Which track should play (a TRACKS key or null for silence).

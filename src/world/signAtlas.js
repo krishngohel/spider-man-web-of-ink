@@ -35,12 +35,9 @@ export function signAtlas() {
   atlas.anisotropy = 4;
   paint(cv);
   atlas.needsUpdate = true;
-  // Paint again with the comic face once it has loaded (the fallback is Impact); after that upload
-  // the canvas is not needed (16 MB of pixels), so it is shrunk away.
-  document.fonts?.load('64px Bangers').then(() => {
-    paint(cv); atlas.needsUpdate = true;
-    atlas.onUpdate = () => { atlas.onUpdate = null; setTimeout(() => { cv.width = cv.height = 1; }, 0); };
-  }).catch(() => {});
+  // Paint again with the comic face once it has loaded (the fallback is Impact). The canvas is kept:
+  // a lost WebGL context re-uploads from it.
+  document.fonts?.load('64px Bangers').then(() => { paint(cv); atlas.needsUpdate = true; }).catch(() => {});
   return atlas;
 }
 

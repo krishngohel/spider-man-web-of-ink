@@ -38,10 +38,18 @@ describe('neighborhood requests', () => {
     const city = buildCity();
     const spots = placeRequests(city, buildStreetProps(city).lamps);
     for (const s of spots) {
-      expect(city.landAt(s.giver.x, s.giver.z), s.r.id).toBe(LAND.city);
+      expect([LAND.city, LAND.park, LAND.suburb, LAND.plaza], s.r.id).toContain(city.landAt(s.giver.x, s.giver.z));
       const inside = city.boxes.some((b) => b.kind === 'building' && s.giver.x > b.min[0] && s.giver.x < b.max[0] && s.giver.z > b.min[2] && s.giver.z < b.max[2]);
       expect(inside, `${s.r.id} inside a building`).toBe(false);
-      if (s.r.task.kind === 'fetch') expect(s.roof, s.r.id).toBeTruthy();
+      if (s.r.task.kind === 'fetch') {
+        expect(s.roof, s.r.id).toBeTruthy();
+        // The item sits in the open, not inside a tower stacked on the roof.
+        const buried = city.boxes.some((b) => s.roof.x > b.min[0] && s.roof.x < b.max[0] && s.roof.z > b.min[2] && s.roof.z < b.max[2] && s.roof.y > b.min[1] && s.roof.y < b.max[1]);
+        expect(buried, `${s.r.id} item buried`).toBe(false);
+      }
+      // Each giver stands in their own district.
+      const d = city.districts.find((q) => q.id === s.r.district);
+      expect(s.giver.x >= d.minX && s.giver.x < d.maxX && s.giver.z >= d.minZ && s.giver.z < d.maxZ, `${s.r.id} in ${s.r.district}`).toBe(true);
     }
   });
 });
