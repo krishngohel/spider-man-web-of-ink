@@ -94,7 +94,9 @@ export function createCityLife(scene, city, quality) {
   peds.castShadow = false;
   group.add(peds);
   const SHIRTS = [0xd8392b, 0x2a5fb0, 0xf2c230, 0x3f8f5a, 0xeeeeea, 0x7a4a9a, 0xe07a2a, 0x2b2b33, 0x5aa0c8];
-  const ped = Array.from({ length: PED_N }, () => ({ x: 0, z: 0, dx: 0, dz: 1, speed: 1.3, phase: 0, flee: 0, alive: false }));
+  // skinned: a real figure (crowd.js) stands in for this one near the camera; pause: seconds it
+  // stands still (stopped to cheer, to take a photo of Spider-Man).
+  const ped = Array.from({ length: PED_N }, () => ({ x: 0, z: 0, dx: 0, dz: 1, speed: 1.3, phase: 0, flee: 0, alive: false, skinned: false, pause: 0 }));
   ped.forEach((o, i) => { peds.setColorAt(i, new THREE.Color(SHIRTS[i % SHIRTS.length])); skin.array[i] = rng.next(); });
   peds.instanceColor.needsUpdate = true;
   skin.needsUpdate = true;
@@ -226,6 +228,8 @@ void main() { gl_FragColor = vec4(0.32, 0.33, 0.4, 1.0); ${AUX_WRITE_FLAT} }`,
     group,
     // A spot cars keep out of (a stroll's scene): { x, z, r } or null.
     setQuietZone(z) { quiet = z; },
+    // The pedestrians (crowd.js puts real figures in for the nearest).
+    peds: ped,
     // Seconds into the traffic cycle (halos light the matching signal lamp).
     get lightT() { return lightT; },
     // Every moving car: fn(x, z, dirX, dirZ).
@@ -249,13 +253,14 @@ void main() { gl_FragColor = vec4(0.32, 0.33, 0.4, 1.0); ${AUX_WRITE_FLAT} }`,
           const d = Math.hypot(o.x - scare.x, o.z - scare.z);
           if (d < scare.r) { o.flee = 2.5; const k = 1 / Math.max(0.5, d); o.dx = (o.x - scare.x) * k; o.dz = (o.z - scare.z) * k; }
         }
-        const sp = o.flee > 0 ? 4.2 : o.speed;
+        if (o.pause > 0 && o.flee <= 0) o.pause -= dt;
+        const sp = o.flee > 0 ? 4.2 : o.pause > 0 ? 0 : o.speed;
         if (o.flee > 0) { o.flee -= dt; if (o.flee <= 0) { if (Math.abs(o.dx) > Math.abs(o.dz)) { o.dx = Math.sign(o.dx); o.dz = 0; } else { o.dz = Math.sign(o.dz); o.dx = 0; } } }
         const nx = o.x + o.dx * sp * dt, nz = o.z + o.dz * sp * dt;
         if (isCity(nx, nz)) { o.x = nx; o.z = nz; } else { o.dx = -o.dx; o.dz = -o.dz; }
         o.phase += dt * sp * 4.2;
         walk.array[i * 2] = o.phase; walk.array[i * 2 + 1] = o.alive ? sp / 1.3 : 0;
-        p.set(o.x, o.alive ? 0 : -50, o.z);
+        p.set(o.x, o.alive && !o.skinned ? 0 : -50, o.z);
         q.setFromAxisAngle(up, Math.atan2(o.dx, o.dz));
         peds.setMatrixAt(i, m4.compose(p, q, s));
       }

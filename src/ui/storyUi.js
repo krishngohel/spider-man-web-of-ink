@@ -191,7 +191,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {}, canAdvanc
       if (!t) { if (prompt.dataset.talk) { prompt.classList.add('hidden'); prompt.dataset.talk = ''; } return; }
       const s = screen(t.p.x, t.p.y + 2.3, t.p.z);
       prompt.classList.toggle('hidden', !s.front);
-      const html = fill(`{hang} TALK TO ${t.name.toUpperCase()}`);
+      const html = fill(t.label ? `{hang} ${t.label}` : `{hang} TALK TO ${t.name.toUpperCase()}`);
       if (prompt.dataset.talk !== html) { prompt.innerHTML = html; prompt.dataset.talk = html; }
       prompt.style.left = `${s.x}px`; prompt.style.top = `${s.y}px`;
     },

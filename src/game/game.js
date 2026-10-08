@@ -21,6 +21,7 @@ import { env as envAt, createClock, PRESETS, WEATHERS } from '../world/timeWeath
 import { createRain } from '../world/rain.js';
 import { createCityLife } from '../world/cityLife.js';
 import { createHalos, HALO } from '../render/halos.js';
+import { createCrowd } from '../world/crowd.js';
 const CAR_HEAD = [1.0, 0.88, 0.6], CAR_TAIL = [1.0, 0.1, 0.08];
 let carHalos = null;
 // Two white heads in front and two red tails behind a moving car.
@@ -225,6 +226,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:warmEnd');
   const assets = await assetsP;
   let heroModel = buildHeroModel(assets);
+  // Real figures for the nearest pedestrians (src/world/crowd.js), fewer on lower quality.
+  const crowd = createCrowd({ scene, assets, buildCharacter, life, count: quality.name === 'low' ? 0 : quality.name === 'medium' ? 6 : 12 });
   scene.add(heroModel.root);
   let poser = createPoser(heroModel);
   let character = characterById('peter');
@@ -879,6 +882,18 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         emoteWheel.steer(input.look, input.move); intent.moveX = intent.moveZ = 0; intent.jump = intent.jumpPressed = false;
       }
       else if (emoteWheel.open) { const id = emoteWheel.close(); if (id && emoteOk) poser.playEmote(emoteById(id)); }
+      // A fist bump with a fan who stopped to cheer (E / pad Y, standing near them, no fight on).
+      if (crowd.bumpable && emoteOk && intent.hangPressed) {
+        const at = crowd.fistBump();
+        if (at) {
+          intent.hangPressed = intent.yankPressed = false;
+          const y = Math.atan2(at.x - hero.body.p.x, at.z - hero.body.p.z);
+          hero.facing.x = Math.sin(y); hero.facing.z = Math.cos(y);
+          poser.playEmote({ clip: 'Handshake' });
+          const sc = screenOf(at.x, 2, at.z); if (sc.front) hud.word('FIST BUMP!', sc.x, sc.y - 30, 'small');
+          sfx.event({ type: 'stamp' });
+        }
+      }
       if (storyOn) director.preStep(intent, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
       combat.preStep(intent, gdt);
       const Tp = performance.now();
@@ -1047,6 +1062,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     prof('aim', Tprev);
     fx.update(dt);
     life.update(mode === 'play' ? gdt : dt * 0.5, renderP, scare);
+    crowd.update(dt, camera.position, hero, { spidey: character.kind !== 'civilian' && mode === 'play' });
+    {
+      const b = crowd.bumpable;
+      if (b && !(storyOn && director.step?.type === 'stroll')) storyUi.talkPrompt({ p: { x: b.m.root.position.x, y: 0.9, z: b.m.root.position.z }, label: 'FIST BUMP' }, screenOf);
+      else if (!(storyOn && director.step?.type === 'stroll')) storyUi.talkPrompt(null);
+    }
     halos.update(performance.now() / 1000, life.lightT, nightNow);
     skyline.setNight?.(nightNow, performance.now() / 1000);
     if (nightNow > 0.02) {
