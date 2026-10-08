@@ -7,9 +7,10 @@ import { buildCity, LAND } from '../../src/world/city.js';
 import { newSave, migrate } from '../../src/core/save.js';
 import { ROSTER } from '../../src/roster/characters.js';
 import { PORTRAITS } from '../../src/ui/portraits.js';
+import { CAST, CROWD } from '../../src/story/cast.js';
 import { SUITS } from '../../src/progress/progression.js';
 
-const TYPES = ['start', 'reach', 'radio', 'broadcast', 'panels', 'title', 'fight', 'defend', 'stealth', 'boss', 'chase', 'credits'];
+const TYPES = ['start', 'reach', 'radio', 'broadcast', 'panels', 'title', 'fight', 'defend', 'stealth', 'boss', 'chase', 'credits', 'stroll'];
 const DASHES = [String.fromCharCode(8211), String.fromCharCode(8212)];
 function strings(v, out = []) {
   if (typeof v === 'string') out.push(v);
@@ -42,7 +43,12 @@ describe('story steps', () => {
       if (['start', 'reach', 'fight', 'defend', 'stealth', 'boss', 'chase'].includes(s.type)) expect(SITE_DEFS[s.site], s.id).toBeTruthy();
       if (s.type === 'stealth') { expect(s.guards.length, s.id).toBeGreaterThan(2); for (const gd of s.guards) expect(gd.route.length, s.id).toBeGreaterThan(0); }
       if (s.suit) expect(SUITS.some((u) => u.id === s.suit), s.id).toBe(true);
-      if (s.char) expect(ROSTER.some((c) => c.id === s.char), s.id).toBe(true);
+      if (s.char) expect(ROSTER.some((c) => c.id === s.char) || !!CAST[s.char], s.id).toBe(true);
+      if (s.type === 'stroll') {
+        expect(SITE_DEFS[s.site], s.id).toBeTruthy();
+        expect(s.npcs.some((n) => n.talk && (n.need ?? true)) || !!s.reach, s.id).toBe(true);
+        for (const n of s.npcs) expect(!!CAST[n.who] || !!CROWD[n.who] || ROSTER.some((c) => c.id === n.who), `${s.id} ${n.who}`).toBe(true);
+      }
       if (['radio', 'broadcast'].includes(s.type)) expect(s.lines.length, s.id).toBeGreaterThan(0);
       if (s.type === 'panels') expect(s.pages.length, s.id).toBeGreaterThan(0);
       if (s.type === 'fight' || s.type === 'defend') expect(s.waves.length, s.id).toBeGreaterThan(0);
@@ -53,12 +59,14 @@ describe('story steps', () => {
   it('every speaker is known, in lines and in balloons', () => {
     const whos = [];
     for (const s of STEPS) {
-      for (const l of s.lines ?? []) whos.push(l.who);
-      for (const pg of s.pages ?? []) for (const p of pg.panels) for (const b of p.balloons ?? []) whos.push(b.who);
+      for (const l of s.lines ?? []) whos.push(l);
+      for (const n of s.npcs ?? []) for (const l of n.talk ?? []) whos.push(l);
+      for (const pg of s.pages ?? []) for (const p of pg.panels) for (const b of p.balloons ?? []) whos.push(b);
     }
-    for (const w of whos) expect(SPEAKERS[w], w).toBeTruthy();
+    // A crowd speaker carries its own name for the scene.
+    for (const l of whos) expect(l.name ?? SPEAKERS[l.who], l.who).toBeTruthy();
     // And every speaker on the radio has a drawn portrait (not the fallback officer).
-    for (const w of new Set(whos)) expect(PORTRAITS, w).toContain(w);
+    for (const w of new Set(whos.map((l) => l.who))) expect(PORTRAITS.includes(w) || !!CROWD[w], w).toBe(true);
   });
   it('no em or en dashes in any story copy', () => {
     const all = strings(STEPS).concat(strings(ACTS), strings(SPEAKERS));

@@ -11,11 +11,13 @@
 //   fight     waves of a faction at a site
 //   boss      a boss module (src/story/bosses) in an arena site
 //   chase     a chase module (the boss module's chase phase)
+//   stroll    Peter out of the suit: walk a scene and talk to people (src/story/stroll.js)
 // Sites are named spots resolved against the city at run time (src/story/sites.js).
 
 import { ACT2 } from './acts/act2.js';
 import { ACT3 } from './acts/act3.js';
 import { ACT4 } from './acts/act4.js';
+import { spliceScenes } from './acts/peter.js';
 
 const L = (who, text) => ({ who, text });
 
@@ -39,7 +41,7 @@ export const SPEAKERS = {
 // in metres from the site; yaw is where a figure faces, in degrees (0 = +z, 90 = +x).
 const shot = (at, cam, look, cast = [], extra = {}) => ({ at, cam, look, cast, ...extra });
 
-export const STEPS = [
+export const STEPS = spliceScenes([
   // ------------------------------------------------------------------ Prologue
   {
     id: 'prologue.open', act: 'prologue', type: 'panels', env: { hour: 6.4, weather: 'clear' },
@@ -190,7 +192,7 @@ export const STEPS = [
   ...ACT2,
   ...ACT3,
   ...ACT4,
-];
+]);
 
 export const stepById = (id) => STEPS.find((s) => s.id === id) ?? null;
 export const actById = (id) => ACTS.find((a) => a.id === id) ?? null;

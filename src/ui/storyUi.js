@@ -25,7 +25,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {}, canAdvanc
       if (p.img) box.append(el('img', { src: p.img, alt: '' }));
       if (p.caption) box.append(el('div', { class: `ccaption ${p.captionPos ?? 'top'}` }, p.caption));
       for (const b of p.balloons ?? []) {
-        const n = el('div', { class: `cballoon ${b.radio ? 'radio' : ''} ${b.who === 'jameson' ? 'shout' : ''}` }, [el('b', {}, SPEAKERS[b.who] ?? b.who), el('span', {}, b.text)]);
+        const n = el('div', { class: `cballoon ${b.radio ? 'radio' : ''} ${b.who === 'jameson' ? 'shout' : ''}` }, [el('b', {}, b.name ?? SPEAKERS[b.who] ?? b.who), el('span', {}, b.text)]);
         n.style.left = `${b.x}%`; n.style.top = `${b.y}%`;
         box.append(n);
       }
@@ -70,7 +70,7 @@ export function createStoryUi(root, { getSettings, onSound = () => {}, canAdvanc
     radio.classList.add('show');
     radio.classList.toggle('bugle', broadcast);
     portrait.innerHTML = portraitSvg(line.who, broadcast);
-    nameEl.textContent = broadcast ? `${SPEAKERS[line.who]} ${COPY.story.onAir}` : SPEAKERS[line.who] ?? line.who;
+    nameEl.textContent = broadcast ? `${SPEAKERS[line.who]} ${COPY.story.onAir}` : line.name ?? SPEAKERS[line.who] ?? line.who;
     textEl.textContent = '';
     onSound(broadcast ? 'crackle' : 'radio');
   }

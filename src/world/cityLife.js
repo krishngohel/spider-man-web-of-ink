@@ -219,11 +219,13 @@ void main() { gl_FragColor = vec4(0.32, 0.33, 0.4, 1.0); ${AUX_WRITE_FLAT} }`,
   for (const h of helis) group.add(h.mesh);
 
   // Update ----------------------------------------------------------------------------------------
-  let lightT = 0;
+  let lightT = 0, quiet = null;
   const avenueGreen = () => (lightT % 24) < 11; // avenues and streets take turns
   const streetGreen = () => (lightT % 24) >= 12 && (lightT % 24) < 23;
   return {
     group,
+    // A spot cars keep out of (a stroll's scene): { x, z, r } or null.
+    setQuietZone(z) { quiet = z; },
     // Seconds into the traffic cycle (halos light the matching signal lamp).
     get lightT() { return lightT; },
     // Every moving car: fn(x, z, dirX, dirZ).
@@ -264,6 +266,7 @@ void main() { gl_FragColor = vec4(0.32, 0.33, 0.4, 1.0); ${AUX_WRITE_FLAT} }`,
         const c = car[i];
         const x = c.axis === 0 ? c.lane : c.pos, z = c.axis === 0 ? c.pos : c.lane;
         if (!c.alive || Math.hypot(x - cx, z - cz) > RADIUS + 30) { placeCar(c, cx, cz, !c.alive && c.speed === 0); continue; }
+        if (quiet && Math.hypot(x - quiet.x, z - quiet.z) < quiet.r) { c.alive = false; continue; }
         let want = c.max;
         // The car ahead in this lane.
         for (let j = 0; j < CAR_N; j++) {

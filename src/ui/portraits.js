@@ -1,3 +1,5 @@
+import { CROWD } from '../story/cast.js';
+
 // Radio portraits, drawn in code as small comic heads (SVG, 100 x 100). Each speaker is a face
 // shape plus hair, mask or helmet, and a collar; the ink outline and a halftone shade come free.
 
@@ -78,8 +80,21 @@ const FACES = {
   robbie: () => collar('#5a5a6a', '#f4f4f4') + head({ skin: '#7a5236', w: 28 }) + `<path d="M24 38 Q26 20 50 20 Q74 20 76 38 Q64 28 50 28 Q36 28 24 38 Z" fill="#d8d8dc" stroke="${INK}" stroke-width="3"/>` + eyes(50, 11, 2.4) + mouth(70, 8, 3),
 };
 
+// Everyday people (cast.js CROWD): a face from their look, skin tone, hair and jacket.
+const hex = (n) => `#${n.toString(16).padStart(6, '0')}`;
+function crowdFace(d) {
+  const t = d.outfit.skin ?? 0.3;
+  const mixc = (a, b) => Math.round(a + (b - a) * t);
+  const skin = `rgb(${mixc(242, 106)},${mixc(207, 66)},${mixc(174, 40)})`;
+  const hair = hex(d.hairColor ?? d.outfit.hat ?? 0x2a1a10);
+  const long = (d.gear ?? []).includes('hairLong');
+  const back = long ? `<path d="M18 88 Q12 30 50 18 Q88 30 82 88 Z" fill="${hair}" stroke="${INK}" stroke-width="3"/>` : '';
+  const top = `<path d="M22 46 Q22 18 50 16 Q78 18 78 46 Q66 30 50 30 Q34 30 22 46 Z" fill="${hair}" stroke="${INK}" stroke-width="3"/>`;
+  return collar(hex(d.outfit.jacket), hex(d.outfit.accent ?? d.outfit.jacket)) + back + head({ skin, w: 27, h: 34, y: 54 }) + top + eyes(52, 11, 2.4) + mouth(70, 8, 3);
+}
+
 export function portraitSvg(who, broadcast = false) {
-  const body = (FACES[who] ?? FACES.cop)();
+  const body = FACES[who] ? FACES[who]() : CROWD[who] ? crowdFace(CROWD[who]) : FACES.cop();
   const bg = broadcast ? '#f7e36a' : '#cfe3f2';
   return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><defs>${dots}</defs><rect width="100" height="100" fill="${bg}"/>${body}</svg>`;
 }

@@ -122,10 +122,11 @@ export function createDirector(g) {
     g.placeHero(site.x + sp[0], site.y + (sp[1] ?? 0) + 0.2, site.z + sp[2], 'ground');
     g.faceYaw?.(((sp[3] ?? 180) * Math.PI) / 180);
     cur.stroll = createStroll(g, { scene, hero, ui, say, site, step, crowd: CROWD });
+    g.quietTraffic?.({ x: site.x, z: site.z, r: 40 });
     cur.phase = 'stroll';
     g.fade(false);
   }
-  function endStroll() { cur?.stroll?.dispose(); if (cur) cur.stroll = null; ui.talkPrompt?.(null); }
+  function endStroll() { if (cur?.stroll) g.quietTraffic?.(null); cur?.stroll?.dispose(); if (cur) cur.stroll = null; ui.talkPrompt?.(null); }
 
   function complete(id) {
     const step = runner.step;
@@ -278,9 +279,10 @@ export function createDirector(g) {
         const s = cur.stroll;
         if (!s) break;
         s.update(dt);
-        const t = s.target;
-        marker.show(t ? { x: t.x, y: t.y - 0.9, z: t.z } : null);
-        markerOn = !!t;
+        // The beacon leads the way to the next person; close up, the talk prompt takes over.
+        const t = s.target, far = t && Math.hypot(hero.body.p.x - t.x, hero.body.p.z - t.z) > 12;
+        marker.show(far ? { x: t.x, y: t.y - 2.4, z: t.z } : null);
+        markerOn = !!far;
         const pr = s.prompt;
         ui.talkPrompt?.(pr ? { p: pr.p, name: pr.n.name ?? speakerName(pr.n.who) } : null, g.screen);
         if (s.done) complete(step.id);

@@ -14,7 +14,7 @@ const out = process.argv[2] ?? 'story-walk';
 const url = process.argv[3] ?? 'http://localhost:5310/';
 const from = process.argv[4] ?? STEPS[0].id, to = process.argv[5] ?? STEPS[STEPS.length - 1].id;
 mkdirSync(out, { recursive: true });
-const list = STEPS.slice(STEPS.findIndex((s) => s.id === from), STEPS.findIndex((s) => s.id === to) + 1).filter((s) => !process.env.ONLY || process.env.ONLY.split(',').includes(s.type));
+const list = STEPS.slice(STEPS.findIndex((s) => s.id === from), STEPS.findIndex((s) => s.id === to) + 1).filter((s) => (!process.env.ONLY || process.env.ONLY.split(',').includes(s.type)) && (!process.env.MATCH || s.id.includes(process.env.MATCH)));
 
 const b = await chromium.launch({ args: launchArgs(), headless: true });
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });

@@ -23,6 +23,10 @@ export const SITE_DEFS = {
   harborWarehouse: { point: [840, 0.9, 840] },
   shipyard: { point: [960, 0.9, 900] },
   uniFront: { lm: 'university', at: 'front' },
+  // Peter's scenes (acts/peter.js): the university's quad lawn, the Bugle's sidewalk, F.E.A.S.T.'s.
+  uniQuad: { lm: 'university', at: 'quad' },
+  bugleWalk: { lm: 'bugle', at: 'front', dz: -8 },
+  shelterWalk: { station: 'harlem', dx: 10, dz: 3 },
   churchStreet: { lm: 'church', at: 'front' },
   churchRoof: { lm: 'church', at: 'roof', pick: 'largest' },
   bellTop: { lm: 'church', at: 'roof', dz: 3.5 },
@@ -58,6 +62,9 @@ export function resolveSite(city, name) {
     const x = (top.min[0] + top.max[0]) / 2, z = (top.min[2] + top.max[2]) / 2;
     return { name, x: x + (d.dx ?? 0), y: top.max[1] + 0.9, z: z + (d.dz ?? 0), ground: false, arena: { minX: top.min[0], maxX: top.max[0], minZ: top.min[2], maxZ: top.max[2], y: top.max[1] } };
   }
-  // In front: the street on the block's south side, just off the curb.
+  // The open lawn inside a quad of halls (the university).
+  if (d.at === 'quad') return { name, x: (b.minX + b.maxX) / 2 + (d.dx ?? 0), y: 0.9, z: b.minZ + 18.5 + (d.dz ?? 0), ground: true };
+  // In front: the street on the block's south side, just off the curb (dz moves it, e.g. onto the sidewalk).
+  if (d.dz) return { name, x: (b.minX + b.maxX) / 2 + (d.dx ?? 0), y: 0.9, z: b.maxZ + 6 + d.dz, ground: true };
   return { name, x: (b.minX + b.maxX) / 2, y: 0.9, z: b.maxZ + 6, ground: true, arena: { minX: b.minX - 10, maxX: b.maxX + 10, minZ: b.maxZ, maxZ: b.maxZ + 18, y: 0 } };
 }

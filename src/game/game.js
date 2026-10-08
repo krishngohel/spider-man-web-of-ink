@@ -1140,6 +1140,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     setCharacter: (id) => switchCharacter(id),
     // Peter in a stroll: talk with his hands (an emote clip on the poser), or stop.
     heroEmote: (e) => { if (e) poser.playEmote(e); else poser.stopEmote(); },
+    quietTraffic: (z) => life.setQuietZone(z),
     faceYaw: (y) => { hero.facing.x = Math.sin(y); hero.facing.z = Math.cos(y); rig.faceYaw(y); },
     setSuit: (id) => progress.setSuitOverride?.(id),
     setOccupation: (f) => combat.setOccupation(f),
