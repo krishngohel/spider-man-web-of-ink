@@ -151,10 +151,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }
     // Aircraft beacons: every antenna top, and the roofs of the tallest towers.
     let k = 0;
+    const tall = city.boxes.filter((b) => b.kind === 'building' && b.max[1] > 140);
     for (const b of city.boxes) {
       const h = b.max[1], cx = (b.min[0] + b.max[0]) / 2, cz = (b.min[2] + b.max[2]) / 2;
       if (b.style === 16 && b.kind === 'prop') halos.add(cx, h + 0.3, cz, RED, 4.5, HALO.BLINK, (k++ * 0.37) % 1);
-      else if (b.kind === 'building' && h > 150) halos.add(cx, h + 1.5, cz, RED, 7, HALO.BLINK, (k++ * 0.61) % 1);
+      // Only the topmost box of a tower (not every tier of a crown).
+      else if (b.kind === 'building' && h > 150 && !tall.some((t) => t !== b && t.min[1] >= h - 0.01 && t.min[0] < b.max[0] && t.max[0] > b.min[0] && t.min[2] < b.max[2] && t.max[2] > b.min[2])) halos.add(cx, h + 1.5, cz, RED, 7, HALO.BLINK, (k++ * 0.61) % 1);
     }
   }
   let nightNow = 0, rainNow = 0;

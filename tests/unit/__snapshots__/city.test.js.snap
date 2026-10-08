@@ -2,7 +2,7 @@
 
 exports[`the full city > the city layout snapshot (footprints change only on purpose) 1`] = `
 {
-  "boxes": 12778,
-  "sig": -183066908,
+  "boxes": 12590,
+  "sig": -194772524,
 }
 `;

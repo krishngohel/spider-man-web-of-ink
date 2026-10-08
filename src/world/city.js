@@ -195,12 +195,14 @@ function buildBlock(b, d, rng, add) {
       add([lx0, 0, z0], [lx1, base, z1], 'building', d.id, style);
       const ix = (lx1 - lx0) * rng.range(0.12, 0.2), iz = (z1 - z0) * rng.range(0.12, 0.2);
       add([lx0 + ix, base, z0 + iz], [lx1 - ix, h, z1 - iz], 'building', d.id, style);
-      roofProp(lx0 + ix, lx1 - ix, z0 + iz, z1 - iz, h, d, rng, add);
-      crown(lx0 + ix, lx1 - ix, z0 + iz, z1 - iz, h, style, d, add);
+      const made = [];
+      roofProp(lx0 + ix, lx1 - ix, z0 + iz, z1 - iz, h, d, rng, (...a) => { const bx = add(...a); made.push(bx); return bx; });
+      crown(lx0 + ix, lx1 - ix, z0 + iz, z1 - iz, h, style, d, add, made);
     } else {
       add([lx0, 0, z0], [lx1, h, z1], 'building', d.id, style);
-      roofProp(lx0, lx1, z0, z1, h, d, rng, add);
-      crown(lx0, lx1, z0, z1, h, style, d, add);
+      const made = [];
+      roofProp(lx0, lx1, z0, z1, h, d, rng, (...a) => { const bx = add(...a); made.push(bx); return bx; });
+      crown(lx0, lx1, z0, z1, h, style, d, add, made);
     }
   }
 }
@@ -209,8 +211,10 @@ function buildBlock(b, d, rng, add) {
 // skyline has silhouettes, not prisms: deco towers step back in tiers to a needle, stone ones in
 // two tiers, glass and office towers get a penthouse and a mast. Its own generator per tower, so
 // nothing else in the city moves.
-function crown(x0, x1, z0, z1, h, style, d, add) {
+function crown(x0, x1, z0, z1, h, style, d, add, made = []) {
   if (h <= 110 || x1 - x0 < 14 || z1 - z0 < 14) return;
+  // A roof that already has a water tower keeps its plain top (a tier would swallow the tower).
+  if (made.some((b) => b.style === 9)) return;
   const rng = createRng(((Math.round(x0) * 92821) ^ (Math.round(z0) * 68917) ^ h) >>> 0);
   if (!rng.chance(0.75)) return;
   const cx = (x0 + x1) / 2, cz = (z0 + z1) / 2, w = x1 - x0, dd = z1 - z0;
