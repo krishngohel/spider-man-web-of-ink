@@ -380,7 +380,29 @@ vec3 facade(vec3 base, float style, float seed) {
     base = mix(base, base * 0.8, seam * 0.5);
     float edge = min(min(vWPos.x - vBox.x, vBox.y - vWPos.x), min(vWPos.z - vBox.z, vBox.w - vWPos.z));
     gInk = max(gInk, 1.0 - smoothstep(pw * 1.1, pw * 2.2, edge));
-  } else if (abs(vWNrm.y) < 0.5) base = facade(base, style, seed);
+  } else if (vWNrm.y > 0.5 && style > 13.5 && style < 14.5 && vBox.y - vBox.x > 1.0) {
+    // An AC unit's top: a round fan grille with an inked rim and a cross of blades.
+    float pw = max(length(fwidth(vWPos.xz)), 1e-4);
+    vec2 c = vec2((vBox.x + vBox.y) * 0.5, (vBox.z + vBox.w) * 0.5);
+    float rad = 0.42 * min(vBox.y - vBox.x, vBox.w - vBox.z);
+    vec2 q = vWPos.xz - c;
+    float d = length(q);
+    if (d < rad) {
+      base = base * 0.45;
+      float blade = step(abs(q.x), 0.05) + step(abs(q.y), 0.05);
+      base = mix(base, base * 2.0, min(blade, 1.0));
+    }
+    gInk = max(gInk, 1.0 - smoothstep(pw * 0.6, pw * 1.8, abs(d - rad)));
+  } else if (abs(vWNrm.y) < 0.5) {
+    base = facade(base, style, seed);
+    // A rooftop stair hut: a door on its street-facing side with a lamp over it, lit at night.
+    if (style > 14.5 && style < 15.5 && vWNrm.z > 0.5) {
+      float du2 = vWPos.x - (vBox.x + vBox.y) * 0.5, dv = vWPos.y - vBox.z;
+      float pw = max(length(fwidth(vWPos.xy)), 1e-4);
+      if (abs(du2) < 0.5 && dv < 2.0) { base = vec3(0.32, 0.22, 0.16); gInk = max(gInk, 1.0 - smoothstep(pw, pw * 2.2, min(0.5 - abs(du2), 2.0 - dv))); }
+      if (abs(du2) < 0.14 && dv > 2.15 && dv < 2.35) { base = vec3(1.0, 0.85, 0.5); gEmit = max(gEmit, uNight); gEmitCol = vec3(1.0, 0.8, 0.45); }
+    }
+  }
   diffuseColor.rgb = base;
 }`)
       .replace('#include <opaque_fragment>', `{
@@ -395,7 +417,7 @@ vec3 facade(vec3 base, float style, float seed) {
 #include <opaque_fragment>`)
       .replace('#include <dithering_fragment>', `#include <dithering_fragment>${SHADOW_ALPHA}`);
   };
-  mat.customProgramCacheKey = () => 'city-building-v14';
+  mat.customProgramCacheKey = () => 'city-building-v15';
   return mat;
 }
 
