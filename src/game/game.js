@@ -381,6 +381,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     // Peter out of the suit (a stroll) is a cast look, not a roster character.
     const def = !ROSTER.some((c) => c.id === id) && CAST[id] ? { ...CAST[id], kind: 'civilian' } : characterById(id);
     scene.remove(heroModel.root);
+    // The old body's own materials and gear geometry go (the skinned body geometry is shared).
+    heroModel.root.traverse((o) => { if (!o.isMesh) return; for (const mt of [].concat(o.material)) mt?.dispose?.(); if (!o.isSkinnedMesh) o.geometry?.dispose?.(); });
     heroModel = buildCharacter(assets, def);
     scene.add(heroModel.root);
     poser = createPoser(heroModel);

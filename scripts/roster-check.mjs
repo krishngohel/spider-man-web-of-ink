@@ -11,6 +11,9 @@ p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 await p.goto(url + '?at=swing&roster=1');
 await p.waitForFunction(() => window.__game?.state?.ready, null, { timeout: 120000 });
+// The mocap clips parse right after ready (a few hundred ms of main-thread work): let them land
+// before the first timed flight, or it gets fewer physics steps.
+await sleep(5000);
 await p.mouse.click(640, 360);
 await sleep(300);
 await p.evaluate(() => window.__game.setSetting('crimes', false));
@@ -26,9 +29,10 @@ const as = async (id, x, y, z, state = 'ground', yaw = 0, pitch = 0.1) => {
 
 // Vulture: holding forward and jump climbs on the wing harness.
 await as('vulture', 0, 60, -300, 'air', 0, 0.1);
-await p.keyboard.down('KeyW'); await p.keyboard.down('Space'); await sleep(1500);
+// He dips as the thrust takes over, then climbs: judged on the climb, over two seconds.
+await p.keyboard.down('KeyW'); await p.keyboard.down('Space'); await sleep(2000);
 let h = await H(); await p.keyboard.up('KeyW'); await p.keyboard.up('Space');
-check('Vulture flies up on the harness', h.p.y > 62 && h.state === 'air', `y ${h.p.y.toFixed(1)}, ${h.state}`);
+check('Vulture flies up on the harness', h.p.y > 62 && h.v.y > 2 && h.state === 'air', `y ${h.p.y.toFixed(1)}, vy ${h.v.y.toFixed(1)}, ${h.state}`);
 
 // Goblin: hover jets hold the glider up.
 await as('goblin', 0, 60, -300, 'air');
