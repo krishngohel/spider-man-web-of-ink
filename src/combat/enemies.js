@@ -369,7 +369,13 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
             const c = pickClip(an, A.heavy ? POOL.roar : POOL.taunt, null);
             if (c) { an.play(c, { once: true, fade: 0.2 }); e.tauntT = Math.min(2.6, an.duration(c)); }
           }
-          if (!(e.tauntT > 0)) an.play(moving > 3.6 ? 'Jog_Fwd_Loop' : moving > 0.4 ? 'Walk_Loop' : (e.fightIdle && e.fightIdle !== 'Idle_Loop' ? e.fightIdle : (e.fightIdle = pickClip(an, POOL.fightIdle, 'Idle_Loop'))), { timeScale: moving > 0.4 ? Math.max(0.7, moving / 3.2) : 1 });
+          if (!(e.tauntT > 0)) {
+            // Mocap walk and run once loaded, each cycle kept in step with how fast he moves.
+            const mo = an.has('Running');
+            const clip = moving > 3.6 ? (mo ? 'Running' : 'Jog_Fwd_Loop') : moving > 0.4 ? (mo ? 'Walking' : 'Walk_Loop') : (e.fightIdle && e.fightIdle !== 'Idle_Loop' ? e.fightIdle : (e.fightIdle = pickClip(an, POOL.fightIdle, 'Idle_Loop')));
+            const ts = moving <= 0.4 ? 1 : !mo ? Math.max(0.7, moving / 3.2) : moving > 3.6 ? Math.max(0.8, Math.min(1.5, moving / 4.6)) : Math.max(0.7, Math.min(1.6, moving / 1.35));
+            an.play(clip, { timeScale: ts });
+          }
           break;
         }
         case 'windup':
@@ -564,7 +570,7 @@ export function createEnemies({ scene, world, assets, onEvent = () => {} }) {
     while (df < -Math.PI) df += Math.PI * 2;
     e.facing += df * k;
     e.model.hurt.value = Math.max(0, e.model.hurt.value - dt * 9);
-    if (e.state === 'engage') e.model.animator.play('Jog_Fwd_Loop');
+    if (e.state === 'engage') e.model.animator.play(e.model.animator.has('Running') ? 'Running' : 'Jog_Fwd_Loop');
     e.model.root.position.set(p.x, p.y, p.z);
     e.model.root.rotation.set(0, e.facing, 0);
     e.model.animator.update(dt);

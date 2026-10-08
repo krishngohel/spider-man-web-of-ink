@@ -185,7 +185,9 @@ export function createPoser(heroModel) {
         // Boss puppets (story/bossActor.js): a slow, readable wind-up (40% of the swing spread over
         // the telegraph), then the strike snaps through the rest.
         else if (e.type === 'windup') {
-          const clip = e.kind === 'uppercut' ? 'Melee_Hook' : e.kind === 'punch' ? ['Punch_Jab', 'Punch_Cross', 'Melee_Hook'][e.n % 3] : e.kind === 'slamStart' ? 'Jump_Start' : 'Crouch_Idle_Loop';
+          // Mocap blows once loaded (a jab, a cross, a hook; a brute's haymaker for the uppercut).
+          const mo = animator.has('Hook_Punch');
+          const clip = e.kind === 'uppercut' ? (mo ? 'Brute_Punch' : 'Melee_Hook') : e.kind === 'punch' ? (mo ? ['Lead_Jab', 'Cross_Punch', 'Hook_Punch'] : ['Punch_Jab', 'Punch_Cross', 'Melee_Hook'])[e.n % 3] : e.kind === 'slamStart' ? 'Jump_Start' : 'Crouch_Idle_Loop';
           const act = animator.play(clip, { once: e.kind !== 'none', fade: 0.1, timeScale: 1 });
           act.timeScale = e.kind === 'none' ? 1 : (act.getClip().duration * 0.4) / Math.max(0.15, e.t);
           windup = { clip, act };
@@ -194,14 +196,15 @@ export function createPoser(heroModel) {
         else if (e.type === 'punch') {
           if (!e.air) {
             if (windup && windup.clip !== 'Crouch_Idle_Loop' && windup.clip !== 'Jump_Start') { windup.act.timeScale = (windup.act.getClip().duration * 0.6) / 0.2; once = windup.clip; onceT = 0.3; }
-            else { const clip = ['Punch_Jab', 'Punch_Cross', 'Melee_Hook'][e.n % 3]; once = clip; onceT = 0.32; animator.play(clip, { once: true, fade: 0.05, timeScale: 1.9 }); }
+            else { const clip = (animator.has('Hook_Punch') ? ['Lead_Jab', 'Cross_Punch', 'Hook_Punch'] : ['Punch_Jab', 'Punch_Cross', 'Melee_Hook'])[e.n % 3]; once = clip; onceT = 0.32; animator.play(clip, { once: true, fade: 0.05, timeScale: 1.9 }); }
           } else { kickT = 0.28; trick = e.n % 3 === 2 ? { def: TRICKS.spin, name: 'spin', t: 0 } : null; }
           windup = null;
         }
         else if (e.type === 'uppercut') {
-          if (windup && windup.clip === 'Melee_Hook') { windup.act.timeScale = (windup.act.getClip().duration * 0.6) / 0.18; }
-          else animator.play('Melee_Hook', { once: true, fade: 0.04, timeScale: 2.4 });
-          once = 'Melee_Hook'; onceT = 0.3; windup = null;
+          const up = windup?.clip ?? (animator.has('Brute_Punch') ? 'Brute_Punch' : 'Melee_Hook');
+          if (windup && (windup.clip === 'Melee_Hook' || windup.clip === 'Brute_Punch')) { windup.act.timeScale = (windup.act.getClip().duration * 0.6) / 0.18; }
+          else animator.play(up, { once: true, fade: 0.04, timeScale: 2.4 });
+          once = up; onceT = 0.3; windup = null;
           trick = { def: TRICKS.backflip, name: 'backflip', t: 0 };
         }
         else if (e.type === 'strikeArrive') combatAnim.arrive();
@@ -220,6 +223,14 @@ export function createPoser(heroModel) {
           } else trick = { def: TRICKS.backflip, name: 'backflip', t: 0.3 };
         }
         else if (e.type === 'airTrick') startTrick('trick', hero);
+        // A boss dazed (stunned open) sways on his feet; beaten, he goes down and stays down.
+        else if (e.type === 'dazed' && animator.has('Stunned')) { combatAnim.stop(); once = 'Stunned'; onceT = e.t ?? 2.4; animator.play('Stunned', { fade: 0.15 }); }
+        else if (e.type === 'defeat') {
+          combatAnim.stop(); trick = null;
+          const ko = animator.has('Knocked_Out') ? 'Knocked_Out' : 'Death01';
+          once = ko; onceT = 1e9;
+          if (animator.has(ko)) animator.play(ko, { once: true, fade: 0.1 });
+        }
         else if (e.type === 'slamStart') { slamT = 2; trick = null; }
 
         else if (e.type === 'land') {

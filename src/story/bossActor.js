@@ -112,7 +112,7 @@ export function createBossActor(ctx, opts) {
     return false;
   };
   a.hurtHero = (dmg, dir, unblockable = true) => combat.heroHit({ dmg: dmg * diffDmg() * a.dmgScale, dir, from: e, unblockable });
-  a.stun = (t = 2.4) => { if (e.state === 'out') return; attack = null; a.state('stun'); e.stunFor = t; a.poise = a.poiseMax; a.pose('heroHurt'); };
+  a.stun = (t = 2.4) => { if (e.state === 'out') return; attack = null; a.state('stun'); e.stunFor = t; a.poise = a.poiseMax; a.pose('heroHurt'); a.pose('dazed', { t }); };
   a.stunned = () => e.state === 'stun';
   a.setAway = (away) => { if (away) a.state('away'); else if (e.state === 'away') a.state('engage'); };
   a.hpFrac = () => Math.max(0, e.hp / e.maxHp);
@@ -148,7 +148,7 @@ export function createBossActor(ctx, opts) {
     applyDv(body, 'surface', dir.x * (args.push ?? 3) * k * 0.4, 0, dir.z * (args.push ?? 3) * k * 0.4);
     return { dealt: a.damage(dmg), blocked: false };
   };
-  a.defeat = () => { attack = null; a.state('out'); e.alive = true; a.pose('heroHurt'); };
+  a.defeat = () => { attack = null; a.state('out'); e.alive = true; a.pose('defeat'); };
   a.yank = (near) => (a.onYank ? a.onYank(near) : false);
 
   function attackStep(dt) {
