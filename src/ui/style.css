@@ -422,6 +422,11 @@ body.cb .bfill { background: linear-gradient(#5ab0ff, #1f4fb6); }
 .letterbox i:first-child { top: 0; }
 .letterbox i:last-child { bottom: 0; }
 .letterbox.on i { height: 11vh; }
+/* A cinematic's subtitle, lettered inside the bottom bar (src/ui/cinematic.js). */
+.cinesub { position: fixed; left: 8%; right: 8%; bottom: 2.6vh; text-align: center; font: 600 clamp(18px, 2.4vw, 27px) var(--body); letter-spacing: 0.5px;
+  color: var(--paper); text-shadow: 0 2px 0 #000, 0 0 12px rgba(0, 0, 0, 0.6); z-index: 31; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.cinesub.show { opacity: 1; }
+body.text-large .cinesub { font-size: 30px; } body.text-huge .cinesub { font-size: 36px; }
 .objective.pulse { animation: objpulse 0.9s ease-out; }
 @keyframes objpulse { 0% { transform: rotate(0.8deg) scale(1.12); box-shadow: 4px 4px 0 var(--ink), 0 0 0 6px #f7e36a; } 100% { transform: rotate(0.8deg) scale(1); box-shadow: 4px 4px 0 var(--ink), 0 0 0 0 transparent; } }
 .tip.quiet { opacity: 0; transition: opacity 0.2s; }

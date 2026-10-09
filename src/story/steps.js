@@ -13,6 +13,8 @@
 //   chase     a chase module (the boss module's chase phase)
 //   stroll    Peter out of the suit: walk a scene and talk to people (src/story/stroll.js)
 // Sites are named spots resolved against the city at run time (src/story/sites.js).
+// cine: '<id>' plays a cinematic (src/story/cinematics.js) as the step begins, before its pages,
+// card or stroll; reveal: '<line>' on a boss step is a reveal shot round him before the fight.
 
 import { ACT2 } from './acts/act2.js';
 import { ACT3 } from './acts/act3.js';
@@ -45,7 +47,7 @@ const shot = (at, cam, look, cast = [], extra = {}) => ({ at, cam, look, cast, .
 export const STEPS = spliceScenes([
   // ------------------------------------------------------------------ Prologue
   {
-    id: 'prologue.open', act: 'prologue', type: 'panels', env: { hour: 6.4, weather: 'clear' },
+    id: 'prologue.open', act: 'prologue', type: 'panels', cine: 'prologue', env: { hour: 6.4, weather: 'clear' },
     pages: [{
       layout: 'wide',
       panels: [
@@ -80,7 +82,7 @@ export const STEPS = spliceScenes([
     ],
   },
   { id: 'prologue.roof', act: 'prologue', type: 'reach', site: 'fiskRoof', radius: 30, minY: -6, text: 'Get to the roof of Fisk Tower.', tutorial: ['wall', 'zip'] },
-  { id: 'prologue.kingpin', act: 'prologue', type: 'boss', boss: 'kingpin', site: 'fiskRoof', text: 'Take down the Kingpin.', tutorial: ['yank', 'finisher'] },
+  { id: 'prologue.kingpin', act: 'prologue', type: 'boss', boss: 'kingpin', site: 'fiskRoof', text: 'Take down the Kingpin.', tutorial: ['yank', 'finisher'], reveal: 'Wilson Fisk does not run. He waits for you to come up.' },
   {
     id: 'prologue.end', act: 'prologue', type: 'panels', env: { hour: 8, weather: 'clear' },
     pages: [{
@@ -102,7 +104,7 @@ export const STEPS = spliceScenes([
   { id: 'prologue.free', act: 'prologue', type: 'title', card: 'free' },
 
   // ------------------------------------------------------------------ Act 1: The Bird and the Bull
-  { id: 'act1.title', act: 'act1', type: 'title', card: 'act' },
+  { id: 'act1.title', act: 'act1', type: 'title', card: 'act', cine: 'act1', env: { hour: 12.4, weather: 'clear' } },
   { id: 'act1.bankStart', act: 'act1', type: 'start', site: 'exchangeFront', text: 'Trouble on Exchange Street. Head to the Financial District.', tutorial: ['freeroam', 'requests'] },
   {
     id: 'act1.bankRadio', act: 'act1', type: 'radio',
@@ -115,7 +117,7 @@ export const STEPS = spliceScenes([
     id: 'act1.bank', act: 'act1', type: 'fight', site: 'exchangeFront', text: 'Stop the Maggia crew outside the bank.',
     waves: [{ faction: 'maggia', mix: ['brawler', 'brawler', 'gunner', 'whip'] }, { faction: 'maggia', mix: ['shield', 'brawler', 'rocket', 'gunner'] }],
   },
-  { id: 'act1.shocker', act: 'act1', type: 'boss', boss: 'shocker', site: 'exchangeFront', text: 'Shut down the Shocker.', tutorial: ['cover', 'backfire', 'yankProp'], env: { hour: 13, weather: 'overcast' } },
+  { id: 'act1.shocker', act: 'act1', type: 'boss', boss: 'shocker', site: 'exchangeFront', text: 'Shut down the Shocker.', tutorial: ['cover', 'backfire', 'yankProp'], env: { hour: 13, weather: 'overcast' }, reveal: 'Herman Schultz. Two gloves, one bank, no indoor voice.' },
   {
     id: 'act1.shockerEnd', act: 'act1', type: 'broadcast',
     lines: [
@@ -171,7 +173,7 @@ export const STEPS = spliceScenes([
       L('peter', 'Somebody? Let me guess. Big guy, white suit, recently arrested?'),
     ],
   },
-  { id: 'act1.rhino', act: 'act1', type: 'boss', boss: 'rhino', site: 'hellsStreet', text: 'Stop the Rhino. Make him charge into something hard.', tutorial: ['charge'] },
+  { id: 'act1.rhino', act: 'act1', type: 'boss', boss: 'rhino', site: 'hellsStreet', text: 'Stop the Rhino. Make him charge into something hard.', tutorial: ['charge'], reveal: 'Aleksei Sytsevich. Two tons, one speed, no brakes.' },
   {
     id: 'act1.end', act: 'act1', type: 'panels', env: { hour: 19.4, weather: 'clear' },
     pages: [{

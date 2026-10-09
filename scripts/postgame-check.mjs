@@ -16,7 +16,7 @@ const results = [];
 const check = (name, ok, detail = '') => { results.push(ok); console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}  ${detail}`); };
 
 // A finished save in slot 2.
-await p.goto(url);
+await p.goto(url + '?nocine=1');
 await p.waitForFunction(() => window.__game?.state?.ready, null, { timeout: 120000 });
 await ev(() => {
   const s = JSON.parse(JSON.stringify(window.__game.save()));

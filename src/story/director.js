@@ -16,6 +16,7 @@ import { CROWD } from './cast.js';
 import { LAYER_FX } from '../render/layers.js';
 import { COPY } from '../ui/copy.js';
 import { comicToon } from '../render/comicShade.js';
+import { buildCinematic } from './cinematics.js';
 
 // Runs the story (spec 10): the current step from the save, one handler per step type, the
 // objective card and waypoint, mission time and weather, retries on defeat (the step starts over;
@@ -66,6 +67,37 @@ export function createDirector(g) {
     return { d: Math.hypot(p.x - site.x, p.z - site.z), dy: p.y - site.y };
   }
 
+  // Cinematics (src/story/cinematics.js, played by src/ui/cinematic.js): the camera leaves for a
+  // few shots with play blocked (the hero stays put, as under a comic), then `then` runs. Off for
+  // the tests and tooling that ask (?nocine, __game.setCinematics), when `then` runs at once.
+  const cineOn = () => !!g.cinematic && (g.cineOn?.() ?? true);
+  function cineCtx(sub = null) {
+    return {
+      boxes: city.boxes, sub,
+      lm(id) {
+        const l = city.landmarks.find((q) => q.id === id), b = l.block;
+        const boxes = (city.landmarkBoxes[id] ?? []).filter((q) => q.kind === 'building');
+        return { x: b.cx, z: b.cz, minX: b.minX, maxX: b.maxX, minZ: b.minZ, maxZ: b.maxZ, top: boxes.length ? Math.max(...boxes.map((q) => q.max[1])) : 0 };
+      },
+      site: (n) => resolveSite(city, n),
+      hero: { x: hero.body.p.x, y: hero.body.p.y, z: hero.body.p.z },
+      boss: boss ? { x: boss.actor.body.p.x, y: boss.actor.body.p.y, z: boss.actor.body.p.z, yaw: boss.actor.facing } : null,
+    };
+  }
+  function playCine(id, sub, then) {
+    const shots = cineOn() ? buildCinematic(id, cineCtx(sub)) : null;
+    if (!shots) { then(); return false; }
+    const ep = epoch, was = cur?.phase ?? null;
+    setBlock(true);
+    if (cur) cur.phase = 'cine';
+    // Standing still while the camera is away (a run cycle frozen mid-stride reads as running on
+    // the spot); in the air he holds where he is, as under a comic.
+    if (hero.state === 'ground') { hero.body.v.x = 0; hero.body.v.z = 0; }
+    const ok = g.cinematic.play(shots, { onDone: () => { if (ep !== epoch) return; setBlock(false); if (cur && cur.phase === 'cine') cur.phase = was; then(); } });
+    if (!ok) { setBlock(false); if (cur) cur.phase = was; then(); }
+    return ok;
+  }
+
   // Begins whatever step the runner is on.
   function begin() {
     const step = runner.step;
@@ -97,21 +129,25 @@ export function createDirector(g) {
     g.setWaypoint(site && ['start', 'reach', 'fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type) ? { x: site.x, z: site.z, story: true } : null);
     const ep = epoch;
     const done = () => { if (ep === epoch) complete(step.id); };
-    switch (step.type) {
-      case 'radio': say(step.lines).then(done); break;
-      case 'broadcast': say(step.lines, { bugle: true }).then(done); break;
-      case 'title': ui.card(step.card, actById(step.act)).then(done); break;
-      case 'credits': setBlock(true); ui.credits(COPY.story.credits).then(() => { if (ep === epoch) { setBlock(false); complete(step.id); } }); break;
-      case 'panels': cur.phase = 'draw'; cur.drawIn = 2; setBlock(true); break;
-      case 'fight': case 'defend': case 'stealth': case 'boss': case 'chase': cur.phase = 'arrive'; break;
-      case 'stroll': {
-        // A new scene: a moment of black, Peter at the scene's spot, its people placed.
-        g.fade(true);
-        cur.phase = 'enter'; cur.enterT = 0;
-        break;
+    const run = () => {
+      switch (step.type) {
+        case 'radio': say(step.lines).then(done); break;
+        case 'broadcast': say(step.lines, { bugle: true }).then(done); break;
+        case 'title': ui.card(step.card, actById(step.act)).then(done); break;
+        case 'credits': setBlock(true); ui.credits(COPY.story.credits).then(() => { if (ep === epoch) { setBlock(false); complete(step.id); } }); break;
+        case 'panels': cur.phase = 'draw'; cur.drawIn = 2; setBlock(true); break;
+        case 'fight': case 'defend': case 'stealth': case 'boss': case 'chase': cur.phase = 'arrive'; break;
+        case 'stroll': {
+          // A new scene: a moment of black, Peter at the scene's spot, its people placed.
+          g.fade(true);
+          cur.phase = 'enter'; cur.enterT = 0;
+          break;
+        }
+        default: break;
       }
-      default: break;
-    }
+    };
+    // An opener (the act's district from the air) plays first; a stroll's plays once its scene is set.
+    if (step.cine && step.type !== 'stroll') playCine(step.cine, null, run); else run();
     g.persist();
   }
   // A stroll's scene is set up behind the fade, then it fades up.
@@ -127,6 +163,8 @@ export function createDirector(g) {
     g.quietTraffic?.({ x: site.x, z: site.z, r: 40 });
     cur.phase = 'stroll';
     g.fade(false);
+    // The scene is set: a slow look over it (the block party) before Peter walks in.
+    if (step.cine) playCine(step.cine, null, () => {});
   }
   function endStroll() {
     // Stopped or skipped while fading in: the screen comes back.
@@ -216,7 +254,6 @@ export function createDirector(g) {
     bctx = { ...bossCtx(), site: cur.site, step };
     boss = BOSSES[step.boss](bctx);
     cur.phase = 'fight';
-    showFightTips();
     if (step.type === 'boss') {
       // A retry starts at the phase the last attempt reached (spec 1.10): the boss begins with the
       // health that phase began at, and its own rules step it into that phase.
@@ -224,8 +261,19 @@ export function createDirector(g) {
         if (boss.setPhase) boss.setPhase(phaseMark.phase);
         else { const e = boss.actor.e; e.hp = Math.max(1, e.maxHp * (phaseMark.frac - 0.005)); }
         word(`PHASE ${phaseMark.phase}`, boss.actor.body.p, 'big');
-      } else { phaseMark = { step: step.id, phase: 1, frac: 1 }; g.bossIntro?.(); }
+      } else {
+        phaseMark = { step: step.id, phase: 1, frac: 1 };
+        // The first meeting: a reveal round him (the boss holds still, the bars stay up), then
+        // the fight's own push-in; a retry goes straight to the bars and the push.
+        if (step.reveal && retries === 0 && cineOn()) {
+          const ep = epoch;
+          const ok = playCine('reveal', step.reveal, () => { if (ep !== epoch || !cur || !boss) return; g.bossIntro?.({ bars: false }); showFightTips(); });
+          if (ok) { g.setWaypoint(null); ui.objective(step.text); return; }
+        }
+        g.bossIntro?.();
+      }
     }
+    showFightTips();
     g.setWaypoint(null);
     ui.objective(step.text);
   }
@@ -269,6 +317,9 @@ export function createDirector(g) {
     if (!cur) return;
     const { step, site } = cur;
     cur.t += dt;
+    // The camera is away on a cinematic: the step waits (a stroll's people keep acting, a boss
+    // being revealed stands where he was put, breathing).
+    if (cur.phase === 'cine') { cur.stroll?.update(dt); boss?.actor.step?.(dt); return; }
     props.step(dt, {
       hero, heroInvuln,
       hitHero: (p, v) => { const l = Math.hypot(v.x, v.z) || 1; combat.heroHit({ dmg: Math.round(p.K.dmg * 0.27), dir: { x: v.x / l, z: v.z / l }, from: null, unblockable: true }); word('WHAM!', hero.body.p, 'hit'); },
@@ -356,7 +407,11 @@ export function createDirector(g) {
         if (cur.phase === 'arrive') {
           const h = heroD(site);
           const ready = step.type === 'chase' ? h.d < 120 : h.d < 70 && h.dy > -12;
-          if (ready) startBoss();
+          if (!ready) break;
+          // A reveal waits for the hero to land (a couple of seconds at most): a swing frozen in
+          // the air while the camera circles the boss would look wrong.
+          if (step.reveal && retries === 0 && cineOn() && hero.state !== 'ground' && (cur.arriveT = (cur.arriveT ?? 0) + dt) < 2.5) break;
+          startBoss();
           break;
         }
         if (!boss) break;
@@ -446,7 +501,7 @@ export function createDirector(g) {
     get marker() { const s = runner.step; return s && s.type === 'start' && cur?.site ? { x: cur.site.x, z: cur.site.z } : null; },
     // From the save's step, or from a given step (chapter select, ?at=).
     start(at = null) { if (!started) { started = true; retries = 0; runner = createStoryRunner(STEPS, save.story); if (at) runner.jump(at); begin(); } },
-    stop() { endStroll(); g.setOccupation?.(null); if (gauntlet) { gauntlet = null; ui.timer(null); runner = createStoryRunner(STEPS, save.story); } epoch++; endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); markerOn = false; marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
+    stop() { endStroll(); g.setOccupation?.(null); if (gauntlet) { gauntlet = null; ui.timer(null); runner = createStoryRunner(STEPS, save.story); } epoch++; g.cinematic?.cancel(); endBoss(); dropGenerator(); combat.clear(); ui.clear(); g.setSuit?.(null); markerOn = false; marker.show(null); g.setWaypoint(null); setEnv(null); cur = null; started = false; setBlock(false); if (retryT >= 0) { retryT = -1; g.fade(false); } },
     update(dt) { if (gauntlet && retryT < 0) { gauntlet.t += dt; ui.timer('GAUNTLET', gauntlet.t); } update(dt); },
     get gauntlet() { return gauntlet ? { t: gauntlet.t, step: runner.step?.id ?? null, index: runner.index } : null; },
     startGauntlet(from = 0) {
@@ -505,12 +560,21 @@ export function createDirector(g) {
     skip() {
       const s = runner.step;
       if (!s) return;
+      if (g.cinematic?.active) { g.cinematic.skip(); return; }
       if (blocking) { ui.skipComic(); return; }
       if (s.type === 'radio' || s.type === 'broadcast') { ui.skipRadio(); return; }
       endBoss(); combat.clear();
       complete(s.id);
     },
-    jump(id) { epoch++; endStroll(); if (retryT >= 0) { retryT = -1; g.fade(false); } endBoss(); dropGenerator(); combat.clear(); ui.clear(); setBlock(false); if (runner.jump(id)) { started = true; retries = 0; begin(); return true; } return false; },
+    jump(id) { epoch++; g.cinematic?.cancel(); endStroll(); if (retryT >= 0) { retryT = -1; g.fade(false); } endBoss(); dropGenerator(); combat.clear(); ui.clear(); setBlock(false); if (runner.jump(id)) { started = true; retries = 0; begin(); return true; } return false; },
+    // Comic pages outside the story (the reward pages at 100% and all gold): drawn in engine at
+    // their sites and read like any other, with play blocked meanwhile. Resolves when read.
+    showPages(stepLike) {
+      if (blocking || g.cinematic?.active) return Promise.resolve(false);
+      setBlock(true);
+      const pages = drawPanels(stepLike);
+      return ui.comic(pages).then(() => { setBlock(false); return true; });
+    },
     bossPhase(n) { boss?.setPhase(n); },
     get boss() { return boss; },
     props, fx,

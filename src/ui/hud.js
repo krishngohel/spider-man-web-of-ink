@@ -166,6 +166,15 @@ export function createHud(root, getSettings) {
         letterT = setTimeout(() => document.body.classList.remove('cine-out'), 400);
       }, secs * 1000);
     },
+    // The bars held up for as long as a cinematic runs (src/ui/cinematic.js), then down.
+    letterboxHold(on) {
+      clearTimeout(letterT); letterT = null;
+      if (on) { letter.classList.add('on'); document.body.classList.add('cine'); document.body.classList.remove('cine-out'); return; }
+      if (!letter.classList.contains('on')) return;
+      letter.classList.remove('on');
+      document.body.classList.remove('cine'); document.body.classList.add('cine-out');
+      letterT = setTimeout(() => document.body.classList.remove('cine-out'), 400);
+    },
     get letterboxed() { return letter.classList.contains('on'); },
     // A comic caption box at the top left (a district name as you enter it).
     caption(text, secs = 2.6) {

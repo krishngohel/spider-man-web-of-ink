@@ -22,7 +22,7 @@ export const FINALE = {
       }],
     },
     {
-      id: 'act4.partyWalk', act: 'act4', type: 'stroll', decor: [{ kind: 'lights', from: [-13, 3.4, -2.8], to: [13, 3.4, -2.8] }, { kind: 'lights', from: [-13, 3.7, 1.2], to: [13, 3.7, 1.2] }, { kind: 'lights', from: [-13, 3.3, 4.8], to: [13, 3.3, 4.8] }],  char: 'parker', site: 'shelter', env: { hour: 19.2, weather: 'clear' },
+      id: 'act4.partyWalk', act: 'act4', type: 'stroll', cine: 'party', decor: [{ kind: 'lights', from: [-13, 3.4, -2.8], to: [13, 3.4, -2.8] }, { kind: 'lights', from: [-13, 3.7, 1.2], to: [13, 3.7, 1.2] }, { kind: 'lights', from: [-13, 3.3, 4.8], to: [13, 3.3, 4.8] }],  char: 'parker', site: 'shelter', env: { hour: 19.2, weather: 'clear' },
       text: 'The block party. Make the rounds. Aunt May is holding a plate for you.',
       spawn: [-12, 0, 4, 90],
       npcs: [

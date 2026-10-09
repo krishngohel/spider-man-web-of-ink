@@ -12,7 +12,7 @@ const page = await b.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 page.on('pageerror', (e) => errors.push(e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-await page.goto(url + '?at=swing');
+await page.goto(url + '?at=swing&nocine=1'); // cinematics skipped, as the comics are
 await page.waitForFunction(() => window.__game?.state?.ready, null, { timeout: 120000 });
 await page.mouse.click(640, 360);
 await sleep(300);

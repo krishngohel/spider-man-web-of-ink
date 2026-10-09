@@ -7,7 +7,7 @@ const shot = (at, cam, look, cast = [], extra = {}) => ({ at, cam, look, cast, .
 const route = (...pts) => pts.map(([x, z]) => ({ x, z }));
 
 export const ACT3 = [
-  { id: 'act3.title', act: 'act3', type: 'title', card: 'act' },
+  { id: 'act3.title', act: 'act3', type: 'title', card: 'act', cine: 'act3', env: { hour: 18.6, weather: 'clear' } },
   {
     id: 'act3.kravenCall', act: 'act3', type: 'broadcast',
     lines: [

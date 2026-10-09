@@ -12,7 +12,12 @@ test('?at=act1.shocker opens the Shocker fight: the boss is up and the fight is 
   const errors = collectErrors(page);
   await page.goto('/?at=act1.shocker');
   await page.waitForFunction(ready, null, { timeout: 90000 });
-  await page.waitForFunction(() => window.__game.story().phase === 'fight', null, { timeout: 15000 });
+  // His reveal plays first (letterboxed, a line under it), then hands over to the fight.
+  await page.waitForFunction(() => window.__game.cinematic.active, null, { timeout: 15000 });
+  expect(await page.evaluate(() => window.__game.hud().letterboxed)).toBe(true);
+  expect(await page.evaluate(() => window.__game.cinematic.shots[0].sub)).toContain('Schultz');
+  await page.waitForFunction(() => window.__game.story().phase === 'fight' && !window.__game.cinematic.active, null, { timeout: 25000 });
+  expect(await page.evaluate(() => window.__game.hud().letterboxed)).toBe(false);
   const st = await page.evaluate(() => window.__game.story());
   expect(st.step).toBe('act1.shocker');
   expect(st.type).toBe('boss');
@@ -22,6 +27,37 @@ test('?at=act1.shocker opens the Shocker fight: the boss is up and the fight is 
   expect(boss.hp).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.__game.mode)).toBe('play');
   expect(errors).toEqual([]);
+});
+
+test('an act opener plays over the city with the hero held still, then hands back to the act card', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/?at=act1.title');
+  await page.waitForFunction(ready, null, { timeout: 90000 });
+  await page.waitForFunction(() => window.__game.cinematic.active, null, { timeout: 15000 });
+  const start = await page.evaluate(() => ({ hero: window.__game.hero().p, mode: window.__game.mode, bars: window.__game.hud().letterboxed, shots: window.__game.cinematic.shots.length, card: document.querySelector('.actcard:not(.hidden)') !== null }));
+  expect(start.mode).toBe('comic');
+  expect(start.bars).toBe(true);
+  expect(start.shots).toBe(3);
+  expect(start.card).toBe(false);
+  await page.waitForTimeout(2500);
+  const sub = await page.evaluate(() => document.querySelector('.cinesub.show')?.textContent ?? '');
+  expect(sub.length).toBeGreaterThan(5);
+  // Space skips to the hand-back, after which the act card shows and play is back.
+  await page.keyboard.press('Space');
+  await page.waitForFunction(() => !window.__game.cinematic.active, null, { timeout: 5000 });
+  const end = await page.evaluate(() => ({ hero: window.__game.hero().p, mode: window.__game.mode, bars: window.__game.hud().letterboxed, card: document.querySelector('.actcard:not(.hidden)') !== null }));
+  expect(end.mode).toBe('play');
+  expect(end.bars).toBe(false);
+  expect(end.card).toBe(true);
+  expect(Math.hypot(end.hero.x - start.hero.x, end.hero.z - start.hero.z)).toBeLessThan(0.5);
+  expect(errors).toEqual([]);
+});
+
+test('?nocine=1 plays no cinematic: the Shocker fight starts straight away', async ({ page }) => {
+  await page.goto('/?at=act1.shocker&nocine=1');
+  await page.waitForFunction(ready, null, { timeout: 90000 });
+  await page.waitForFunction(() => window.__game.story().phase === 'fight', null, { timeout: 15000 });
+  expect(await page.evaluate(() => window.__game.cinematic.active)).toBe(false);
 });
 
 test('a stealth step starts with its guards unaware, and no alarm', async ({ page }) => {
@@ -52,7 +88,10 @@ test('a story slot saves, and after a reload Continue resumes the same step at t
   await page.waitForFunction(ready, null, { timeout: 90000 });
   await page.locator('.title .mbtn', { hasText: 'STORY' }).click();
   await page.locator('.slot').nth(1).locator('.mbtn', { hasText: 'NEW GAME' }).click();
-  await page.waitForFunction(() => window.__game.mode === 'comic', null, { timeout: 15000 });
+  // The opening cinematic, then the first comic: Esc skips each in turn.
+  await page.waitForFunction(() => window.__game.cinematic.active, null, { timeout: 15000 });
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__game.mode === 'comic' && !window.__game.cinematic.active && document.querySelector('.comic:not(.hidden)'), null, { timeout: 15000 });
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.__game.mode === 'play' && window.__game.story().step === 'prologue.swing', null, { timeout: 10000 });
   // Stand somewhere new on the ground and wait for the autosave (every 20 s of play).
