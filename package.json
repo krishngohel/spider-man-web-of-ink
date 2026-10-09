@@ -16,7 +16,9 @@
   "devDependencies": {
     "@gltf-transform/core": "4.5",
     "@gltf-transform/extensions": "4.5",
+    "@gltf-transform/functions": "4.5",
     "@playwright/test": "1.63",
+    "meshoptimizer": "^1.3.0",
     "playwright-core": "1.63",
     "sharp": "^0.35.4",
     "vite": "^8.3.1",

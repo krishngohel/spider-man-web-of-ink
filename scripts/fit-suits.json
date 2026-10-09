@@ -1,0 +1,85 @@
+{
+ "amazing": {
+  "src": "amazing.glb",
+  "rot": [
+   0,
+   90,
+   0
+  ]
+ },
+ "scarlet": {
+  "src": "scarlet.glb"
+ },
+ "blackSuit": {
+  "src": "symbiote.glb",
+  "skin": false,
+  "tris": 30000,
+  "simplifyError": 0.05,
+  "rot": [
+   -90,
+   0,
+   0
+  ]
+ },
+ "noir": {
+  "src": "noir.glb",
+  "loose": 1.5
+ },
+ "2099": {
+  "src": "s2099.glb",
+  "rot": [
+   90,
+   0,
+   0
+  ],
+  "drop": "^Object_\\d+_body_0 "
+ },
+ "stealth": {
+  "src": "bigtime.glb"
+ },
+ "electric": {
+  "src": "volt.glb"
+ },
+ "punk": {
+  "src": "punk.glb"
+ },
+ "homemade": {
+  "src": "homemade.glb",
+  "rot": [
+   90,
+   0,
+   0
+  ],
+  "loose": 1.2,
+  "useRig": false
+ },
+ "armor": {
+  "src": "armour.glb"
+ },
+ "ghost": {
+  "src": "ghost.glb",
+  "useRig": false
+ },
+ "shadow": {
+  "src": "shadow.glb",
+  "rot": [
+   -90,
+   0,
+   0
+  ],
+  "useRig": false
+ },
+ "miles": {
+  "src": "miles.glb",
+  "drop": "Plane|Object_85",
+  "rot": [
+   90,
+   0,
+   0
+  ],
+  "dropFloor": {
+   "y": 0.12,
+   "x": 0.27
+  }
+ }
+}

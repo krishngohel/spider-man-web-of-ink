@@ -15,7 +15,7 @@ const shots = [];
 for (const id of ids) {
   for (const z of [3.3, -3.3]) {
     await p.evaluate(([i, zz]) => { const g = window.__game; const s = g.save(); s.progress.suit = i; g.progress().apply(); g.setCamOverride({ at: [0.4, 0.3, zz], fov: 34, lookY: 0.05 }); }, [id, z]);
-    await sleep(350);
+    await sleep(z > 0 ? 1500 : 350);
     shots.push(await p.screenshot());
   }
 }

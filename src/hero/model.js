@@ -451,15 +451,73 @@ const SUIT_RECOLOR_HOOKS = (uniforms) => ({
   }`,
 });
 
-// A suit with a model (the fitted film suit) shows that mesh and hides the painted body.
-function showSuitModel(hero, on) {
-  const use = on && hero.suitMeshes?.length > 0;
-  for (const o of hero.suitMeshes ?? []) o.visible = use;
-  for (const o of hero.bodyMeshes ?? []) o.visible = !use;
+// Fitted suit models (scripts/fit-any-suit.mjs): one small GLB per suit with the hero's joint names,
+// loaded the first time the suit is worn and bound to that hero's own bones. The painted body shows
+// until it arrives. 'tasm' is the classic film suit that lives inside hero_m.glb.
+const fittedFiles = new Map();
+let fittedBase = './assets/';
+export function setSuitModelBase(base) { fittedBase = base; }
+export const isSuitFile = (m) => !!m && m !== 'tasm';
+export function loadSuitModel(id) {
+  if (!isSuitFile(id)) return Promise.resolve(null);
+  if (!fittedFiles.has(id)) {
+    fittedFiles.set(id, new GLTFLoader().loadAsync(`${fittedBase}suits/${id}.glb`).then((g) => g.scene).catch((e) => {
+      console.warn('suit model failed to load', id, e?.message ?? e);
+      fittedFiles.delete(id);
+      return null;
+    }));
+  }
+  return fittedFiles.get(id);
+}
+function attachFitted(hero, scene) {
+  const meshes = [];
+  scene.traverse((o) => {
+    if (!o.isSkinnedMesh) return;
+    const bones = o.skeleton.bones.map((b) => hero.model.getObjectByName(b.name));
+    if (bones.some((b) => !b)) return;
+    const src = o.material;
+    const mat = comicToon({
+      map: src.map ?? null, color: src.color?.clone() ?? new THREE.Color(0xffffff),
+      emissive: src.emissive?.clone() ?? new THREE.Color(0), emissiveMap: src.emissiveMap ?? null,
+      side: src.side ?? THREE.FrontSide,
+    });
+    const m = new THREE.SkinnedMesh(o.geometry, mat);
+    m.name = 'FittedSuit';
+    // The file's geometry is in the hero file's scene space, so the bind matrix is the identity.
+    m.bind(new THREE.Skeleton(bones, o.skeleton.boneInverses), new THREE.Matrix4());
+    m.castShadow = true;
+    m.frustumCulled = false;
+    hero.model.add(m);
+    hero.hulls?.push(addHullOutline(m));
+    meshes.push(m);
+  });
+  return meshes;
+}
+// Shows one of: the painted body, the film suit ('tasm'), or a fitted suit by id.
+function showSuitModel(hero, which) {
+  const tasm = which === 'tasm' && hero.suitMeshes?.length > 0;
+  const fitted = hero.fitted?.get(which) ?? null;
+  for (const o of hero.suitMeshes ?? []) o.visible = tasm;
+  for (const list of hero.fitted?.values() ?? []) for (const o of list) o.visible = list === fitted;
+  for (const o of hero.bodyMeshes ?? []) o.visible = !tasm && !fitted;
+}
+function wearModel(hero, suit) {
+  const m = suit.model ?? null; // fitted suits bind by joint name: the female body has the same joints
+  hero.wantModel = m;
+  if (!isSuitFile(m)) { showSuitModel(hero, m ? 'tasm' : 'paint'); return; }
+  hero.fitted ??= new Map();
+  if (hero.fitted.has(m)) { showSuitModel(hero, m); return; }
+  showSuitModel(hero, 'paint');
+  loadSuitModel(m).then((scene) => {
+    if (!scene || hero.fitted.has(m)) return;
+    hero.fitted.set(m, attachFitted(hero, scene));
+    const w = hero.wantModel;
+    showSuitModel(hero, isSuitFile(w) ? (hero.fitted.has(w) ? w : 'paint') : w ? 'tasm' : 'paint');
+  });
 }
 
 export function setSuit(hero, suit) {
-  showSuitModel(hero, !!suit.model);
+  wearModel(hero, suit);
   if (hero.recolorU) applyRecolor(hero.recolorU, suit);
   const u = hero.suitMat.userData.suit;
   u.uRed.value.set(suit.red); u.uBlue.value.set(suit.blue); u.uBlack.value.set(suit.black); u.uLens.value.set(suit.lens);
@@ -540,9 +598,8 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
   // The drawn outline (spec G6), added after the traversal so the hulls are not visited.
   const hullMeshes = hulls.map((o) => addHullOutline(o));
   const bone = (n) => model.getObjectByName(n);
-  showSuitModel({ suitMeshes, bodyMeshes }, !!suit.model);
-  return {
-    root, orient, model, suitMat, hulls: hullMeshes, suitMeshes, bodyMeshes, recolorU,
+  const built = {
+    root, orient, model, suitMat, hulls: hullMeshes, suitMeshes, bodyMeshes, recolorU, female,
     animator: createAnimator(model, assets.clips),
     bones: {
       upperarmR: bone('upperarm_r'), lowerarmR: bone('lowerarm_r'), handR: bone('hand_r'),
@@ -552,4 +609,6 @@ export function buildHeroModel(assets, suit = SUIT_CLASSIC, { female = false, sc
       spine: bone('spine_03'), head: bone('Head'), pelvis: bone('pelvis'),
     },
   };
+  wearModel(built, suit);
+  return built;
 }

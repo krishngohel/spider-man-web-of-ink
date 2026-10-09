@@ -41,7 +41,7 @@ import { buildLanterns } from '../world/lanterns.js';
 import { createEmoteWheel } from '../ui/emoteWheel.js';
 import { emoteById } from '../hero/emotes.js';
 import { createHero, emptyIntent } from '../hero/controller.js';
-import { loadHeroAssets, buildHeroModel, loadCombatClips } from '../hero/model.js';
+import { loadHeroAssets, buildHeroModel, loadCombatClips, loadSuitModel } from '../hero/model.js';
 import { TUNE } from '../combat/tuning.js';
 import { shake as stopShake } from '../combat/hitstop.js';
 import { createPoser } from '../hero/pose.js';
@@ -100,6 +100,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // The hero assets start downloading now; the city's shaders warm up while they arrive.
   const assetsP = loadHeroAssets('./assets/', (f) => onProgress(0.15 + f * 0.7));
   assetsP.catch(() => {}); // handled where it is awaited below
+  // The worn suit's model (a fitted suit file) downloads beside them, so the title shows it at once.
+  const wornSuitP = (() => {
+    try { const id = loadSlot(window.localStorage, lastSlot(window.localStorage) ?? 1)?.progress?.suit; return loadSuitModel(SUITS.find((q) => q.id === id)?.model); } catch { return Promise.resolve(null); }
+  })();
   if (params.has('aux')) ink.uniforms.uDebugAux.value = 1; // shows the aux target (normals, ids)
   if (params.has('inkrepeat')) ink.debug.repeat = Math.max(1, Math.min(16, Number(params.get('inkrepeat')) || 1));
   ink.setComic(quality.comic);
@@ -300,6 +304,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // The save (slot 1 until the story's slot screen arrives): found stations, districts, position.
   const saveSlot = lastSlot(window.localStorage) ?? 1;
   const save = loadSlot(window.localStorage, saveSlot) ?? newSave(saveSlot);
+  await wornSuitP;
   // Dev: ?suits unlocks every suit in whichever save is loaded (a story slot or free swing loads its
   // own over this one), story suits included, to look them all over.
   const unlockSuitsIfAsked = () => { if (params.has('suits') && save.progress) save.progress.suits = SUITS.map((q) => q.id); };

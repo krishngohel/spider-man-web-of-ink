@@ -112,10 +112,15 @@ export function skillEffects(skills) {
 // story: a story step that must be done first (the Black Suit comes from the symbiote, not a shop).
 // pattern: the layout within style 0 (0 Amazing 2, 1 Amazing 2012, 2 hoodie, 3 homemade, 4 wrestler, 5 punk).
 const PATTERN = { amazing: 1, scarlet: 2, homemade: 3, wrestler: 4, punk: 5 };
-// model: a fitted film suit mesh worn instead of the painted body (hero_m.glb SuitModel).
-const MODEL = { classic: 'tasm' };
-// Colourways of the film suit (its texture recoloured): until a suit has a model of its own.
-const RECOLOR = new Set(['amazing', 'crimson', 'arctic', 'gold', 'rocket', 'sunset', 'negative', 'future', 'symbiote', 'last']);
+// model: a suit mesh worn instead of the painted body: 'tasm' is the film suit inside hero_m.glb,
+// any other id a fitted model at public/assets/suits/<id>.glb (scripts/fit-any-suit.mjs, credited
+// in copy.js). Iron Spider, Wrestler and Last Stand keep their painted designs.
+const MODEL = {
+  classic: 'tasm', amazing: 'amazing', scarlet: 'scarlet', blackSuit: 'blackSuit', noir: 'noir', 2099: '2099',
+  stealth: 'stealth', electric: 'electric', punk: 'punk', homemade: 'homemade', armor: 'armor', ghost: 'ghost', shadow: 'shadow',
+};
+// Colourways of the film suit (its texture recoloured).
+const RECOLOR = new Set(['crimson', 'arctic', 'gold', 'rocket', 'sunset', 'negative', 'future', 'symbiote', 'last']);
 const SU = (id, name, style, red, blue, black, lens, level, cost, power = null, story = null) => ({ id, name, style, pattern: PATTERN[id] ?? 0, model: MODEL[id] ?? (RECOLOR.has(id) ? 'tasm' : null), recolor: RECOLOR.has(id), red, blue, black, lens, level, cost, power, story });
 export const SUITS = [
   SU('classic', 'Classic', 0, 0xbb121e, 0x192e7e, 0x0e0d16, 0xf4f6fb, 1, {}, 'webBlossom'),
