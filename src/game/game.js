@@ -105,7 +105,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   assetsP.catch(() => {}); // handled where it is awaited below
   // The worn suit's model (a fitted suit file) downloads beside them, so the title shows it at once.
   const wornSuitP = (() => {
-    try { const id = loadSlot(window.localStorage, lastSlot(window.localStorage) ?? 1)?.progress?.suit; return loadSuitModel(SUITS.find((q) => q.id === id)?.model); } catch { return Promise.resolve(null); }
+    try { const id = params.get('suit') ?? loadSlot(window.localStorage, lastSlot(window.localStorage) ?? 1)?.progress?.suit; return loadSuitModel(SUITS.find((q) => q.id === id)?.model); } catch { return Promise.resolve(null); }
   })();
   if (params.has('aux')) ink.uniforms.uDebugAux.value = 1; // shows the aux target (normals, ids)
   if (params.has('inkrepeat')) ink.debug.repeat = Math.max(1, Math.min(16, Number(params.get('inkrepeat')) || 1));
@@ -312,7 +312,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   await wornSuitP;
   // Dev: ?suits unlocks every suit in whichever save is loaded (a story slot or free swing loads its
   // own over this one), story suits included, to look them all over.
-  const unlockSuitsIfAsked = () => { if (params.has('suits') && save.progress) save.progress.suits = SUITS.map((q) => q.id); };
+  // ?suit=<id> also wears that suit (perf and look checks of one suit).
+  const unlockSuitsIfAsked = () => {
+    if (params.has('suits') && save.progress) save.progress.suits = SUITS.map((q) => q.id);
+    const want = params.get('suit');
+    if (want && save.progress && SUITS.some((q) => q.id === want)) { if (!save.progress.suits.includes(want)) save.progress.suits.push(want); save.progress.suit = want; }
+  };
   unlockSuitsIfAsked();
   let saveT = 0;
   const persist = () => {
