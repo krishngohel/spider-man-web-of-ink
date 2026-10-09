@@ -829,7 +829,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         }
         const ee = e.e;
         const tier = ee ? impactJudge.tier({ type: 'heroHit', heavy: e.heavy, stop: e.stop, ko: e.ko, counter: e.counter, boss: !!ee.boss, bossStun: ee.state === 'stun', target: ee }) : 0;
-        if (tier) { const q = ee.body.p; if (fireImpact(tier, q) === 2 && e.ko) actionShot(q); }
+        // The action shot follows camera shake, not the Impact frames setting.
+        if (tier) { const q = ee.body.p; fireImpact(tier, q); if (tier === 2 && e.ko) actionShot(q); }
         break;
       }
       case 'heroHurt': sfx.event({ type: 'hurt' }); combatHud.hurt(); combat.enemies.cheer?.(); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.5); break;
