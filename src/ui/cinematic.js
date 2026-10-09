@@ -10,6 +10,9 @@ import { sampleSequence, totalDuration } from './cinematicShots.js';
 // never moves while the camera is away.
 
 const RETURN_DUR = 0.7; // seconds: the ease back to the game camera once the shots (or a skip) end
+// Further than this from the game camera, the hand-back is a cut: a straight ease that far would
+// fly through the buildings in between.
+const CUT_DIST = 30;
 
 export function createCinematic({ camera, hud, root }) {
   const sub = el('div', { class: 'cinesub' });
@@ -112,6 +115,7 @@ export function createCinematic({ camera, hud, root }) {
         snapPos.copy(camera.position);
         snapQuat.copy(camera.quaternion);
         const toFov = camera.fov;
+        if (returnT === 0 && fromPos.distanceTo(snapPos) > CUT_DIST) { finish(); return; }
         returnT += dt;
         const k = Math.min(1, returnT / RETURN_DUR);
         const e = k * k * (3 - 2 * k);

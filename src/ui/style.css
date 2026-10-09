@@ -487,6 +487,6 @@ body.pad-nav .ui-layer button:focus, body.pad-nav .ui-layer input:focus, body.pa
 /* Tutorial tips off. */
 body.no-tips .tip, body.no-tips .storytips { display: none; }
 /* Cinema bars up: the HUD steps out of the shot and comes back after. */
-body.cine .ui-layer > :is(.hud, .notice, .objective, .storytips, .stimer, .stealthbox, .holdprompt, .tdprompt), body.cine .cb > :is(.cb-panel, .cb-combo, .cb-gadget, .cb-prompts, .cb-target) { opacity: 0 !important; transition: opacity 0.3s; }
+body.cine .ui-layer > :is(.hud, .notice, .objective, .storytips, .stimer, .stealthbox, .holdprompt, .tdprompt), body.cine .cb > :is(.cb-panel, .cb-combo, .cb-gadget, .cb-prompts, .cb-target) { opacity: 0 !important; transition: opacity 0.12s; }
 body.cine-out .ui-layer > :is(.hud, .objective, .storytips, .stimer), body.cine-out .cb > :is(.cb-panel, .cb-gadget) { animation: hudback 0.35s ease-out; }
 @keyframes hudback { from { opacity: 0; } to { opacity: 1; } }
