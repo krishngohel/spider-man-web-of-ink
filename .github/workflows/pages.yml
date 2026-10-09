@@ -1,10 +1,9 @@
 name: Deploy to GitHub Pages
 
-# Runs by hand only (Actions > Deploy to GitHub Pages > Run workflow) until the site goes live:
-# the repository is private for now. To deploy on every push, add back:
-#   push:
-#     branches: [main]
+# Every push to main tests, builds and deploys the site (krishngohel.github.io/spider-man-web-of-ink).
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
