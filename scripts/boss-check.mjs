@@ -243,7 +243,7 @@ await run('act2.electro', 'pilot beats Electro on the power station', async ({ s
   }
   await key('KeyD', false);
   await brawl(bossE, h, st);
-}, 240000);
+}, 300000); // the pilot often drops to the street between relays and climbs back: a long fight
 
 // Scorpion: catch him on the bridge, then fight against the poison clock.
 await run('act2.scorpionChase', 'pilot catches the Scorpion on the bridge', async ({ h, bossE }) => {
