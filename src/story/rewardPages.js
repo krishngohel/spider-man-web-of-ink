@@ -19,7 +19,7 @@ export const REWARD_PAGES = {
     pages: [{
       layout: 'duo',
       panels: [
-        { shot: shot('neonPlaza', [-30, 26, 70], [0, 8, -40], [{ who: 'hero', p: [0, 0, 0], yaw: 'cam' }], { fov: 48 }), caption: 'Twelve Taskmaster challenges. Twelve gold medals. The stopwatch goes back in the drawer.' },
+        { shot: shot('neonPlaza', [-7, 3.2, 12], [0, 1.6, -8], [{ who: 'hero', p: [0, 0, 0], yaw: 'cam' }], { fov: 48 }), caption: 'Twelve Taskmaster challenges. Twelve gold medals. The stopwatch goes back in the drawer.' },
         { shot: shot('neonPlaza', [-1.6, 1.85, 2.6], [0, 1.5, 0], [{ who: 'hero', p: [0, 0, 0], yaw: 'cam' }], { fov: 36 }), balloons: [{ who: 'peter', text: 'Tell Taskmaster I was not even trying. Actually, do not tell him that. I was trying so hard.', x: 6, y: 8 }] },
       ],
     }],
