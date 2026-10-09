@@ -4,6 +4,15 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Spider-Man: Web of Ink (unofficial fan game)</title>
+  <meta name="description" content="An unofficial comic-book Spider-Man fan game that runs in the browser." />
+  <!-- A black web and spider on a red disc, drawn as SVG right here (no image file). -->
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Ccircle cx='32' cy='32' r='29' fill='%23d4252f' stroke='%2310101a' stroke-width='4'/%3E%3Cg fill='none' stroke='%2310101a' stroke-width='2.4' stroke-linecap='round'%3E%3Cpath d='M32 4V60M4 32H60M12.2 12.2L51.8 51.8M51.8 12.2L12.2 51.8'/%3E%3Cpath d='M32 22L39 25L42 32L39 39L32 42L25 39L22 32L25 25Z'/%3E%3Cpath d='M32 12L46 18L52 32L46 46L32 52L18 46L12 32L18 18Z'/%3E%3C/g%3E%3Cellipse cx='32' cy='33' rx='5' ry='7' fill='%2310101a'/%3E%3Ccircle cx='32' cy='24' r='3.4' fill='%2310101a'/%3E%3C/svg%3E" />
+  <!-- Start the model downloads while the game script is still loading. -->
+  <link rel="preload" href="./assets/hero_m.glb" as="fetch" crossorigin />
+  <link rel="preload" href="./assets/anims1.glb" as="fetch" crossorigin />
+  <link rel="preload" href="./assets/anims2.glb" as="fetch" crossorigin />
+  <link rel="preload" href="./assets/hero_f.glb" as="fetch" crossorigin />
+  <link rel="preload" href="./assets/hair_long.glb" as="fetch" crossorigin />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Bangers&family=Barlow+Condensed:wght@500;700&display=swap" rel="stylesheet" />
@@ -15,10 +24,28 @@
     #loading h1 { font-size: clamp(36px, 7vw, 88px); margin: 0; letter-spacing: 2px; color: #d4252f; text-shadow: 4px 4px 0 #10101a; }
     #loading .bar { width: min(420px, 70vw); height: 14px; border: 3px solid #10101a; margin: 24px auto 0; background: #fff; }
     #loading .bar i { display: block; height: 100%; width: 8%; background: #1d4fb8; }
-    #loading .msg { display: none; font-family: 'Barlow Condensed', sans-serif; font-size: 22px; margin-top: 18px; max-width: 520px; padding: 0 16px; }
-    #loading.error .msg.err, #loading.mobile .msg.mob { display: block; }
-    #loading.error .bar, #loading.mobile .bar { display: none; }
+    #loading .msg { display: none; font-family: 'Barlow Condensed', sans-serif; font-size: 22px; margin: 18px auto 0; max-width: 520px; padding: 0 16px; }
+    #loading .why { display: block; font-family: ui-monospace, Consolas, monospace; font-size: 14px; margin-top: 10px; color: #5a5060; word-break: break-word; }
+    #loading .reload { font: 22px 'Bangers', Impact, sans-serif; letter-spacing: 1px; margin-top: 16px; padding: 8px 22px; background: #ffd23f; color: #10101a; border: 3px solid #10101a; box-shadow: 4px 4px 0 #10101a; cursor: pointer; }
+    #loading.error .msg.err, #loading.failed .msg.fail, #loading.mobile .msg.mob { display: block; }
+    #loading.error .bar, #loading.failed .bar, #loading.mobile .bar { display: none; }
   </style>
+  <script>
+    // A boot that fails before the game script can report it (a script that will not load, or
+    // throws while it starts) still says so, instead of a loading bar that never moves.
+    window.__bootFail = function (err) {
+      var l = document.getElementById('loading');
+      if (!l || l.classList.contains('error') || l.classList.contains('failed')) return;
+      l.classList.add('failed');
+      var why = l.querySelector('.why');
+      if (why) why.textContent = String((err && err.message) || err || 'Unknown error').slice(0, 300);
+    };
+    addEventListener('error', function (e) {
+      if (window.__booted) return;
+      if (e.target && e.target.tagName === 'SCRIPT') window.__bootFail(new Error('A game file did not load: ' + (e.target.src || 'script')));
+      else if (e.error) window.__bootFail(e.error);
+    }, true);
+  </script>
 </head>
 <body>
   <canvas id="game" tabindex="0"></canvas>
@@ -27,6 +54,7 @@
       <h1>WEB OF INK</h1>
       <div class="bar"><i></i></div>
       <p class="msg err">This game needs WebGL 2. Try a recent Chrome, Edge, Firefox or Safari on a computer.</p>
+      <div class="msg fail">Something went wrong loading the game.<span class="why"></span><button class="reload" type="button" onclick="location.reload()">RELOAD</button></div>
       <p class="msg mob">Web of Ink is made for a computer with a keyboard and mouse or a gamepad. Open this page on a laptop or desktop to play.</p>
     </div>
   </div>
