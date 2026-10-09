@@ -6,6 +6,7 @@ import { LAYER_FX } from '../render/layers.js';
 import { LAND } from '../world/city.js';
 import { createBody, placeBody, applyDv } from '../physics/ledger.js';
 import { ARCHETYPES } from '../combat/enemies.js';
+import { COPY } from '../ui/copy.js';
 
 // The open world at run time (spec 11): collectibles you touch, landmark photos you take, street
 // crimes, hideouts, ring courses (races, Taskmaster runs), Taskmaster fights, research stations,
@@ -312,10 +313,14 @@ export function createContentWorld(g) {
     startMeshes.push({ m, x: c.x, z: c.z });
   }
   function startMarkers() { return [...cat.races, ...cat.challenges]; }
+  // A run quit from the pause menu does not start again (nor another one sharing its marker) until
+  // the hero has stepped away from where he quit.
+  let skipStart = null;
   function updateRuns(dt) {
     const p = hero.body.p;
     if (!run) {
-      if (g.busy()) return;
+      if (skipStart && Math.hypot(p.x - skipStart.x, p.z - skipStart.z) > 6) skipStart = null;
+      if (skipStart || g.busy()) return;
       // A start marker (on the street): step into it to begin.
       for (const c of startMarkers()) {
         if (Math.hypot(p.x - c.x, p.z - c.z) < 4 && p.y < 3) { beginRun(c); return; }
@@ -370,6 +375,17 @@ export function createContentWorld(g) {
       if (run.c.bombs) m.scale.setScalar(0.5);
       scene.add(m); ringMeshes.push(m);
     }
+  }
+  // Ends the run with no result (Retry and Quit from the pause menu): enemies, rings and timer go.
+  function dropRun() {
+    if (!run) return null;
+    const c = run.c;
+    for (const m of ringMeshes) scene.remove(m);
+    ringMeshes.length = 0;
+    for (const e of run.list) combat.enemies.remove(e);
+    g.timer(null);
+    run = null;
+    return c;
   }
   function finishRun(ok) {
     const c = run.c;
@@ -521,6 +537,21 @@ export function createContentWorld(g) {
       if (crime) { for (const e of crime.list) combat.enemies.remove(e); endCrime(false); }
     },
     get busyHere() { return !!(crime || base || run || task); },
+    // The race or challenge running now (for the pause menu's Retry and Quit), or null.
+    get challenge() { return run ? { id: run.c.id, kind: run.c.kind, name: run.c.name } : null; },
+    // Again from the start marker, with the countdown.
+    retryRun() {
+      const c = dropRun();
+      if (!c) return;
+      g.placeHero?.(c.x, 0.9, c.z);
+      beginRun(c);
+    },
+    quitRun() {
+      const c = dropRun();
+      if (!c) return;
+      skipStart = { x: hero.body.p.x, z: hero.body.p.z };
+      g.caption(COPY.challengeQuit, 1.6);
+    },
     // Map icons: what is still to find or do (collectibles only once you have been near).
     mapIcons() {
       const icons = [];
