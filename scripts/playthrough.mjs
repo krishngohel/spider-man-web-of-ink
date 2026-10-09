@@ -4,14 +4,29 @@
 // stealth are skipped here because boss-check plays every one of them with real inputs.
 // Checks: every step is visited in order, the save advances by step id, the credits roll, the
 // roster and the Anti-Venom suit unlock, no page errors.
-//   node scripts/playthrough.mjs [url]
-import { chromium } from 'playwright-core';
+//   node scripts/playthrough.mjs [url]        (ENGINE=firefox runs it in Firefox, as webkit-check does)
+import { chromium, firefox } from 'playwright-core';
 import { launchArgs, sleep } from './lib.mjs';
 import { STEPS } from '../src/story/steps.js';
 
 const url = process.argv[2] ?? 'http://localhost:5312/';
-const b = await chromium.launch({ args: launchArgs(), headless: true });
+// Firefox has no mute flag: its volume scale is 0, and the game's master volume is 0 below.
+const engine = process.env.ENGINE ?? 'chromium';
+const b = engine === 'firefox'
+  ? await firefox.launch({ headless: true, firefoxUserPrefs: { 'webgl.force-enabled': true, 'media.volume_scale': '0.0' } })
+  : await chromium.launch({ args: launchArgs(), headless: true });
+console.log(`engine ${engine}`);
 const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
+if (engine === 'firefox') {
+  await p.addInitScript(() => {
+    try {
+      const k = 'web-of-ink-settings-v1';
+      const s = JSON.parse(localStorage.getItem(k) || '{}');
+      s.volume = { ...(s.volume || {}), master: 0 };
+      localStorage.setItem(k, JSON.stringify(s));
+    } catch { /* storage blocked */ }
+  });
+}
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
