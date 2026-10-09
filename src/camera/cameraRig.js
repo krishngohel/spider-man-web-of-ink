@@ -26,6 +26,11 @@ export const CAM = {
   flyPitchMin: -0.6, flyFloor: 1.0, lookNoise: 30, // lookNoise: px per second
   shoulderBy: { ground: 0.6, air: 0.3, swing: 0.15, hang: 0.2, zip: 0.2, wall: 0.1, glide: 0.3 },
   fovFrom: 15, fovTo: 55, attachKick: 0.35, attachLevel: 0.12, whisker: 0.25,
+  // The critical action shot (Gotham's actionShot): low and to the side of the blow, pushing in and
+  // orbiting a little, tilted like a panel. Never under the floor (actClear above it when set up,
+  // actFloor during it), never through a wall (the whisker rays from the blow stop it short).
+  actDur: 0.9, actDist: 3.3, actPush: 0.6, actOrbit: 0.35, actLift: -0.35, actBack: 1.0,
+  actRoll: 0.14, actFov: 10, actClear: 1.0, actFloor: 0.6, actRoom: 1.5,
 };
 
 // Where the combat camera wants to sit given the fight (pure, tested).
@@ -72,6 +77,30 @@ export function createCameraRig() {
     fovPop: 0,
     focus: { x: 0, y: 0, z: 0 },
     focusV: { x: 0, y: 0, z: 0 },
+    // What the camera shows: the follow camera (k 0), or blended toward the action shot (k up to 1).
+    // Only the drawn view: the yaw and fwd the controls read are left alone.
+    view: { k: 0, pos: { x: 0, y: 0, z: -5 }, fwd: { x: 0, y: 0, z: 1 }, roll: 0, fov: 0 },
+    act: null,
+    // A critical blow at `at` from `from` (the hero): frame it from the side for CAM.actDur s.
+    // Returns false (no shot) when neither side has room for the camera.
+    actionShot(at, from, world) {
+      const dx = at.x - from.x, dz = at.z - from.z, l = Math.hypot(dx, dz) || 1;
+      const ux = dx / l, uz = dz / l, px = -uz, pz = ux;
+      // The point it looks at: the blow, a third of the way back toward the hero, at chest height.
+      const f = { x: at.x + (from.x - at.x) * 0.35, y: Math.max(at.y, from.y) - 0.15, z: at.z + (from.z - at.z) * 0.35 };
+      const top = Math.max(at.y, from.y) + 1.5;
+      if (world) f.y = Math.max(f.y, world.groundHeight(f.x, top, f.z) + 0.6);
+      // The side of the line the camera is already on first.
+      const first = (rig.pos.x - f.x) * px + (rig.pos.z - f.z) * pz >= 0 ? 1 : -1;
+      for (const side of [first, -first]) {
+        const a0 = Math.atan2(px * side * CAM.actDist - ux * CAM.actBack, pz * side * CAM.actDist - uz * CAM.actBack);
+        const room = shotRoom(world, f, a0, CAM.actDist + CAM.actBack * 0.3, CAM.actLift);
+        if (room < CAM.actRoom) continue;
+        rig.act = { t: 0, f, a0, side, room };
+        return true;
+      }
+      return false;
+    },
     kickWant: 0,
     pos: { x: 0, y: 0, z: -5 },
     fwd: { x: 0, y: 0, z: 1 },
@@ -198,9 +227,68 @@ export function createCameraRig() {
       const cp = Math.cos(rig.pitch), sp = Math.sin(rig.pitch);
       rig.fwd.x = Math.sin(rig.yaw) * cp; rig.fwd.y = -sp; rig.fwd.z = Math.cos(rig.yaw) * cp;
       place(world);
+      actionStep(dt, world, p);
       return rig;
     },
   };
+
+  // How far the camera can go from the blow `f` along the heading `a` (radians, atan2(x, z)) and
+  // `lift` before a wall: three rays, a whisker to either side.
+  function shotRoom(world, f, a, dist, lift) {
+    if (!world) return dist;
+    let dx = Math.sin(a) * dist, dy = lift, dz = Math.cos(a) * dist;
+    const l = Math.hypot(dx, dy, dz) || 1; dx /= l; dy /= l; dz /= l;
+    const sx = -dz, sz = dx;
+    let room = l;
+    for (const s of [0, 1, -1]) {
+      const hit = world.raycast(f.x + sx * CAM.whisker * s, f.y, f.z + sz * CAM.whisker * s, dx, dy, dz, l + CAM.wallClear, RAY);
+      if (hit) room = Math.min(room, Math.max(0, hit.t - CAM.wallClear));
+    }
+    return room;
+  }
+  const smoothK = (x) => x * x * (3 - 2 * x);
+  function actionStep(dt, world, p) {
+    const V = rig.view, a = rig.act;
+    V.pos.x = rig.pos.x; V.pos.y = rig.pos.y; V.pos.z = rig.pos.z;
+    V.fwd.x = rig.fwd.x; V.fwd.y = rig.fwd.y; V.fwd.z = rig.fwd.z;
+    V.k = 0; V.roll = 0; V.fov = 0;
+    if (!a) return;
+    a.t += dt;
+    const k = a.t / CAM.actDur;
+    // Done, or the hero carried far off (a teleport, a launch): back to the follow camera.
+    if (k >= 1 || Math.hypot(p.x - a.f.x, p.z - a.f.z) > 12) { rig.act = null; return; }
+    // Snap in fast, hold, ease out.
+    const w = k < 0.12 ? k / 0.12 : k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
+    const e = smoothK(Math.max(0, Math.min(1, w)));
+    // Push in and orbit a little round the blow.
+    const ang = a.a0 + a.side * CAM.actOrbit * k;
+    const want = CAM.actDist - CAM.actPush * k;
+    const room = shotRoom(world, a.f, ang, want, CAM.actLift + 0.3 * k);
+    const lift = CAM.actLift + 0.3 * k, L = Math.hypot(want, lift);
+    const d = Math.max(0.6, Math.min(L, room));
+    const sx = a.f.x + (Math.sin(ang) * want / L) * d, sz = a.f.z + (Math.cos(ang) * want / L) * d;
+    let sy = a.f.y + (lift / L) * d;
+    if (world) sy = Math.max(sy, world.groundHeight(sx, a.f.y + 1.5, sz) + CAM.actFloor);
+    // Blend from the follow camera; the straight line between two clear spots is checked too.
+    let bx = rig.pos.x + (sx - rig.pos.x) * e, by = rig.pos.y + (sy - rig.pos.y) * e, bz = rig.pos.z + (sz - rig.pos.z) * e;
+    if (world && e > 0.01) {
+      const ox = bx - a.f.x, oy = by - a.f.y, oz = bz - a.f.z, ol = Math.hypot(ox, oy, oz) || 1;
+      const hit = world.raycast(a.f.x, a.f.y, a.f.z, ox / ol, oy / ol, oz / ol, ol + CAM.wallClear, RAY);
+      if (hit && hit.t - CAM.wallClear < ol) {
+        const t = Math.max(0.4, hit.t - CAM.wallClear);
+        bx = a.f.x + (ox / ol) * t; by = a.f.y + (oy / ol) * t; bz = a.f.z + (oz / ol) * t;
+      }
+      by = Math.max(by, world.groundHeight(bx, Math.max(by, a.f.y) + 1.5, bz) + CAM.actFloor);
+    }
+    V.pos.x = bx; V.pos.y = by; V.pos.z = bz;
+    // Look: from the follow camera's direction toward the blow.
+    let lx = a.f.x - bx, ly = a.f.y - by, lz = a.f.z - bz;
+    const ll = Math.hypot(lx, ly, lz) || 1; lx /= ll; ly /= ll; lz /= ll;
+    let fx = rig.fwd.x + (lx - rig.fwd.x) * e, fy = rig.fwd.y + (ly - rig.fwd.y) * e, fz = rig.fwd.z + (lz - rig.fwd.z) * e;
+    const fl = Math.hypot(fx, fy, fz) || 1;
+    V.fwd.x = fx / fl; V.fwd.y = fy / fl; V.fwd.z = fz / fl;
+    V.k = e; V.roll = a.side * CAM.actRoll * e; V.fov = -CAM.actFov * e;
+  }
 
   // Over the right shoulder: the crosshair (screen centre) looks past the hero, never through him.
   const sh = { x: 0, y: 0, z: 0 };

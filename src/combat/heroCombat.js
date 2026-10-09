@@ -89,7 +89,8 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     enemies.freeze?.(e, s);
     if (last) slowmo(0.45);
     if (heavy) word(kind === 'kick' ? KICKS[c.combo % KICKS.length] : WORDS[(c.punchN + c.combo) % WORDS.length], e, heavy ? 'hit' : 'small');
-    onEvent({ type: 'heroHit', e, heavy, kind, stop: s });
+    // ko: this blow put him down; counter: the counter after a perfect dodge (impact frames, tier 2).
+    onEvent({ type: 'heroHit', e, heavy, kind, stop: s, ko: e.hp <= 0, counter: c.move?.key === 'counter' && !!c.counterPerfect });
     return r;
   }
 
@@ -639,6 +640,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     if (threat && !threat.boss) { c.counterTgt = threat; c.counterUntil = c.clock + TUNE.dodgeTime + TUNE.counterWindow; }
     enemies.tokens?.holdAll(TUNE.dodgeHold);
     const perfect = !!threat && soon <= COMBAT.perfectWindow + 1 / 60;
+    c.counterPerfect = perfect;
     // Which side relative to where the hero faces (the poser picks the flip).
     const side = dx * hero.facing.z - dz * hero.facing.x > 0 ? 'l' : 'r';
     if (perfect) {

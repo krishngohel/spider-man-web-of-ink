@@ -221,7 +221,7 @@ export function createContentWorld(g) {
   }
   function updateCrime(dt) {
     if (nights) nights.t += dt;
-    if (!crime) { crimeCd -= dt; if (crimeCd <= 0 && (nights || !g.busy())) { crimeCd = 20; startCrime(nights ? ['mugging', 'robbery', 'gang', 'hostage', 'van', 'drones', 'sniper'][Math.floor(Math.random() * 7)] : null); } return; }
+    if (!crime) { crimeCd -= dt; if (crimeCd <= 0 && (nights || (!g.busy() && g.crimesOn?.() !== false))) { crimeCd = 20; startCrime(nights ? ['mugging', 'robbery', 'gang', 'hostage', 'van', 'drones', 'sniper'][Math.floor(Math.random() * 7)] : null); } return; }
     crime.t += dt;
     if (crime.bonus) {
       const hc = combat.heroCombat.c, b = crime.bonus;
