@@ -85,6 +85,9 @@ button { font: inherit; }
 /* Bottom left, under the combat panel: the top left is the district caption's. */
 .fps { position: absolute; left: 10px; bottom: 2px; font: 700 13px var(--body); color: #fff; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink); }
 .fps.hidden { display: none; }
+.gpu-hint { position: fixed; right: 16px; bottom: 16px; z-index: 40; max-width: min(460px, calc(100vw - 32px)); display: flex; gap: 12px; align-items: center; padding: 10px 14px; background: var(--paper, #f3ecd9); color: var(--ink); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); font: 15px/1.3 var(--body); }
+.gpu-hint p { margin: 0; }
+.gpu-hint .mbtn { flex: none; }
 .statelabel { position: absolute; left: 12px; top: 30px; font: 700 15px var(--body); color: #fff; text-shadow: 1px 1px 0 var(--ink); }
 .tip { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%) rotate(-0.6deg); width: min(520px, calc(100vw - 32px)); background: #fff;
   border: 3px solid var(--ink); box-shadow: 5px 5px 0 var(--ink); padding: 10px 14px; font-size: 20px; line-height: 1.25; transition: opacity 0.25s; }

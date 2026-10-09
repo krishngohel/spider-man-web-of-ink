@@ -21,6 +21,7 @@ export function createHud(root, getSettings) {
   const speedNum = el('b', {}, '0');
   const speedo = el('div', { class: 'speedo' }, [speedNum, el('span', {}, 'KM/H')]);
   const fps = el('div', { class: 'fps' });
+  let gpuName = ''; // the GPU the browser draws with, beside the frame rate
   const stateLabel = el('div', { class: 'statelabel' });
   const tip = el('div', { class: 'tip hidden' });
   const lockHint = el('div', { class: 'lockhint hidden' }, COPY.clickToPlay);
@@ -121,6 +122,7 @@ export function createHud(root, getSettings) {
   }
 
   return {
+    setGpu(name) { gpuName = name; },
     show(on) { hud.classList.toggle('hidden', !on); if (on) showTip(); },
     // A full-screen fade to black (a fall into the river, a subway ride).
     fade(on) { fader.classList.toggle('on', on); },
@@ -239,7 +241,7 @@ export function createHud(root, getSettings) {
       // Tutorial tips off: the first-play tip and the story's tips stay hidden.
       document.body.classList.toggle('no-tips', !s.tips);
       fps.classList.toggle('hidden', !s.showFps);
-      if (s.showFps) fps.textContent = `${Math.round(f)} FPS`;
+      if (s.showFps) fps.textContent = `${Math.round(f)} FPS${gpuName ? `  ${gpuName}` : ''}`;
       speedNum.textContent = String(Math.round(speed * 3.6));
       speedo.classList.toggle('hidden', !s.showSpeed);
       // The crosshair only in the air (the swing finds its own anchor; on the ground it is noise).

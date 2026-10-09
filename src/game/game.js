@@ -86,6 +86,7 @@ import { createContentWorld } from '../content/world.js';
 import { createPuzzles } from '../ui/puzzles.js';
 import { createTracker } from '../ui/tracker.js';
 import { createSplashMemory } from './splash.js';
+import { gpuRenderer, gpuShortName, maybeShowGpuHint } from '../ui/gpuInfo.js';
 import { watchContextLoss } from '../ui/contextLost.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
@@ -98,6 +99,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   // Renderer and look ------------------------------------------------------------------------
   const renderer = createRenderer(canvas, quality);
+  const gpuRaw = gpuRenderer(renderer.getContext());
+  let gpuHint = null; // the integrated-graphics hint, on the title screen only
   const basePixelRatio = () => pixelRatioCap(quality, navigator.userAgent, window.devicePixelRatio);
   const ink = createInkPipeline(renderer, quality, { gpuTime: params.has('gputime') });
   // The hero assets start downloading now; the city's shaders warm up while they arrive.
@@ -302,6 +305,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     combat.setOnScreen((e) => { sv.set(e.body.p.x, e.body.p.y + 0.5, e.body.p.z).project(camera); return sv.z < 1 && Math.abs(sv.x) < 1 && Math.abs(sv.y) < 1; });
   }
   const hud = createHud(uiRoot, () => settings);
+  hud.setGpu(gpuShortName(gpuRaw));
   const devPanel = createDevPanel(uiRoot);
   if (dev) devPanel.show();
 
@@ -563,6 +567,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const comicResumes = () => { if (storyOn && director?.blocking) { mode = 'comic'; input.setEnabled(false); return true; } return false; };
   const padComic = { a: false, b: false };
   function enterPlay() {
+    gpuHint?.remove(); gpuHint = null;
     mode = 'play';
     resetIntent();
     menus.hideAll();
@@ -1519,7 +1524,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const bench = params.get('bench') === '1';
   if (at === 'swing' || bench) enterPlay();
   else if (at && stepById(at)) devStory(at);
-  else menus.showTitle();
+  else { menus.showTitle(); gpuHint = maybeShowGpuHint(uiRoot, gpuRaw, window.localStorage); }
   // ?bench=1: the one-link benchmark for the player's own machine (loaded only when asked for).
   if (bench) {
     import('../dev/perfBench.js').then(({ runPerfBench }) => runPerfBench({
