@@ -234,7 +234,7 @@ export function createDirector(g) {
             let d = toCam - toWho; while (d > 180) d -= 360; while (d < -180) d += 360;
             yaw = kind === 'to' ? toWho : toWho + d * 0.5;
           }
-          actors.place(c.who, { x: base.x + c.p[0], y: base.y + c.p[1], z: base.z + c.p[2] }, yaw, c.pose, c.who === 'hero' ? s.suit : null, c.t ?? 0.5, c.prop ?? null);
+          actors.place(c.who, { x: base.x + c.p[0], y: base.y + c.p[1], z: base.z + c.p[2] }, yaw, c.pose, c.who === 'hero' ? (s.suit ?? step.suit ?? null) : null, c.t ?? 0.5, c.prop ?? null);
         }
         shotCam.fov = s.fov ?? 45;
         shotCam.aspect = g.aspect();
@@ -359,7 +359,7 @@ export function createDirector(g) {
         // The suit models the pages show (the worn one and any a shot asks for) load before the
         // pages are drawn, or the first comic in a suit would show the painted body (3 s at most).
         if (cur.phase === 'draw' && !cur.suitsP) {
-          const ids = new Set([save.progress?.suit ?? 'classic']);
+          const ids = new Set([step.suit ?? save.progress?.suit ?? 'classic']);
           for (const pg of step.pages ?? []) for (const p of pg.panels ?? []) if (p.shot?.suit) ids.add(p.shot.suit);
           cur.suitsP = Promise.race([Promise.all([...ids].map((i) => loadSuitModel(suitById(i).model))), new Promise((r) => setTimeout(r, 3000))]).then(() => { cur.suitsOk = true; });
         }
