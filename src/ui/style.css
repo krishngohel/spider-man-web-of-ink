@@ -81,7 +81,8 @@ button { font: inherit; }
 .speedo b { font-size: 46px; font-weight: 400; }
 .speedo span { font-size: 20px; margin-left: 4px; }
 .speedo.hidden { display: none; }
-.fps { position: absolute; left: 12px; top: 10px; font: 700 15px var(--body); color: #fff; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink); }
+/* Bottom left, under the combat panel: the top left is the district caption's. */
+.fps { position: absolute; left: 10px; bottom: 2px; font: 700 13px var(--body); color: #fff; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink); }
 .fps.hidden { display: none; }
 .statelabel { position: absolute; left: 12px; top: 30px; font: 700 15px var(--body); color: #fff; text-shadow: 1px 1px 0 var(--ink); }
 .tip { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%) rotate(-0.6deg); width: min(520px, calc(100vw - 32px)); background: #fff;
@@ -107,10 +108,11 @@ button { font: inherit; }
   75% { transform: translate(-50%, -58%) rotate(var(--tilt)) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -70%) rotate(var(--tilt)) scale(0.9); opacity: 0; }
 }
-.toast { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); background: var(--yellow); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink);
-  padding: 8px 14px; font-size: 18px; max-width: min(560px, calc(100vw - 32px)); pointer-events: auto; }
-.toast.hidden { display: none; }
-.toast button { margin-left: 10px; }
+/* A timed notice under the boss bar (Low Power Mode): nothing to click, gone by itself. */
+.ui-layer > .notice { position: fixed; left: 50%; top: 16px; z-index: 6; width: max-content; max-width: min(460px, calc(100vw - 32px)); padding: 7px 14px;
+  background: var(--paper); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); font: 600 16px/1.3 var(--body); color: var(--ink);
+  pointer-events: none; opacity: 0; transform: translate(-50%, -8px) rotate(-0.5deg); transition: opacity 0.3s, transform 0.3s; }
+.ui-layer > .notice.show { opacity: 1; transform: translate(-50%, 0) rotate(-0.5deg); }
 
 /* Help -------------------------------------------------------------------------------------- */
 .help { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 8; width: min(340px, calc(100vw - 32px)); background: var(--paper);
@@ -434,3 +436,9 @@ body.cb .bfill { background: linear-gradient(#5ab0ff, #1f4fb6); }
 .emote-title { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -60%); font: 30px var(--head); letter-spacing: 1px; color: var(--ink); }
 .emote-page { position: absolute; left: 50%; top: 50%; transform: translate(-50%, 90%); font: 11px var(--body, sans-serif); letter-spacing: 1px; color: var(--ink); opacity: 0.7; white-space: nowrap; }
 .cb-slot.off { opacity: 0.35; }
+/* Tutorial tips off. */
+body.no-tips .tip, body.no-tips .storytips { display: none; }
+/* Cinema bars up: the HUD steps out of the shot and comes back after. */
+body.cine .ui-layer > :is(.hud, .notice, .objective, .storytips, .stimer, .stealthbox, .holdprompt, .tdprompt), body.cine .cb > :is(.cb-panel, .cb-combo, .cb-gadget, .cb-prompts, .cb-target) { opacity: 0 !important; transition: opacity 0.3s; }
+body.cine-out .ui-layer > :is(.hud, .objective, .storytips, .stimer), body.cine-out .cb > :is(.cb-panel, .cb-gadget) { animation: hudback 0.35s ease-out; }
+@keyframes hudback { from { opacity: 0; } to { opacity: 1; } }

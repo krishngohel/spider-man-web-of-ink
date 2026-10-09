@@ -116,8 +116,7 @@ export const COPY = {
   combat: { gangSpotted: 'STREET GANG SPOTTED', gangBusted: 'GANG BUSTED!', defeated: 'DOWN, BUT NOT OUT', combo: 'COMBO', focus: 'FOCUS' },
   subwayTo: 'SUBWAY TO',
   noAnchor: 'MISSED',
-  lowPower: 'Your browser is holding the game at 30 frames a second (Low Power Mode or Energy Saver). Plug in, or turn that mode off, for a smoother swing.',
-  ok: 'Got it',
+  lowPower: 'The game is running at 30 frames a second, which usually means Low Power Mode or battery saver is on. Plug in, or turn it off in your battery settings, for a smoother swing.',
   // First-play tips, in order. Each one leaves when you do the thing it asks.
   tips: [
     { id: 'swing', text: 'Jump, then hold <kbd>{swing}</kbd> in the air to swing: the web finds a building. Let go to fly, hold again for the next web.', done: 'release' },

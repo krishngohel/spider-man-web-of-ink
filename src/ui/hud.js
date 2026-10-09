@@ -1,12 +1,19 @@
 import { el } from './dom.js';
 import { COPY } from './copy.js';
 import { bindingLabel } from '../core/bindings.js';
+import { placeWord, wordBox, centreBox } from './wordPlace.js';
+import { createNoticeQueue } from './noticeQueue.js';
 
 const TIPS_KEY = 'web-of-ink-tips-v4'; // v4: tips rewritten for swing assist and zip points
+const WORD_LIFE = 750; // ms, the wordpop animation in style.css
+
+// The HUD boxes a sound word keeps off (whichever are showing).
+const AVOID = ['.objective:not(.hidden)', '.bossbar:not(.hidden)', '.dlg-panel.show', '.waypoint:not(.hidden)', '.cb-panel', '.cb-combo:not(.hidden)',
+  '.cb-gadget', '.caption.show', '.alertbox.show', '.stimer:not(.hidden)', '.stip', '.tip:not(.hidden):not(.quiet)', '.notice.show', '.xpbox:not(.hidden)', '.speedo:not(.hidden)', '.lockhint:not(.hidden)', '.cb-prompts', '.help:not(.hidden)'];
 
 // The in-play overlay: reticle, where the next web would stick, speed, frame rate, first-play tips
 // (each leaves when you do what it asks: Gotham lesson, cards that linger get in the way), speed
-// lines, the controls card and the one-time Low Power Mode note.
+// lines, the controls card and short timed notices (the Low Power Mode note).
 export function createHud(root, getSettings) {
   const reticle = el('div', { class: 'reticle' });
   const dot = el('div', { class: 'anchor-dot none' });
@@ -18,8 +25,19 @@ export function createHud(root, getSettings) {
   const tip = el('div', { class: 'tip hidden' });
   const lockHint = el('div', { class: 'lockhint hidden' }, COPY.clickToPlay);
   const lines = el('canvas', { class: 'speedlines' });
-  const toastText = el('span');
-  const toast = el('div', { class: 'toast hidden' }, [toastText, el('button', { class: 'chip', onclick: () => toast.classList.add('hidden') }, COPY.ok)]);
+  // A notice card under the boss bar: timed, nothing to click, only in play.
+  const notice = el('div', { class: 'notice' });
+  const notices = createNoticeQueue({
+    render(text) {
+      notice.textContent = text;
+      // Below the boss bar and the challenge timer when they are up.
+      let top = 16;
+      for (const q of ['.bossbar:not(.hidden)', '.stimer:not(.hidden)']) { const r = document.querySelector(q)?.getBoundingClientRect(); if (r && r.height) top = Math.max(top, r.bottom + 12); }
+      notice.style.top = `${top}px`;
+      notice.classList.add('show');
+    },
+    hide() { notice.classList.remove('show'); },
+  });
   const help = el('div', { class: 'help hidden' });
   const words = el('div', { class: 'words' });
   const fader = el('div', { class: 'fader' });
@@ -38,9 +56,11 @@ export function createHud(root, getSettings) {
   let xpT = 0;
   let captionT = 0;
   const hud = el('div', { class: 'hud hidden' }, [lines, words, reticle, dot, noAnchor, speedo, fps, stateLabel, tip, lockHint, help]);
-  const wordPool = Array.from({ length: 6 }, () => { const w = el('div', { class: 'word' }); words.append(w); return { el: w, t: 0 }; });
+  // Ten words can be up at once (a busy fight); each remembers its box while it shows.
+  const wordPool = Array.from({ length: 10 }, () => { const w = el('div', { class: 'word' }); words.append(w); return { el: w, until: 0, box: null }; });
+  const wordSize = new Map();
   let wordNext = 0;
-  root.append(hud, toast, fader, letter);
+  root.append(hud, notice, fader, letter);
   hud.append(caption, wpMark, xpBox, alertBox);
   const lctx = lines.getContext('2d');
 
@@ -104,7 +124,18 @@ export function createHud(root, getSettings) {
     show(on) { hud.classList.toggle('hidden', !on); if (on) showTip(); },
     // A full-screen fade to black (a fall into the river, a subway ride).
     fade(on) { fader.classList.toggle('on', on); },
-    letterbox(secs) { letter.classList.add('on'); clearTimeout(letterT); letterT = setTimeout(() => letter.classList.remove('on'), secs * 1000); },
+    // Cinema bars; the HUD fades out while they are up and back in after.
+    letterbox(secs) {
+      letter.classList.add('on');
+      document.body.classList.add('cine'); document.body.classList.remove('cine-out');
+      clearTimeout(letterT);
+      letterT = setTimeout(() => {
+        letter.classList.remove('on');
+        document.body.classList.remove('cine'); document.body.classList.add('cine-out');
+        letterT = setTimeout(() => document.body.classList.remove('cine-out'), 400);
+      }, secs * 1000);
+    },
+    get letterboxed() { return letter.classList.contains('on'); },
     // A comic caption box at the top left (a district name as you enter it).
     caption(text, secs = 2.6) {
       if (captionT > 0) {
@@ -132,37 +163,58 @@ export function createHud(root, getSettings) {
     setTipQuiet(on) { tip.classList.toggle('quiet', on); },
     toggleHelp() { renderHelp(); help.classList.toggle('hidden'); },
     get helpOpen() { return !help.classList.contains('hidden'); },
-    lowPower() { toastText.textContent = COPY.lowPower; toast.classList.remove('hidden'); },
+    // A short notice for a few seconds (waits for play, never needs a click).
+    notice(text, secs = 9) { notices.push(text, secs); },
+    lowPower() { notices.push(COPY.lowPower, 10); },
+    get noticeShowing() { return notices.showing; },
     // Gameplay events from the hero (and 'reel' from the game).
     onEvent(e) {
       if (e.type === 'noAnchor' || e.type === 'miss') noAnchorT = 0.6;
       const t = COPY.tips[tipIndex];
-      if (t && e.type === t.done) {
+      if (t && e.type === t.done && getSettings().tips) {
         tipIndex++;
         try { localStorage.setItem(TIPS_KEY, String(tipIndex)); } catch { /* storage blocked */ }
         tip.classList.add('hidden');
         setTimeout(showTip, 900);
       }
     },
-    // A comic sound word at screen point (x, y) in CSS pixels. Never over the middle of the screen:
-    // a word that would land there slides out to the side (Gotham lesson: words over the action).
+    // A comic sound word at screen point (x, y) in CSS pixels. Never over the middle of the screen
+    // (a word that would land there slides out to the side: Gotham lesson, words over the action),
+    // never over a HUD box (objective, boss bar, radio, waypoint, combat panel, captions), and off
+    // the other words still showing (ui/wordPlace.js).
     word(text, x, y, kind = 'small') {
       if (!getSettings().soundWords) return;
-      const w = wordPool[wordNext];
-      wordNext = (wordNext + 1) % wordPool.length;
-      const cx = innerWidth / 2, cy = innerHeight / 2;
-      const dx = x - cx, dy = y - cy;
-      const rx = innerWidth * 0.16, ry = innerHeight * 0.16;
-      if (Math.abs(dx) < rx && Math.abs(dy) < ry) x = cx + (dx >= 0 ? 1 : -1) * rx * 1.15;
-      x = Math.max(80, Math.min(innerWidth - 80, x));
-      y = Math.max(60, Math.min(innerHeight - 80, y));
+      const now = performance.now();
+      // The oldest slot, or a free one.
+      let w = wordPool.find((q) => q.until <= now);
+      if (!w) { w = wordPool[wordNext]; wordNext = (wordNext + 1) % wordPool.length; }
+      w.until = 0;
+      const view = { w: innerWidth, h: innerHeight };
+      const mid = centreBox(view);
+      if (x > mid.left && x < mid.right && y > mid.top && y < mid.bottom) x = view.w / 2 + (x >= view.w / 2 ? 1 : -1) * (mid.right - view.w / 2) * 1.15;
+      const tilt = Math.random() * 16 - 8;
       w.el.textContent = text;
       w.el.className = `word ${kind}`;
-      w.el.style.left = `${x}px`; w.el.style.top = `${y}px`;
-      w.el.style.setProperty('--tilt', `${(Math.random() * 16 - 8).toFixed(1)}deg`);
+      // Measured once per word and size (one layout), then from the cache.
+      const key = `${kind}:${text}`;
+      let size = wordSize.get(key);
+      if (!size) { size = { w: w.el.offsetWidth, h: w.el.offsetHeight }; if (size.w) wordSize.set(key, size); }
+      const ui = [];
+      for (const q of AVOID) for (const n of document.querySelectorAll(q)) { const r = n.getBoundingClientRect(); if (r.width && r.height) ui.push(r); }
+      const live = wordPool.filter((q) => q !== w && q.until > now && q.box).map((q) => q.box);
+      let p = placeWord(x, y, size.w, size.h, tilt, view, [...ui, mid, ...live]);
+      // Crowded: overlapping another word beats covering the HUD or the middle.
+      if (p.crowded) p = placeWord(x, y, size.w, size.h, tilt, view, [...ui, mid]);
+      if (p.crowded) p = placeWord(x, y, size.w, size.h, tilt, view, ui);
+      w.box = wordBox(p.x, p.y, size.w, size.h, tilt);
+      w.until = now + WORD_LIFE;
+      w.el.style.left = `${p.x}px`; w.el.style.top = `${p.y}px`;
+      w.el.style.setProperty('--tilt', `${tilt.toFixed(1)}deg`);
       void w.el.offsetWidth; // restart the animation
       w.el.classList.add('show');
     },
+    // Test hook: the boxes of the words showing now.
+    liveWords() { const now = performance.now(); return wordPool.filter((q) => q.until > now && q.box).map((q) => ({ text: q.el.textContent, ...q.box })); },
     // The waypoint marker: on the point when it is on screen, pinned to the edge when it is not.
     waypoint(on, x = 0, y = 0, metres = 0, behind = false) {
       wpMark.classList.toggle('hidden', !on);
@@ -181,8 +233,11 @@ export function createHud(root, getSettings) {
       xpBox.classList.remove('hidden'); xpT = 2.4;
     },
     resetTips() { tipIndex = 0; try { localStorage.removeItem(TIPS_KEY); } catch { /* storage blocked */ } showTip(); },
-    update(dt, { fps: f, speed, anchor, state, dev, w, h }) {
+    update(dt, { fps: f, speed, anchor, state, dev, w, h, play = true }) {
       const s = getSettings();
+      notices.tick(dt, play);
+      // Tutorial tips off: the first-play tip and the story's tips stay hidden.
+      document.body.classList.toggle('no-tips', !s.tips);
       fps.classList.toggle('hidden', !s.showFps);
       if (s.showFps) fps.textContent = `${Math.round(f)} FPS`;
       speedNum.textContent = String(Math.round(speed * 3.6));
@@ -190,7 +245,7 @@ export function createHud(root, getSettings) {
       // The crosshair only in the air (the swing finds its own anchor; on the ground it is noise).
       reticle.classList.toggle('hidden', state === 'ground' || state === 'hang');
       // A first-play tip moves on by itself after a while: never a card parked on screen.
-      if (!tip.classList.contains('hidden') && !tip.classList.contains('quiet')) {
+      if (s.tips && !tip.classList.contains('hidden') && !tip.classList.contains('quiet')) {
         tipT += dt;
         if (tipT > 14) { tipT = 0; tipIndex++; try { localStorage.setItem(TIPS_KEY, String(tipIndex)); } catch { /* storage blocked */ } tip.classList.add('hidden'); setTimeout(showTip, 20000); }
       }

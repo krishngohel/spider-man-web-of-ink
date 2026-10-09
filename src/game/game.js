@@ -516,6 +516,13 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (e.code === 'Escape' && mode === 'paused' && menus.pauseOpen && !input.capturing && performance.now() - pausedAt > 300) { e.preventDefault(); resume(); }
   });
 
+  // A hidden tab (closed, switched away from, a laptop lid) saves now, not at the next 20 s save.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden' || mode === 'title' || session?.active) return;
+    save.playTime += saveT; saveT = 0;
+    persist();
+  });
+
   // Comic pages that began while the game was paused take over again when play resumes.
   const comicResumes = () => { if (storyOn && director?.blocking) { mode = 'comic'; input.setEnabled(false); return true; } return false; };
   const padComic = { a: false, b: false };
@@ -1202,7 +1209,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     prof('render', Tr);
 
     const Th = performance.now();
-    hud.update(dt, { fps, speed: mode === 'play' ? hero.speed : 0, anchor: mode === 'play' ? preview : null, state: hero.state, dev: dev || devPanel.open, w: innerWidth, h: innerHeight });
+    hud.update(dt, { fps, speed: mode === 'play' ? hero.speed : 0, anchor: mode === 'play' ? preview : null, state: hero.state, dev: dev || devPanel.open, w: innerWidth, h: innerHeight, play: mode === 'play' && !menus.open });
     prof('hud', Th);
     input.endFrame();
 
@@ -1444,6 +1451,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     setTime(h) { settings = { ...settings, timeOfDay: 'cycle' }; clock.set(h); },
     setWeather(w) { if (WEATHERS.includes(w)) { weatherState.from = w; weatherState.to = w; weatherState.k = 1; weatherState.next = 1e9; } },
     play: () => enterPlay(),
+    hud: () => hud, // test hook: sound words, notices, letterbox
     get frameTimes() { return Array.from(frameTimes.slice(0, Math.min(frameIdx, frameTimes.length))); },
     get workTimes() { return Array.from(workTimes.slice(0, Math.min(frameIdx, workTimes.length))); },
     get gpuTimes() { return Array.from(gpuTimes.slice(0, Math.min(frameIdx, gpuTimes.length))).filter((v) => v >= 0); },
