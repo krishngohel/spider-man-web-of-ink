@@ -6,7 +6,7 @@ const shot = (at, cam, look, cast = [], extra = {}) => ({ at, cam, look, cast, .
 const route = (...pts) => pts.map(([x, z]) => ({ x, z }));
 
 export const ACT4 = [
-  { id: 'act4.title', act: 'act4', type: 'title', card: 'act' },
+  { id: 'act4.title', act: 'act4', type: 'title', card: 'act', cine: 'act4', env: { hour: 1.8, weather: 'rain' } },
   {
     id: 'act4.breakout', act: 'act4', type: 'panels', env: { hour: 2, weather: 'rain' },
     pages: [{
@@ -79,7 +79,7 @@ export const ACT4 = [
     waves: [{ faction: 'sable', mix: ['brawler', 'brawler', 'shield', 'gunner'] }, { faction: 'sable', mix: ['brute', 'brawler', 'jetpack', 'gunner'] }, { faction: 'sable', mix: ['shield', 'brute', 'whip', 'rocket'] }],
   },
   { id: 'act4.ockStart', act: 'act4', type: 'start', site: 'oscorpFront', text: 'Doctor Octopus is at Oscorp Tower.', env: { hour: 22, weather: 'rain' } },
-  { id: 'act4.ock', act: 'act4', type: 'boss', boss: 'ock', site: 'oscorpFront', text: 'Stop Doctor Octopus.', tutorial: ['ockGrab', 'ockBraced'], env: { hour: 22.2, weather: 'rain' } },
+  { id: 'act4.ock', act: 'act4', type: 'boss', boss: 'ock', site: 'oscorpFront', text: 'Stop Doctor Octopus.', tutorial: ['ockGrab', 'ockBraced'], env: { hour: 22.2, weather: 'rain' }, reveal: 'Otto Octavius. Four arms, and every one of them has a plan.' },
   {
     id: 'act4.ockEnd', act: 'act4', type: 'panels', env: { hour: 23, weather: 'rain' },
     pages: [{
@@ -109,5 +109,5 @@ export const ACT4 = [
       L('jameson', 'I am not going to say it. Fine. Thank you, Spider-Man. Now get off my roof.'),
     ],
   },
-  { id: 'act4.credits', act: 'act4', type: 'credits' },
+  { id: 'act4.credits', act: 'act4', type: 'credits', cine: 'dusk' },
 ];

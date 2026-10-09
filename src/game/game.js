@@ -49,6 +49,8 @@ import { createWebLine } from '../hero/webLine.js';
 import { createCameraRig } from '../camera/cameraRig.js';
 import { createSfx } from '../audio/sfx.js';
 import { createHud } from '../ui/hud.js';
+import { createCinematic } from '../ui/cinematic.js';
+import { REWARD_PAGES, createRewardWatch } from '../story/rewardPages.js';
 import { createMenus } from '../ui/menus.js';
 import { createDevPanel } from '../ui/devPanel.js';
 import { createMap } from '../ui/map.js';
@@ -302,6 +304,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     combat.setOnScreen((e) => { sv.set(e.body.p.x, e.body.p.y + 0.5, e.body.p.z).project(camera); return sv.z < 1 && Math.abs(sv.x) < 1 && Math.abs(sv.y) < 1; });
   }
   const hud = createHud(uiRoot, () => settings);
+  // Story cinematics (src/ui/cinematic.js): off with ?nocine (and __game.setCinematics) for the
+  // tooling that walks the story, the way it skips comics.
+  const cinematic = createCinematic({ camera, hud, root: uiRoot });
+  let cineEnabled = !params.has('nocine');
   const devPanel = createDevPanel(uiRoot);
   if (dev) devPanel.show();
 
@@ -1062,6 +1068,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       saveT += dt;
       if (saveT > 20) { saveT = 0; save.playTime += 20; persist(); }
       districtCheck();
+      rewardStep(dt);
       for (const e of events) { sfx.event(e); hud.onEvent(e); worldEvent(e); }
       for (const e of events) { eventLog.push(e.type); if (eventLog.length > 200) eventLog.shift(); }
       interpolate();
@@ -1088,7 +1095,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         const pad = [...(navigator.getGamepads?.() ?? [])].find((q) => q && q.connected);
         const a = !!pad?.buttons[0]?.pressed, b = !!pad?.buttons[1]?.pressed;
         if (a && !padComic.a) storyUi.advanceComic();
-        if (b && !padComic.b) storyUi.skipComic();
+        if (b && !padComic.b && !cinematic.active) storyUi.skipComic();
         padComic.a = a; padComic.b = b;
       }
       nav.update(dt);
@@ -1170,6 +1177,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     }
     fovKick *= Math.exp(-dt * 25);
     if (!camOverride && mode !== 'photo' && mode !== 'title' && Math.abs(camera.fov - (rig.fov + fovKick + rig.fovPop)) > 0.01) { camera.fov = rig.fov + fovKick + rig.fovPop; camera.updateProjectionMatrix(); }
+    // A story cinematic overrides whatever camera was just set, and eases back to it when done.
+    cinematic.update(dt);
     if (waypoint && mode === 'play') {
       wpV.set(waypoint.x, Math.max(2, hero.body.p.y * 0.5), waypoint.z).project(camera);
       const behind = wpV.z > 1;
@@ -1187,7 +1196,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     rain.update(camera, time);
     // The camera crammed right up against the hero (a tight corner): hide him rather than fill the
     // screen with his back.
-    heroModel.root.visible = camOverride || mode === 'photo' || mode === 'title' || rig.closeness > 0.9;
+    heroModel.root.visible = camOverride || cinematic.active || mode === 'photo' || mode === 'title' || rig.closeness > 0.9;
     const hp = hero.body.p;
     sun.target.position.set(Math.round(hp.x / 8) * 8, 0, Math.round(hp.z / 8) * 8);
     sun.position.copy(sun.target.position).addScaledVector(sunDir, 400);
@@ -1285,7 +1294,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     hideHero: (on) => { heroModel.root.visible = !on; },
     // A boss fight opens with letterbox bars and a push-in; a boss going down gets a beat of slow
     // motion (spec 1.10).
-    bossIntro: () => { hud.letterbox(1.6); rig.cinematic(1.3); },
+    bossIntro: ({ bars = true } = {}) => { if (bars) hud.letterbox(1.6); rig.cinematic(1.3); },
+    cinematic, cineOn: () => cineEnabled,
     faceToward: (p) => {
       const dx = p.x - hero.body.p.x, dz = p.z - hero.body.p.z;
       const flyingFast = hero.state !== 'ground' && hero.state !== 'wall' && Math.hypot(hero.body.v.x, hero.body.v.z) > 10;
@@ -1349,6 +1359,16 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   });
   const tracker = createTracker(uiRoot, { data: () => ({ ...content.tracker(), requests: requests.count() }), onBack: () => menus.showPause() });
   nav.register(tracker.node, () => tracker.back());
+  // The reward pages (src/story/rewardPages.js): 100% of the city, gold in every challenge. Shown
+  // once per save, in calm solo play (no fight, no mission, nothing else on screen).
+  const rewardWatch = createRewardWatch({ save, tracker: () => ({ ...content.tracker(), requests: requests.count() }) });
+  function rewardStep(dt) {
+    if (session.active || save.slot > 3 || combat.enemies.engaged.length || combat.encounter || content.busyHere || storyUi.comicOpen || storyUi.cardOpen || storyUi.talking) return;
+    if (storyOn && (director.quiet || director.blocking || director.inFight)) return;
+    const kind = rewardWatch.tick(dt);
+    if (!kind) return;
+    director.showPages(REWARD_PAGES[kind]).then((shown) => { if (shown) { rewardWatch.seen(kind); persist(); } });
+  }
   function takePhoto() {
     const got = content.photo({ x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
     hud.flash?.();
@@ -1441,6 +1461,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     },
     poser: () => ({ trick: poser.trick, hand: poser.webHand }),
     setCamOverride(o) { camOverride = o; },
+    cinematic, // test hook: active, skip(), the shot playing
+    setCinematics: (on) => { cineEnabled = !!on; },
+    showReward: (kind) => director.showPages(REWARD_PAGES[kind]),
     startTrace() { trace = []; },
     stopTrace() { const t = trace; trace = null; return t; },
     setSetting(k, v) { applySettings({ ...settings, [k]: v }); },

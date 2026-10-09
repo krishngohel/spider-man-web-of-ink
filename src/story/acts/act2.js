@@ -5,7 +5,7 @@ const L = (who, text) => ({ who, text });
 const shot = (at, cam, look, cast = [], extra = {}) => ({ at, cam, look, cast, ...extra });
 
 export const ACT2 = [
-  { id: 'act2.title', act: 'act2', type: 'title', card: 'act' },
+  { id: 'act2.title', act: 'act2', type: 'title', card: 'act', cine: 'act2', env: { hour: 20.8, weather: 'clear' } },
   {
     id: 'act2.blackout', act: 'act2', type: 'panels', env: { hour: 21, weather: 'clear' },
     pages: [{
