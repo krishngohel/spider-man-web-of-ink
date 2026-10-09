@@ -159,6 +159,16 @@ export function createSfx(getVolume) {
         case 'stamp': tone({ freq: 140, freq2: 60, dur: 0.25, gain: 0.3 }); burst({ freq: 400, freq2: 200, q: 1, dur: 0.2, gain: 0.25 }); break;
         case 'enemyOut': tone({ freq: 330, freq2: 165, dur: 0.18, gain: 0.08, type: 'triangle' }); break;
         case 'noAnchor': tone({ freq: 240, freq2: 200, dur: 0.06, gain: 0.05, type: 'square' }); break;
+        // Menus: a soft tick on hover or a move, a two-note step up to choose, a step down for Back.
+        case 'uiMove': tone({ freq: 1500, freq2: 1400, dur: 0.035, gain: 0.04, type: 'triangle' }); break;
+        case 'uiSelect':
+          tone({ freq: 880, freq2: 880, dur: 0.06, gain: 0.06, type: 'triangle' });
+          setTimeout(() => tone({ freq: 1320, freq2: 1320, dur: 0.11, gain: 0.06, type: 'triangle' }), 55);
+          break;
+        case 'uiBack':
+          tone({ freq: 990, freq2: 990, dur: 0.05, gain: 0.055, type: 'triangle' });
+          setTimeout(() => tone({ freq: 620, freq2: 600, dur: 0.1, gain: 0.055, type: 'triangle' }), 55);
+          break;
         default: break;
       }
     },

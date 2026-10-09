@@ -18,12 +18,14 @@ export function createRosterMenu(root, { isOpen, current, onPick, onBack }) {
       el('div', { class: 'pm-grid rs-grid' }, ROSTER.filter((c) => c.kind === 'hero').map(card)),
       el('h3', {}, COPY.roster.villains),
       el('div', { class: 'pm-grid rs-grid' }, ROSTER.filter((c) => c.kind === 'villain').map(card)),
-      el('div', { class: 'foot' }, [el('button', { class: 'mbtn', onclick: () => { api.hide(); onBack(); } }, COPY.buttons.back)]),
+      el('div', { class: 'foot' }, [el('button', { class: 'mbtn', 'data-back': true, onclick: () => { api.hide(); onBack(); } }, COPY.buttons.back)]),
     ].filter(Boolean)));
   }
   const api = {
     show() { render(); panel.classList.remove('hidden'); },
     hide() { panel.classList.add('hidden'); },
+    back() { api.hide(); onBack(); },
+    node: panel,
   };
   return api;
 }

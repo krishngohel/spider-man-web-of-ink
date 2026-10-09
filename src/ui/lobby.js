@@ -38,7 +38,7 @@ export function createLobby(root, { session, onEnter, onBack, startMode }) {
       ]),
       el('p', { class: 'mp-msg' }, msg),
       el('details', {}, [el('summary', {}, C.advanced), el('div', { class: 'row' }, [el('span', {}, C.relay), relay])]),
-      el('div', { class: 'foot' }, [el('button', { class: 'mbtn', onclick: () => { api.hide(); onBack(); } }, COPY.buttons.back)]),
+      el('div', { class: 'foot' }, [el('button', { class: 'mbtn', 'data-back': true, onclick: () => { api.hide(); onBack(); } }, COPY.buttons.back)]),
     ]));
   }
 
@@ -74,6 +74,10 @@ export function createLobby(root, { session, onEnter, onBack, startMode }) {
     showWorld() { renderWorld(); world.classList.remove('hidden'); },
     hideWorld() { world.classList.add('hidden'); },
     get profile() { return prof; },
+    // Back from the lobby goes to the title; from the world menu, back into the world.
+    back() { api.hide(); onBack(); },
+    backWorld() { api.hideWorld(); onEnter(); },
+    node: panel, worldNode: world,
   };
   return api;
 }

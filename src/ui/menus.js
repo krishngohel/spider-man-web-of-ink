@@ -2,30 +2,58 @@ import { el } from './dom.js';
 import { COPY } from './copy.js';
 import { ACTIONS, DEFAULT_BINDINGS, keyLabel, rebind } from '../core/bindings.js';
 
-// Title screen, pause menu, settings and controls (with rebinding). Mouse, keyboard and gamepad
-// (D-pad or left stick to move, A to choose, B to go back, left/right to change a value).
+// Title screen (Continue, story slots, free swing, multiplayer, settings, controls, what's new,
+// credits), pause menu, settings in tabs, and controls (with rebinding). Mouse, keyboard and
+// gamepad all work on every page through the shared navigation (ui/nav.js): D-pad or left stick to
+// move, A to choose, B or Esc to go back, left and right to change a value, LB and RB for tabs.
 
-export function createMenus(root, { getSettings, setSettings, input, onPlay, onResume, onRestart, onQuit, onProgress = () => {}, onRoster = () => {}, onMultiplayer = () => {}, onStory = () => {}, onTracker = () => {}, onPhoto = () => {}, onGauntlet = () => {}, onNights = () => {}, postGame = () => false }) {
+const SETTINGS_TABS = ['game', 'controls', 'camera', 'graphics', 'audio', 'access'];
+const pct = (v) => `${Math.round(v * 100)}%`;
+
+export function createMenus(root, {
+  getSettings, setSettings, input, nav = null, onPlay, onResume, onRestart, onQuit,
+  onProgress = () => {}, onRoster = () => {}, onMultiplayer = () => {}, onStory = () => {}, onTracker = () => {}, onPhoto = () => {},
+  onGauntlet = () => {}, onNights = () => {}, postGame = () => false,
+  getContinue = () => null, onContinue = () => {}, onResetTips = () => {},
+  inChallenge = () => false, onRetryChallenge = () => {}, onQuitChallenge = () => {},
+}) {
   const C = COPY.settings;
+  const B = COPY.buttons;
   // Title ---------------------------------------------------------------------------------------
+  const titleButtons = el('div', { class: 'buttons' });
   const title = el('div', { class: 'title hidden' }, el('div', { class: 'card' }, [
     el('h1', { class: 'logo' }, [el('span', { class: 'a' }, COPY.title.a), el('span', { class: 'b' }, COPY.title.b)]),
     el('p', { class: 'sub' }, COPY.subtitle),
-    el('div', { class: 'buttons' }, [
-      el('button', { class: 'mbtn primary', onclick: () => { hideAll(); onStory(); } }, COPY.buttons.story),
-      el('button', { class: 'mbtn', onclick: () => onPlay() }, COPY.buttons.play),
-      el('button', { class: 'mbtn', onclick: () => { hideAll(); onMultiplayer(); } }, COPY.buttons.multiplayer),
-      el('button', { class: 'mbtn', onclick: () => openSettings('title') }, COPY.buttons.settings),
-      el('button', { class: 'mbtn', onclick: () => openControls('title') }, COPY.buttons.controls),
-    ]),
+    titleButtons,
     el('p', { class: 'disclaimer' }, COPY.disclaimer),
   ]));
+  function renderTitle() {
+    // Continue: straight into the last slot played, with where it stands.
+    const cont = getContinue();
+    titleButtons.replaceChildren(
+      cont ? el('button', { class: 'mbtn primary cont', onclick: () => { hideAll(); onContinue(cont.slot); } }, [B.continue, el('span', { class: 'msub' }, COPY.continueSub(cont.slot, cont.where, cont.percent))]) : null,
+      el('button', { class: `mbtn${cont ? '' : ' primary'}`, onclick: () => { hideAll(); onStory(); } }, COPY.buttons.story),
+      el('button', { class: 'mbtn', onclick: () => onPlay() }, COPY.buttons.play),
+      el('button', { class: 'mbtn', onclick: () => { hideAll(); onMultiplayer(); } }, COPY.buttons.multiplayer),
+      el('div', { class: 'pair' }, [
+        el('button', { class: 'mbtn', onclick: () => openSettings('title') }, COPY.buttons.settings),
+        el('button', { class: 'mbtn', onclick: () => openControls('title') }, COPY.buttons.controls),
+      ]),
+      el('div', { class: 'pair' }, [
+        el('button', { class: 'mbtn', onclick: () => openWhatsNew() }, B.whatsNew),
+        el('button', { class: 'mbtn', onclick: () => openCredits() }, B.credits),
+      ]),
+    );
+  }
 
   // Pause ---------------------------------------------------------------------------------------
   const pause = el('div', { class: 'menu hidden' }, el('div', { class: 'card' }, [
     el('h2', {}, COPY.pause),
     el('div', { class: 'buttons' }, [
-      el('button', { class: 'mbtn primary', onclick: () => onResume() }, COPY.buttons.resume),
+      // A click on Resume is a real user gesture: the game takes the mouse back on it.
+      el('button', { class: 'mbtn primary', onclick: () => onResume({ lock: true }) }, COPY.buttons.resume),
+      el('button', { class: 'mbtn challenge', onclick: () => onRetryChallenge() }, B.retryChallenge),
+      el('button', { class: 'mbtn challenge', onclick: () => onQuitChallenge() }, B.quitChallenge),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onProgress(); } }, COPY.buttons.progress),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onTracker(); } }, COPY.buttons.tracker),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onPhoto(); } }, COPY.buttons.photo),
@@ -34,19 +62,24 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onRoster(); } }, COPY.buttons.roster),
       el('button', { class: 'mbtn', onclick: () => openSettings('pause') }, COPY.buttons.settings),
       el('button', { class: 'mbtn', onclick: () => openControls('pause') }, COPY.buttons.controls),
-      el('button', { class: 'mbtn', onclick: () => onRestart() }, COPY.buttons.restart),
+      el('button', { class: 'mbtn', onclick: () => onRestart({ lock: true }) }, COPY.buttons.restart),
       el('button', { class: 'mbtn', onclick: () => onQuit() }, COPY.buttons.quit),
     ]),
   ]));
 
-  const settingsPanel = el('div', { class: 'panel hidden' });
+  const settingsPanel = el('div', { class: 'panel settings hidden' });
   const controlsPanel = el('div', { class: 'panel hidden' });
-  root.append(title, pause, settingsPanel, controlsPanel);
-  let returnTo = null;
+  const whatsNewPanel = el('div', { class: 'panel whatsnew hidden' });
+  const creditsPanel = el('div', { class: 'panel credits-page hidden' });
+  const PAGES = [title, pause, settingsPanel, controlsPanel, whatsNewPanel, creditsPanel];
+  root.append(...PAGES);
+  let returnTo = null, settingsTab = 'game', controlsViaSettings = false;
 
   const update = (patch) => setSettings({ ...getSettings(), ...patch });
+  const backBtn = (fn) => el('button', { class: 'mbtn', 'data-back': true, onclick: fn }, COPY.buttons.back);
+  const label = (text, note) => el('span', {}, [text, note ? el('span', { class: 'note' }, note) : null]);
 
-  function choice(label, note, values, key, labels) {
+  function choice(lbl, note, values, key, labels) {
     const s = getSettings();
     const btn = el('button', { class: 'chip', 'data-cycle': '1' }, labels[String(s[key])]);
     const cycle = (dir = 1) => {
@@ -57,65 +90,95 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
     };
     btn.addEventListener('click', () => cycle(1));
     btn.cycle = cycle;
-    return el('div', { class: 'row' }, [el('span', {}, [label, note ? el('span', { class: 'note' }, note) : null]), btn]);
+    return el('div', { class: 'row' }, [label(lbl, note), btn]);
   }
-  function slider(label, min, max, step, get, set) {
-    const r = el('input', { type: 'range', min, max, step, value: get() });
-    r.addEventListener('input', () => set(parseFloat(r.value)));
-    return el('div', { class: 'row' }, [el('span', {}, label), r]);
+  // A slider with its value read out beside it.
+  function slider(lbl, min, max, step, get, set, fmt = (v) => String(v)) {
+    const r = el('input', { type: 'range', min, max, step, value: get(), 'aria-label': lbl });
+    const out = el('output', {}, fmt(get()));
+    r.addEventListener('input', () => { const v = parseFloat(r.value); out.textContent = fmt(v); set(v); });
+    return el('div', { class: 'row' }, [el('span', {}, lbl), el('div', { class: 'slide' }, [r, out])]);
   }
-  function toggle(label, key, note) {
-    const c = el('input', { type: 'checkbox' });
+  function toggle(lbl, key, note) {
+    const c = el('input', { type: 'checkbox', 'aria-label': lbl });
     c.checked = !!getSettings()[key];
     c.addEventListener('change', () => update({ [key]: c.checked }));
-    return el('div', { class: 'row' }, [el('span', {}, [label, note ? el('span', { class: 'note' }, note) : null]), c]);
+    return el('div', { class: 'row' }, [label(lbl, note), c]);
+  }
+  function action(lbl, note, text, fn) {
+    const b = el('button', { class: 'chip', onclick: () => fn(b) }, text);
+    return el('div', { class: 'row' }, [label(lbl, note), b]);
   }
 
-  function openSettings(from) {
+  function settingsRows(tab) {
+    const s = getSettings;
+    const vol = (k) => (v) => update({ volume: { ...s().volume, [k]: v } });
+    switch (tab) {
+      case 'game': return [
+        choice(C.difficulty[0], C.difficulty[1], ['friendly', 'amazing', 'spectacular'], 'difficulty', C.difficultyValues),
+        choice(C.gravity[0], C.gravity[1], ['comic', 'real'], 'gravity', C.gravityValues),
+        toggle(C.crimes[0], 'crimes', C.crimes[1]),
+        choice(C.timeOfDay[0], C.timeOfDay[1], ['cycle', 'day', 'golden', 'night'], 'timeOfDay', C.timeValues),
+        choice(C.weather[0], null, ['cycle', 'clear', 'overcast', 'rain'], 'weather', C.weatherValues),
+        toggle(C.tips[0], 'tips', C.tips[1]),
+        action(C.resetTips[0], C.resetTips[1], C.resetTipsButton, (b) => { onResetTips(); b.textContent = C.resetTipsDone; }),
+      ];
+      case 'controls': return [
+        choice(C.toggle[0], C.toggle[1], [false, true], 'swingToggle', C.toggleValues),
+        choice(C.swingAssist[0], C.swingAssist[1], ['off', 'normal', 'high'], 'swingAssist', C.swingAssistValues),
+        action(C.keyBindings[0], C.keyBindings[1], C.keyBindingsButton, () => openControls(returnTo, true)),
+      ];
+      case 'camera': return [
+        slider(C.sensitivity[0], 0.2, 3, 0.05, () => s().sensitivity, (v) => update({ sensitivity: v }), (v) => `${v.toFixed(2)}x`),
+        toggle(C.invertY[0], 'invertY'),
+        toggle(C.invertX[0], 'invertX'),
+        slider(C.fov[0], 50, 80, 1, () => s().fov, (v) => update({ fov: v }), (v) => `${Math.round(v)}°`),
+        toggle(C.cameraShake[0], 'cameraShake', C.cameraShake[1]),
+        toggle(C.speedLines[0], 'speedLines'),
+      ];
+      case 'graphics': return [
+        choice(C.quality[0], null, ['high', 'medium', 'low'], 'quality', C.qualityValues),
+        slider(C.renderScale[0], 0.5, 1, 0.05, () => s().renderScale, (v) => update({ renderScale: v }), pct),
+        toggle(C.dynamicRes[0], 'dynamicRes', C.dynamicRes[1]),
+        toggle(C.showFps[0], 'showFps'),
+        toggle(C.showSpeed[0], 'showSpeed'),
+      ];
+      case 'audio': return [
+        slider(C.master[0], 0, 1, 0.05, () => s().volume.master, vol('master'), pct),
+        slider(C.music[0], 0, 1, 0.05, () => s().volume.music, vol('music'), pct),
+        slider(C.sfx[0], 0, 1, 0.05, () => s().volume.sfx, vol('sfx'), pct),
+      ];
+      default: return [
+        choice(C.textSize[0], C.textSize[1], ['normal', 'large', 'huge'], 'textSize', C.textSizeValues),
+        toggle(C.colorblind[0], 'colorblind', C.colorblind[1]),
+        choice(C.impactFrames[0], C.impactFrames[1], ['full', 'soft', 'off'], 'impactFrames', C.impactValues),
+        toggle(C.slowMo[0], 'slowMo', C.slowMo[1]),
+        toggle(C.finisherSlowmo[0], 'finisherSlowmo', C.finisherSlowmo[1]),
+        toggle(C.soundWords[0], 'soundWords', C.soundWords[1]),
+      ];
+    }
+  }
+
+  function openSettings(from, tab = settingsTab) {
     returnTo = from;
+    settingsTab = tab;
     hideAll();
+    const tabs = el('div', { class: 'pm-tabs set-tabs' }, SETTINGS_TABS.map((t) =>
+      el('button', { class: `chip${t === tab ? ' on' : ''}`, 'data-tab': t, onclick: () => openSettings(from, t) }, C.tabs[t])));
     settingsPanel.replaceChildren(el('div', { class: 'card' }, [
       el('h2', {}, C.title),
-      el('h3', {}, C.sections.move),
-      choice(C.gravity[0], C.gravity[1], ['comic', 'real'], 'gravity', C.gravityValues),
-      choice(C.swingAssist[0], C.swingAssist[1], ['off', 'normal', 'high'], 'swingAssist', C.swingAssistValues),
-      choice(C.toggle[0], C.toggle[1], [false, true], 'swingToggle', C.toggleValues),
-      choice(C.difficulty[0], C.difficulty[1], ['friendly', 'amazing', 'spectacular'], 'difficulty', C.difficultyValues),
-      toggle(C.crimes[0], 'crimes', C.crimes[1]),
-      el('h3', {}, C.sections.camera),
-      slider(C.sensitivity[0], 0.2, 3, 0.05, () => getSettings().sensitivity, (v) => update({ sensitivity: v })),
-      toggle(C.invertY[0], 'invertY'),
-      toggle(C.invertX[0], 'invertX'),
-      el('h3', {}, 'Accessibility'),
-      choice(C.textSize[0], C.textSize[1], ['normal', 'large', 'huge'], 'textSize', C.textSizeValues),
-      toggle(C.colorblind[0], 'colorblind', C.colorblind[1]),
-      toggle(C.slowMo[0], 'slowMo', C.slowMo[1]),
-      toggle(C.finisherSlowmo[0], 'finisherSlowmo', C.finisherSlowmo[1]),
-      slider(C.fov[0], 50, 80, 1, () => getSettings().fov, (v) => update({ fov: v })),
-      toggle(C.speedLines[0], 'speedLines'),
-      toggle(C.soundWords[0], 'soundWords', C.soundWords[1]),
-      el('h3', {}, C.sections.video),
-      choice(C.quality[0], null, ['high', 'medium', 'low'], 'quality', C.qualityValues),
-      slider(C.renderScale[0], 0.5, 1, 0.05, () => getSettings().renderScale, (v) => update({ renderScale: v })),
-      toggle(C.dynamicRes[0], 'dynamicRes', C.dynamicRes[1]),
-      toggle(C.showFps[0], 'showFps'),
-      toggle(C.showSpeed[0], 'showSpeed'),
-      choice(C.timeOfDay[0], C.timeOfDay[1], ['cycle', 'day', 'golden', 'night'], 'timeOfDay', C.timeValues),
-      choice(C.weather[0], null, ['cycle', 'clear', 'overcast', 'rain'], 'weather', C.weatherValues),
-      el('h3', {}, C.sections.audio),
-      slider(C.master[0], 0, 1, 0.05, () => getSettings().volume.master, (v) => update({ volume: { ...getSettings().volume, master: v } })),
-      slider(C.music[0], 0, 1, 0.05, () => getSettings().volume.music, (v) => update({ volume: { ...getSettings().volume, music: v } })),
-      slider(C.sfx[0], 0, 1, 0.05, () => getSettings().volume.sfx, (v) => update({ volume: { ...getSettings().volume, sfx: v } })),
-      el('div', { class: 'foot' }, [el('button', { class: 'mbtn', onclick: back }, COPY.buttons.back)]),
+      tabs,
+      el('div', { class: 'set-body' }, settingsRows(tab)),
+      el('div', { class: 'foot' }, [backBtn(back)]),
     ]));
     settingsPanel.classList.remove('hidden');
-    focusFirst(settingsPanel);
   }
 
-  function openControls(from) {
+  function openControls(from, viaSettings = false) {
     returnTo = from;
+    controlsViaSettings = viaSettings;
     hideAll();
-    const rows = ACTIONS.map(({ id, label }) => {
+    const rows = ACTIONS.map(({ id, label: lbl }) => {
       const btn = el('button', { class: 'chip' }, keyLabel(getSettings().bindings[id]?.[0]));
       btn.addEventListener('click', () => {
         btn.classList.add('wait');
@@ -123,10 +186,10 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
         input.captureNext((code) => {
           btn.classList.remove('wait');
           if (code) update({ bindings: rebind(getSettings().bindings, id, code) });
-          openControls(returnTo);
+          openControls(returnTo, controlsViaSettings);
         });
       });
-      return el('div', { class: 'row' }, [el('span', {}, label), btn]);
+      return el('div', { class: 'row' }, [el('span', {}, lbl), btn]);
     });
     controlsPanel.replaceChildren(el('div', { class: 'card' }, [
       el('h2', {}, COPY.controls.title),
@@ -135,60 +198,75 @@ export function createMenus(root, { getSettings, setSettings, input, onPlay, onR
       el('h3', {}, COPY.controls.gamepad),
       el('table', { class: 'pad-table' }, COPY.controls.padRows.map(([k, v]) => el('tr', {}, [el('td', {}, v), el('td', {}, k)]))),
       el('div', { class: 'foot' }, [
-        el('button', { class: 'mbtn', onclick: () => { update({ bindings: DEFAULT_BINDINGS }); openControls(returnTo); } }, COPY.buttons.reset),
-        el('button', { class: 'mbtn', onclick: back }, COPY.buttons.back),
+        el('button', { class: 'mbtn', onclick: () => { update({ bindings: DEFAULT_BINDINGS }); openControls(returnTo, controlsViaSettings); } }, COPY.buttons.reset),
+        backBtn(back),
       ]),
     ]));
     controlsPanel.classList.remove('hidden');
-    focusFirst(controlsPanel);
+  }
+
+  function openWhatsNew() {
+    hideAll();
+    const W = COPY.whatsNew;
+    whatsNewPanel.replaceChildren(el('div', { class: 'card' }, [
+      el('h2', {}, W.title),
+      el('p', { class: 'wn-lead' }, W.lead),
+      el('ul', { class: 'wn-list' }, W.items.map((t) => el('li', {}, t))),
+      el('div', { class: 'foot' }, [backBtn(showTitle)]),
+    ]));
+    whatsNewPanel.classList.remove('hidden');
+  }
+
+  // Credits from the title: the same list the end credits roll (models, music, thanks), whatever
+  // it holds, as a page to scroll.
+  function openCredits() {
+    hideAll();
+    creditsPanel.replaceChildren(el('div', { class: 'card' }, [
+      el('h2', {}, B.credits),
+      el('div', { class: 'cr-list', tabindex: '0', 'data-scroll': true }, COPY.story.credits.map((l) => el(l.h ? 'h3' : 'p', {}, l.text))),
+      el('div', { class: 'foot' }, [backBtn(showTitle)]),
+    ]));
+    creditsPanel.classList.remove('hidden');
   }
 
   function back() {
     input.cancelCapture();
+    // The keys page opened from Settings goes back to Settings; otherwise to the title or pause.
+    const fromKeys = !controlsPanel.classList.contains('hidden') && controlsViaSettings;
+    controlsViaSettings = false;
     settingsPanel.classList.add('hidden');
     controlsPanel.classList.add('hidden');
+    if (fromKeys) { openSettings(returnTo, 'controls'); return; }
     if (returnTo === 'title') showTitle(); else showPause();
   }
 
-  function hideAll() { for (const n of [title, pause, settingsPanel, controlsPanel]) n.classList.add('hidden'); }
+  function hideAll() { for (const n of PAGES) n.classList.add('hidden'); }
   function focusFirst(node) { requestAnimationFrame(() => node.querySelector('button, input')?.focus({ preventScroll: true })); }
-  function showTitle() { hideAll(); title.classList.remove('hidden'); focusFirst(title); }
-  function showPause() { hideAll(); for (const b of pause.querySelectorAll('.postgame')) b.style.display = postGame() ? '' : 'none'; pause.classList.remove('hidden'); focusFirst(pause); }
-  const visible = () => [title, pause, settingsPanel, controlsPanel].find((n) => !n.classList.contains('hidden')) ?? null;
+  function showTitle() { hideAll(); renderTitle(); title.classList.remove('hidden'); focusFirst(title); }
+  function showPause() {
+    hideAll();
+    for (const b of pause.querySelectorAll('.postgame')) b.style.display = postGame() ? '' : 'none';
+    // Retry and Quit while a race or challenge runs.
+    const ch = inChallenge();
+    const [retry, quit] = pause.querySelectorAll('.challenge');
+    for (const b of [retry, quit]) b.style.display = ch ? '' : 'none';
+    if (ch) { retry.textContent = ch.kind === 'race' ? B.retryRace : B.retryChallenge; quit.textContent = ch.kind === 'race' ? B.quitRace : B.quitChallenge; }
+    pause.classList.remove('hidden');
+    focusFirst(pause);
+  }
+  const visible = () => PAGES.find((n) => !n.classList.contains('hidden')) ?? null;
 
-  // Gamepad navigation, polled by the game loop while a menu is open.
-  const prev = new Map();
-  function padNav() {
-    const pads = navigator.getGamepads?.() ?? [];
-    const pad = [...pads].find((p) => p && p.connected);
-    if (!pad) return;
-    const edge = (i, axis = null) => {
-      let down = !!pad.buttons[i]?.pressed;
-      if (axis) down = down || axis();
-      const was = prev.get(i) ?? false;
-      prev.set(i, down);
-      return down && !was;
-    };
-    const ay = pad.axes[1] ?? 0, ax = pad.axes[0] ?? 0;
-    const node = visible();
-    if (!node) return;
-    const items = [...node.querySelectorAll('button, input')];
-    const at = items.indexOf(document.activeElement);
-    if (edge(12, () => ay < -0.6)) items[Math.max(0, at - 1)]?.focus();
-    if (edge(13, () => ay > 0.6)) items[Math.min(items.length - 1, at + 1)]?.focus();
-    const a = document.activeElement;
-    const left = edge(14, () => ax < -0.6), right = edge(15, () => ax > 0.6);
-    if ((left || right) && a) {
-      if (a.cycle) a.cycle(right ? 1 : -1);
-      else if (a.type === 'range') { const st = parseFloat(a.step) || 0.1; a.value = String(parseFloat(a.value) + (right ? st : -st)); a.dispatchEvent(new Event('input')); }
-      else if (a.type === 'checkbox') { a.checked = !a.checked; a.dispatchEvent(new Event('change')); }
-    }
-    if (edge(0)) a?.click();
-    if (edge(1)) { if (node === settingsPanel || node === controlsPanel) back(); else if (node === pause) onResume(); }
+  if (nav) {
+    nav.register(title, null);
+    nav.register(pause, () => onResume({ lock: false }));
+    nav.register(settingsPanel, back);
+    nav.register(controlsPanel, back);
+    nav.register(whatsNewPanel, showTitle);
+    nav.register(creditsPanel, showTitle);
   }
 
   return {
-    showTitle, showPause, hideAll, padNav,
+    showTitle, showPause, hideAll,
     get open() { return !!visible(); },
     get pauseOpen() { return !pause.classList.contains('hidden'); },
   };
