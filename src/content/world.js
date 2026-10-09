@@ -13,7 +13,7 @@ import { ARCHETYPES } from '../combat/enemies.js';
 // quiet and nothing new starts.
 
 const L = (who, text) => ({ who, text });
-const CRIMES = {
+export const CRIMES = {
   mugging: { name: 'MUGGING', mix: ['brawler', 'brawler'] },
   robbery: { name: 'STORE ROBBERY', mix: ['brawler', 'brawler', 'gunner', 'shield'] },
   gang: { name: 'GANG FIGHT', mix: ['brawler', 'brawler', 'whip', 'gunner', 'brute'] },
@@ -25,7 +25,7 @@ const CRIMES = {
   chase: { name: 'GETAWAY CAR', objective: 'car' },
   collapse: { name: 'COLLAPSE', objective: 'collapse' },
 };
-const DISTRICT_CRIMES = {
+export const DISTRICT_CRIMES = {
   midtown: ['mugging', 'robbery', 'chase', 'bomb', 'sniper'], hells: ['mugging', 'gang', 'robbery', 'collapse'], financial: ['van', 'robbery', 'hostage', 'chase'],
   harbor: ['van', 'drones', 'gang', 'collapse'], neon: ['robbery', 'mugging', 'chase', 'bomb'], harlem: ['mugging', 'gang', 'collapse'],
   chinatown: ['gang', 'robbery', 'hostage'], upper: ['robbery', 'sniper', 'bomb', 'drones'], queens: ['mugging', 'robbery', 'chase'], park: ['mugging', 'gang'],

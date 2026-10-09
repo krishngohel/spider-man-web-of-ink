@@ -446,7 +446,7 @@ export const PETER_SCENES = [
 // The scenes were laid out against a landmark's street-front spot; these move them where people
 // can stand: the university's quad, and onto the sidewalks of the Bugle and the shelter (the depth
 // squeezed to fit the sidewalk; the shelter's mirrored, its building being on the other side).
-const REMAP = {
+export const REMAP = {
   uniFront: { site: 'uniQuad', sz: 1, flip: false },
   bugleFront: { site: 'bugleWalk', sz: 0.5, flip: false },
   shelter: { site: 'shelterWalk', sz: 0.5, flip: true },
