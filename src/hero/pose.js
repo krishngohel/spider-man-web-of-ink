@@ -3,6 +3,7 @@ import { COM_HEIGHT } from './model.js';
 import { createBodyRig } from './bodyRig.js';
 import { POSES, MIRRORED, LAYOUT, lerpPose } from './poses.js';
 import { createCombatAnim } from './combatAnim.js';
+import { createFootPlant, plantWeight } from './footPlant.js';
 
 // Drives the hero model from the physics state. Two layers:
 //  - On the ground and on walls, Quaternius clips (idle, jog, sprint, crawl) play on the mixer.
@@ -61,8 +62,12 @@ const TRICKS = {
 const HURT = ['React_Small_F', 'React_Gut', 'React_Small_L', 'React_Small_R'];
 const HURT_BIG = ['React_Front', 'Big_Head_Hit', 'Uppercut_Hit'];
 
-export function createPoser(heroModel) {
+// opts.groundAt(x, y, z): the highest surface under (x, z) at or below y; with it the feet plant
+// on the ground when standing or walking slowly (footPlant.js).
+export function createPoser(heroModel, opts = {}) {
   const { root, orient, animator, model } = heroModel;
+  const plant = opts.groundAt ? createFootPlant(model, opts.groundAt) : null;
+  const plantFwd = new THREE.Vector3();
   animator.prime(CLIPS);
   animator.play('Idle_Loop', { fade: 0 });
   const rig = createBodyRig(model);
@@ -508,6 +513,16 @@ export function createPoser(heroModel) {
         rig.apply(cur, pins);
         rig.blendWithSnapshot(procW);
       }
+      if (plant) {
+        // Standing, idling or walking slowly on clips: feet on the ground under them. Off at once
+        // in the air, on a wall, in a fight move; faded with speed; held off through an emote, a
+        // landing, a flinch or a perch.
+        const cut = st !== 'ground' || fighting;
+        const busy = cut || !!emote || !!once || landT > 0 || perchT > 0 || procW > 0.05;
+        root.updateMatrixWorld(true);
+        plant.update(dt, root.position.y - COM_HEIGHT, plantWeight({ state: st, speed: hs, busy }), plantFwd.set(hero.facing.x, 0, hero.facing.z), cut);
+      }
     },
+    get plant() { return plant; },
   };
 }

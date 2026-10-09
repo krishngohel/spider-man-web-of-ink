@@ -244,7 +244,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Real figures for the nearest pedestrians (src/world/crowd.js), fewer on lower quality.
   const crowd = createCrowd({ scene, assets, buildCharacter, life, count: quality.name === 'low' ? 0 : quality.name === 'medium' ? 6 : 12 });
   scene.add(heroModel.root);
-  let poser = createPoser(heroModel);
+  // The hero's feet plant on the collision ground (steps, kerbs, roof edges) when he stands or walks.
+  const groundAt = (x, y, z) => world.groundHeight(x, y, z);
+  let poser = createPoser(heroModel, { groundAt });
   let character = characterById('peter');
   const webLine = createWebLine(scene);
   const fx = createFx(scene);
@@ -412,7 +414,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     heroModel.root.traverse((o) => { if (!o.isMesh) return; for (const mt of [].concat(o.material)) mt?.dispose?.(); if (!o.isSkinnedMesh) o.geometry?.dispose?.(); });
     heroModel = buildCharacter(assets, def);
     scene.add(heroModel.root);
-    poser = createPoser(heroModel);
+    poser = createPoser(heroModel, { groundAt });
     character = def;
     hero.mover = def.mover ? MOVERS[def.mover]({ ...(def.moverOpts ?? {}), metal }) : null;
     hero.body.mass = def.mass ?? 75;
@@ -1473,6 +1475,15 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     },
     poser: () => ({ trick: poser.trick, hand: poser.webHand }),
     setCamOverride(o) { camOverride = o; },
+    // Test hook: a plain box in the collision world and the scene (a step or a kerb to stand on).
+    addTestBox(min, max) {
+      world.addBox({ min, max, kind: 'prop' }); world.build();
+      const m = new THREE.Mesh(new THREE.BoxGeometry(max[0] - min[0], max[1] - min[1], max[2] - min[2]), new THREE.MeshLambertMaterial({ color: 0x8c8478 }));
+      m.position.set((min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2);
+      scene.add(m);
+    },
+    setFacing(yaw) { hero.facing.x = Math.sin(yaw); hero.facing.z = Math.cos(yaw); },
+    plant: (on) => { const q = poser.plant; if (q && on !== undefined) q.enabled = !!on; return q ? { w: q.weight, drop: q.drop, off: q.offsets, on: q.enabled } : null; },
     // Impact frames: this frame's sample, the action shot's blend and the word focus; pin(ms) holds
     // the timeline ms after the next trigger (stills), pin(null) lets it run; fire a tier by hand.
     impact: () => ({ ...impactOut, frozen: impactFrozen, shot: rig.view.k, focusUntil: hud.focusUntil, now: performance.now() }),
