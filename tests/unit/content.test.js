@@ -45,6 +45,21 @@ describe('open-world content', () => {
     expect(medalFor(c.medals[3], c)).toBe(3);
     expect(medalFor(c.medals[1] + 50, c)).toBe(1);
   });
+  it('every race and challenge has its own start, at least 15 m from any other, on open land', () => {
+    const starts = [...cat.races, ...cat.challenges];
+    for (let i = 0; i < starts.length; i++) {
+      const a = starts[i];
+      expect(city.landAt(a.x, a.z)).not.toBe(LAND.water);
+      for (let j = i + 1; j < starts.length; j++) {
+        const b = starts[j];
+        expect(Math.hypot(a.x - b.x, a.z - b.z), `${a.id} and ${b.id}`).toBeGreaterThanOrEqual(15);
+      }
+    }
+    // A race still starts on its first ring.
+    for (const r of cat.races) expect([r.x, r.z]).toEqual([r.rings[0].x, r.rings[0].z]);
+    // The fix moved only starts: the rest of the catalog sits where it did.
+    expect(cat.challenges.filter((c) => ['tm1', 'tm7', 'tm8'].includes(c.id)).map((c) => [c.x, c.z])).toEqual([[0, -60], [960, -720], [0, 660]]);
+  });
   it('pays out exactly the tokens progression is balanced against', () => {
     expect(contentTokens(cat, city.districts.map((d) => d.id))).toEqual(CONTENT_TOKENS);
   });

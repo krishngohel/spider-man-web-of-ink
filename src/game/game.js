@@ -1331,7 +1331,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     holding: () => input.down('hang'),
     placeHero: (x, y, z) => placeHeroAt(x, y, z, 0, 0, 0, 'ground'),
     pressedHang: () => input.pressed('hang'),
-    busy: () => (storyOn && director.quiet) || session.active || !settings.crimes || !!combat.encounter,
+    // Busy: nothing new starts (a quiet story beat, multiplayer, a fight on). The Street crime
+    // setting only stops crimes; races, challenges and hideouts still start with it off.
+    busy: () => (storyOn && director.quiet) || session.active || !!combat.encounter,
+    crimesOn: () => !!settings.crimes,
     puzzle: (kind) => { mode = 'comic'; input.setEnabled(false); if (locked()) document.exitPointerLock(); return puzzles.play(kind).then((ok) => { mode = 'play'; resetIntent(); input.setEnabled(true); return ok; }); },
   });
   // Neighborhood requests (src/content/requests.js): people around the city who need a hand.

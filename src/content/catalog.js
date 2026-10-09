@@ -57,7 +57,32 @@ export function buildCatalog(city) {
   // Research stations: Oscorp kiosks on roofs, eight tasks.
   const RESEARCH_KINDS = ['pipes', 'circuit', 'drones', 'pigeons', 'pipes', 'circuit', 'drones', 'cable'];
   const research = spread(rng, buildings.filter((b) => top(b) > 20 && top(b) < 90), 8, (b) => b.district).map((b, i) => ({ id: `rs${i + 1}`, kind: 'research', task: RESEARCH_KINDS[i], ...centre(b), y: top(b) + 0.9, district: b.district }));
-  return { backpacks, photos, tags, pigeons, hideouts, research, challenges: buildChallenges(city, rng), races: buildRaces(city, rng) };
+  const challenges = buildChallenges(city, rng), races = buildRaces(city, rng);
+  spreadStarts([...races, ...challenges], city); // a race starts on its first ring: races keep theirs
+  return { backpacks, photos, tags, pigeons, hideouts, research, challenges, races };
+}
+
+// Every race and challenge gets its own start marker (two Taskmaster runs in one district used to
+// share the crossing in its middle, and only the first ever started). A start that crowds an
+// earlier one moves to the nearest free street crossing around it, on land and out of any building.
+// Done after everything is placed and without the random generator, so nothing else moves.
+export const START_GAP = 40;
+export function spreadStarts(list, city) {
+  const g = city.grid;
+  const open = (x, z) => city.landAt(x, z) !== LAND.water && !city.boxes.some((b) => b.min[1] < 3 && x > b.min[0] - 2 && x < b.max[0] + 2 && z > b.min[2] - 2 && z < b.max[2] + 2);
+  const placed = [];
+  const clear = (x, z) => placed.every((q) => Math.hypot(q.x - x, q.z - z) >= START_GAP);
+  for (const c of list) {
+    if (!clear(c.x, c.z)) {
+      const near = [];
+      for (let i = -3; i <= 3; i++) for (let j = -3; j <= 3; j++) if (i || j) near.push({ x: c.x + i * g.avenueEvery, z: c.z + j * g.streetEvery });
+      near.sort((a, b) => Math.hypot(a.x - c.x, a.z - c.z) - Math.hypot(b.x - c.x, b.z - c.z) || a.x - b.x || a.z - b.z);
+      const best = near.find((q) => Math.abs(q.z) <= 940 && open(q.x, q.z) && clear(q.x, q.z));
+      if (best) { c.x = best.x; c.z = best.z; }
+    }
+    placed.push(c);
+  }
+  return list;
 }
 
 // A course of rings through the city: a start and checkpoints at a height, following avenues and
