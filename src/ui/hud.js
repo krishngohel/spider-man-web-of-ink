@@ -1,7 +1,7 @@
 import { el } from './dom.js';
 import { COPY } from './copy.js';
 import { bindingLabel } from '../core/bindings.js';
-import { placeWord, wordBox, centreBox } from './wordPlace.js';
+import { placeWord, wordBox, centreBox, actionFocusBox, moveOffFocus } from './wordPlace.js';
 import { createNoticeQueue } from './noticeQueue.js';
 
 const TIPS_KEY = 'web-of-ink-tips-v4'; // v4: tips rewritten for swing assist and zip points
@@ -68,6 +68,11 @@ export function createHud(root, getSettings) {
   try { tipIndex = Math.min(COPY.tips.length, parseInt(localStorage.getItem(TIPS_KEY) ?? '0', 10) || 0); } catch { tipIndex = 0; }
   let noAnchorT = 0;
   let lineSeed = 0;
+  // A critical's action shot: ink speed lines rushing in on the blow (screen point, start, length
+  // in ms), and the middle of the screen kept clear of words until focusUntil.
+  const burst = { x: 0, y: 0, t0: -1e9, ms: 1000 };
+  let focusUntil = -1e9;
+  let keepOff = null; // another box words keep off until focusUntil (the impact panel's word)
 
   const keys = () => {
     const b = getSettings().bindings;
@@ -97,11 +102,35 @@ export function createHud(root, getSettings) {
     help.replaceChildren(el('h3', {}, COPY.help.title), ...COPY.help.rows.map(([key, what]) => el('div', { class: 'k' }, [el('b', {}, fill(key, k)), el('span', {}, fill(what, k))])));
   }
 
+  // The action shot's speed lines: dark ink wedges from the screen edges toward the blow, leaving
+  // a clear ring round it, thinning out over the burst.
+  function drawBurst(now) {
+    const k = (now - burst.t0) / burst.ms;
+    if (k < 0 || k >= 1) return;
+    const cw = lines.width, ch = lines.height, cx = burst.x / 2, cy = burst.y / 2;
+    const R = Math.hypot(Math.max(cx, cw - cx), Math.max(cy, ch - cy));
+    const fade = k < 0.08 ? k / 0.08 : k < 0.55 ? 1 : 1 - (k - 0.55) / 0.45;
+    lctx.fillStyle = `rgba(18,16,28,${0.75 * fade})`;
+    const seed = Math.floor(burst.t0) % 997;
+    const n = 54;
+    for (let i = 0; i < n; i++) {
+      const r = Math.sin((i + 1) * 12.9898 + seed * 0.37) * 43758.5453, r2 = Math.sin((i + 5) * 78.233 + seed) * 12543.13;
+      const a = ((i + (r - Math.floor(r)) * 0.6) / n) * Math.PI * 2;
+      const inner = R * (0.2 + 0.18 * (r2 - Math.floor(r2)) + 0.12 * k);
+      const half = (0.006 + 0.012 * (r - Math.floor(r))) * Math.PI;
+      lctx.beginPath();
+      lctx.moveTo(cx + Math.cos(a) * inner, cy + Math.sin(a) * inner);
+      lctx.lineTo(cx + Math.cos(a - half) * R * 1.05, cy + Math.sin(a - half) * R * 1.05);
+      lctx.lineTo(cx + Math.cos(a + half) * R * 1.05, cy + Math.sin(a + half) * R * 1.05);
+      lctx.closePath(); lctx.fill();
+    }
+  }
   function drawLines(speed, w, h) {
     const s = getSettings();
     const amt = s.speedLines ? Math.min(1, Math.max(0, (speed - 32) / 40)) : 0;
     if (lines.width !== Math.round(w / 2) || lines.height !== Math.round(h / 2)) { lines.width = Math.round(w / 2); lines.height = Math.round(h / 2); }
     lctx.clearRect(0, 0, lines.width, lines.height);
+    if (s.speedLines) drawBurst(performance.now());
     if (amt <= 0) return;
     const cw = lines.width, ch = lines.height, cx = cw / 2, cy = ch / 2;
     lineSeed = (lineSeed + 1) % 997;
@@ -190,7 +219,8 @@ export function createHud(root, getSettings) {
       if (!w) { w = wordPool[wordNext]; wordNext = (wordNext + 1) % wordPool.length; }
       w.until = 0;
       const view = { w: innerWidth, h: innerHeight };
-      const mid = centreBox(view);
+      // Just after a critical the middle is the blow itself (the action shot frames it there).
+      const mid = now < focusUntil ? actionFocusBox(view) : centreBox(view);
       if (x > mid.left && x < mid.right && y > mid.top && y < mid.bottom) x = view.w / 2 + (x >= view.w / 2 ? 1 : -1) * (mid.right - view.w / 2) * 1.15;
       const tilt = Math.random() * 16 - 8;
       w.el.textContent = text;
@@ -201,18 +231,40 @@ export function createHud(root, getSettings) {
       if (!size) { size = { w: w.el.offsetWidth, h: w.el.offsetHeight }; if (size.w) wordSize.set(key, size); }
       const ui = [];
       for (const q of AVOID) for (const n of document.querySelectorAll(q)) { const r = n.getBoundingClientRect(); if (r.width && r.height) ui.push(r); }
+      if (keepOff && now < focusUntil) ui.push(keepOff);
       const live = wordPool.filter((q) => q !== w && q.until > now && q.box).map((q) => q.box);
       let p = placeWord(x, y, size.w, size.h, tilt, view, [...ui, mid, ...live]);
       // Crowded: overlapping another word beats covering the HUD or the middle.
       if (p.crowded) p = placeWord(x, y, size.w, size.h, tilt, view, [...ui, mid]);
       if (p.crowded) p = placeWord(x, y, size.w, size.h, tilt, view, ui);
       w.box = wordBox(p.x, p.y, size.w, size.h, tilt);
+      w.at = { x: p.x, y: p.y, w: size.w, h: size.h, rot: tilt };
       w.until = now + WORD_LIFE;
       w.el.style.left = `${p.x}px`; w.el.style.top = `${p.y}px`;
       w.el.style.setProperty('--tilt', `${tilt.toFixed(1)}deg`);
       void w.el.offsetWidth; // restart the animation
       w.el.classList.add('show');
     },
+    // A critical: the action shot frames the blow at screen point (x, y). Speed lines rush in on
+    // it, and for `ms` the middle of the screen stays clear of words (any word already there steps
+    // aside).
+    critical(x, y, ms = 1300, lines = true, avoid = null) {
+      const now = performance.now();
+      focusUntil = now + ms;
+      if (avoid) keepOff = avoid;
+      if (lines) { burst.x = x; burst.y = y; burst.t0 = now; }
+      const view = { w: innerWidth, h: innerHeight };
+      const live = wordPool.filter((q) => q.until > now && q.at);
+      const ui = keepOff ? [keepOff] : [];
+      for (const q of AVOID) for (const n of document.querySelectorAll(q)) { const r = n.getBoundingClientRect(); if (r.width && r.height) ui.push(r); }
+      for (const m of moveOffFocus(live.map((q) => ({ ...q.at, q })), actionFocusBox(view), view, ui)) {
+        const q = m.word.q;
+        q.at.x = m.x; q.at.y = m.y;
+        q.box = wordBox(m.x, m.y, q.at.w, q.at.h, q.at.rot);
+        q.el.style.left = `${m.x}px`; q.el.style.top = `${m.y}px`;
+      }
+    },
+    get focusUntil() { return focusUntil; },
     // Test hook: the boxes of the words showing now.
     liveWords() { const now = performance.now(); return wordPool.filter((q) => q.until > now && q.box).map((q) => ({ text: q.el.textContent, ...q.box })); },
     // The waypoint marker: on the point when it is on screen, pinned to the edge when it is not.

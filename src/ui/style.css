@@ -94,6 +94,19 @@ button { font: inherit; }
   text-shadow: 3px 3px 0 var(--ink); letter-spacing: 1px; }
 .lockhint.hidden { display: none; }
 .speedlines { position: absolute; inset: 0; width: 100%; height: 100%; }
+/* The tier 2 impact panel: the frozen frame in a tilted ink border on a paper gutter, a halftone
+   burst behind the hit, a big sound word in the far corner. Under the HUD (z-index 5). */
+.ui-layer > .impact-panel { position: fixed; inset: 0; pointer-events: none; z-index: 4; opacity: 0; visibility: hidden; }
+.ui-layer > .impact-panel.on { opacity: 1; visibility: visible; }
+.ui-layer > .impact-panel.out { opacity: 0; transform: scale(0.97); transition: opacity 0.12s linear, transform 0.12s ease-out; }
+.impact-panel .ip-frame { position: absolute; inset: 3.5vmin; border: 1.3vmin solid var(--ink); box-shadow: 0 0 0 100vmax rgba(245, 236, 212, 0.93); transform: rotate(var(--tilt, 3deg)); }
+.impact-panel .ip-burst { position: absolute; left: var(--ix, 50%); top: var(--iy, 50%); width: 62vmin; height: 62vmin; transform: translate(-50%, -50%); opacity: 0.5;
+  background: radial-gradient(circle, var(--ink) 1.3px, transparent 1.8px) 0 0 / 9px 9px;
+  -webkit-mask-image: radial-gradient(circle, #000 18%, transparent 70%); mask-image: radial-gradient(circle, #000 18%, transparent 70%); }
+.impact-panel .ip-word { position: absolute; font-family: var(--head); font-size: 12vmin; line-height: 1; letter-spacing: 3px; color: var(--yellow); white-space: nowrap;
+  -webkit-text-stroke: 0.5vmin var(--ink); paint-order: stroke fill; text-shadow: 1vmin 1vmin 0 var(--ink); transform: rotate(var(--wtilt, -6deg)) scale(0.6); }
+.impact-panel.on .ip-word { animation: ippop 0.18s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+@keyframes ippop { to { transform: rotate(var(--wtilt, -6deg)) scale(1); } }
 /* Sound words: comic lettering with a heavy outline, popped in, held, gone. */
 .words { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .word { position: absolute; transform: translate(-50%, -50%) rotate(var(--tilt, 0deg)) scale(0); opacity: 0; font-family: var(--head); letter-spacing: 2px;

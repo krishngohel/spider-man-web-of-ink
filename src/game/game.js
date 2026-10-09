@@ -79,7 +79,8 @@ import { createDirector } from '../story/director.js';
 import { createStoryUi } from '../ui/storyUi.js';
 import { createSlots, slotSummary } from '../ui/slots.js';
 import { createNav } from '../ui/nav.js';
-import { impactFlash } from './impact.js';
+import { createImpactJudge, createImpactTimeline, createActionGate, panelWord } from './impact.js';
+import { createImpactPanel } from '../ui/impactPanel.js';
 import { stepById } from '../story/steps.js';
 import { resolveSite } from '../story/sites.js';
 import { createContentWorld } from '../content/world.js';
@@ -767,7 +768,42 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const wordGate = (k, s) => { if (time - (wordAt.get(k) ?? -99) < s) return false; wordAt.set(k, time); return true; };
   let gdt = 0;
   // Combat feedback: words, sounds, shakes, impact frames, the HUD.
-  let impactTimer = 0, impactLong = false;
+  // Impact frames (spec P3): tier 1 the short ink flash on a heavy hit, tier 2 a comic-panel freeze
+  // on the blows that matter (impact.js decides which). The timeline runs on a real-time clock and
+  // is sampled every frame; the panel sits under the HUD.
+  const impactJudge = createImpactJudge(), impactTl = createImpactTimeline(), actionGate = createActionGate();
+  const impactOut = { impact: 0, soft: true, freeze: false, panel: 0, panelT: 0, tier: 0 };
+  const impactPanel = createImpactPanel(uiRoot);
+  const impactAt = { x: 0.5, y: 0.5 };
+  let impactPin = null, impactPinBase = 0, panelN = 0, impactFrozen = false;
+  const impactNow = () => (impactPin === null ? performance.now() : impactPinBase);
+  const reducedMotion = () => { try { return !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches; } catch { return false; } };
+  function fireImpact(tier, p) {
+    const m = settings.impactFrames;
+    // Multiplayer never freezes the world (everyone shares it): the flash only.
+    const want = session?.active ? Math.min(tier, 1) : tier;
+    const s = p ? screenOf(p.x, p.y, p.z) : null;
+    const sx = s && s.front ? s.x : innerWidth / 2, sy = s && s.front ? s.y : innerHeight / 2;
+    const got = impactTl.trigger(want, impactNow(), m);
+    if (!got) return 0;
+    impactAt.x = sx / innerWidth; impactAt.y = 1 - sy / innerHeight;
+    const panel = got === 2 && m === 'full';
+    if (panel) impactPanel.show(sx, sy, panelWord(panelN++));
+    // The panel frames the blow mid-screen: sound words step aside for a moment (and off its word).
+    if (got === 2) hud.critical(sx, sy, 1300, false, panel ? impactPanel.wordRect() : null);
+    return got;
+  }
+  // The critical action shot (finishers and knockouts), at most once every 4 s, off with camera
+  // shake off or reduced motion. Speed lines rush in on the middle, where the shot frames the blow.
+  function actionShot(at) {
+    if (camOverride || mode !== 'play' || session?.active) return false;
+    const now = performance.now();
+    if (!actionGate.want(now, { cameraShake: settings.cameraShake, reducedMotion: reducedMotion() })) return false;
+    if (!rig.actionShot(at, hero.body.p, world)) return false;
+    actionGate.mark(now);
+    hud.critical(innerWidth / 2, innerHeight / 2, 1300, true);
+    return true;
+  }
   // Hit feel on the camera (fix spec C9): the field of view punches in and springs back in about
   // 0.12 s, and the camera kicks a few centimetres along the blow for three frames.
   let fovKick = 0, camKickT = 0;
@@ -789,22 +825,13 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
           const cx = hp.x + (dx / l) * Math.max(0.4, l - 0.35), cz = hp.z + (dz / l) * Math.max(0.4, l - 0.35);
           if (e.heavy) fx.burst(cx, q.y + 0.45, cz); else fx.spark(cx, q.y + 0.45, cz);
         }
-        const hitFlash = e.heavy && (e.stop ?? 0) >= 0.08 ? impactFlash(settings.impactFrames, 'hit') : null;
-        if (hitFlash && !impactLong) {
-          const s = screenOf(e.e.body.p.x, e.e.body.p.y, e.e.body.p.z);
-          ink.setImpact(hitFlash.strength, hitFlash.soft, s.x / innerWidth, 1 - s.y / innerHeight); clearTimeout(impactTimer); impactTimer = setTimeout(() => ink.setImpact(0), hitFlash.ms);
-        }
+        const ee = e.e;
+        const tier = ee ? impactJudge.tier({ type: 'heroHit', heavy: e.heavy, stop: e.stop, ko: e.ko, counter: e.counter, boss: !!ee.boss, bossStun: ee.state === 'stun', target: ee }) : 0;
+        if (tier) { const q = ee.body.p; if (fireImpact(tier, q) === 2 && e.ko) actionShot(q); }
         break;
       }
       case 'heroHurt': sfx.event({ type: 'hurt' }); combatHud.hurt(); combat.enemies.cheer?.(); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.5); break;
-      case 'finisher': {
-        const s = screenOf(at.x, at.y, at.z);
-        const fl = impactFlash(settings.impactFrames, 'finisher');
-        if (fl) ink.setImpact(fl.strength, fl.soft, s.x / innerWidth, 1 - s.y / innerHeight);
-        clearTimeout(impactTimer); impactLong = true;
-        impactTimer = setTimeout(() => { ink.setImpact(0); impactLong = false; }, fl ? fl.ms : 220);
-        break;
-      }
+      case 'finisher': if (at) { fireImpact(2, at); actionShot(at); } break;
       case 'slam': fx.ring(e.at.x, e.at.y - 0.9, e.at.z, 2.2); if (settings.cameraShake) rig.shake = 0.8; break;
       case 'enemyOut': combatHud.ko(e.e); break;
       case 'hint': hud.caption(e.text, 2.4); break;
@@ -968,12 +995,19 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     input.update(dt);
 
     events.length = 0;
+    // Impact frames: what the timeline shows this frame (leaving play cancels one). A tier 2 freeze
+    // holds the world, the hero and his presses still (they latch and play after it).
+    if (impactTl.active && mode !== 'play') impactTl.cancel();
+    impactTl.sample(impactPin === null ? performance.now() : impactPinBase + impactPin, impactOut);
+    ink.setImpact(impactOut.impact, impactOut.soft, impactAt.x, impactAt.y);
+    impactPanel.set(impactOut.panel);
+    impactFrozen = mode === 'play' && impactOut.freeze && !session.active;
     if (mode === 'play') {
       if (input.pressed('pause')) { pauseGame(); }
       if (input.pressed('help')) hud.toggleHelp();
       if (input.pressed('map')) openMap();
       buildIntent();
-      gdt = dt * combat.timeScale(dt) * (settings.slowMo ? 0.75 : 1);
+      gdt = impactFrozen ? 0 : dt * combat.timeScale(dt) * (settings.slowMo ? 0.75 : 1);
       // The gadget wheel slows the world while it is open, and the stick picks instead of steering.
       if (combatHud.wheelOpen) { if (!session.active) gdt *= 0.25; intent.moveX = intent.moveZ = 0; }
       if (gadgetHold > 12) { if (!combatHud.wheelOpen) combatHud.openWheel(); combatHud.steerWheel(input.look, input.move); wheelUsed = true; }
@@ -1002,7 +1036,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         }
       }
       if (storyOn) director.preStep(intent, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
-      combat.preStep(intent, gdt);
+      if (!impactFrozen) combat.preStep(intent, gdt);
       const Tp = performance.now();
       // The hero's hitstop: frozen for a few frames on a blow while the world goes on.
       const heroFrozen = combat.heroCombat.c.heroStop > 0;
@@ -1015,7 +1049,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       }
       // No physics step this frame (the hero frozen in a hitstop, or a very high refresh rate):
       // combat has already read its presses, so they must not fire again next frame.
-      if (adv.steps === 0) { intent.attackPressed = false; intent.webPressed = false; intent.yankPressed = false; intent.gadgetPressed = false; intent.divePressed = false; }
+      if (adv.steps === 0 && !impactFrozen) { intent.attackPressed = false; intent.webPressed = false; intent.yankPressed = false; intent.gadgetPressed = false; intent.divePressed = false; }
       alpha = adv.alpha;
       prof('physics', Tp);
       events.push(...hero.events);
@@ -1142,8 +1176,11 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       camera.lookAt(renderP.x + 0.8, renderP.y + 1.1, renderP.z - 2.6);
       if (camera.fov !== 46) { camera.fov = 46; camera.updateProjectionMatrix(); }
     } else {
-      camera.position.set(rig.pos.x, rig.pos.y, rig.pos.z);
-      camera.lookAt(rig.pos.x + rig.fwd.x, rig.pos.y + rig.fwd.y, rig.pos.z + rig.fwd.z);
+      // The follow camera, or blended into a critical's action shot (rig.view).
+      const V = rig.view;
+      camera.position.set(V.pos.x, V.pos.y, V.pos.z);
+      camera.lookAt(V.pos.x + V.fwd.x, V.pos.y + V.fwd.y, V.pos.z + V.fwd.z);
+      if (V.k > 0) camera.rotateZ(V.roll);
       // A little roll with the hero's turns while flying (the camera leans into the swing).
       const v = hero.body.v, heading = Math.atan2(v.x, v.z);
       let turn = heading - camHeading;
@@ -1164,7 +1201,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       }
     }
     fovKick *= Math.exp(-dt * 25);
-    if (!camOverride && mode !== 'photo' && mode !== 'title' && Math.abs(camera.fov - (rig.fov + fovKick + rig.fovPop)) > 0.01) { camera.fov = rig.fov + fovKick + rig.fovPop; camera.updateProjectionMatrix(); }
+    if (!camOverride && mode !== 'photo' && mode !== 'title' && Math.abs(camera.fov - (rig.fov + fovKick + rig.fovPop + rig.view.fov)) > 0.01) { camera.fov = rig.fov + fovKick + rig.fovPop + rig.view.fov; camera.updateProjectionMatrix(); }
     if (waypoint && mode === 'play') {
       wpV.set(waypoint.x, Math.max(2, hero.body.p.y * 0.5), waypoint.z).project(camera);
       const behind = wpV.z > 1;
@@ -1189,7 +1226,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     const Tprev = performance.now();
     updatePreview(dt);
     prof('aim', Tprev);
-    fx.update(dt);
+    fx.update(impactFrozen ? 0 : dt);
     life.update(mode === 'play' ? gdt : dt * 0.5, renderP, scare);
     crowd.update(dt, camera.position, hero, { spidey: character.kind !== 'civilian' && mode === 'play' });
     {
@@ -1436,6 +1473,12 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     },
     poser: () => ({ trick: poser.trick, hand: poser.webHand }),
     setCamOverride(o) { camOverride = o; },
+    // Impact frames: this frame's sample, the action shot's blend and the word focus; pin(ms) holds
+    // the timeline ms after the next trigger (stills), pin(null) lets it run; fire a tier by hand.
+    impact: () => ({ ...impactOut, frozen: impactFrozen, shot: rig.view.k, focusUntil: hud.focusUntil, now: performance.now() }),
+    impactPin(ms) { impactPin = ms; impactPinBase = performance.now(); impactTl.reset(); },
+    fireImpact: (tier, p) => fireImpact(tier, p ?? hero.body.p),
+    actionShot: (p) => { actionGate.reset(); return actionShot(p ?? hero.body.p); },
     startTrace() { trace = []; },
     stopTrace() { const t = trace; trace = null; return t; },
     setSetting(k, v) { applySettings({ ...settings, [k]: v }); },

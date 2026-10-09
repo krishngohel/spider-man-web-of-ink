@@ -55,3 +55,24 @@ export function centreBox(view, k = 0.16) {
   const rx = view.w * k, ry = view.h * k, cx = view.w / 2, cy = view.h / 2;
   return { left: cx - rx, right: cx + rx, top: cy - ry, bottom: cy + ry };
 }
+
+// While a critical's action shot (and its impact panel) frames the blow, the middle third of the
+// screen and most of its height is the blow itself (Gotham's actionFocusBox): words keep off it.
+export function actionFocusBox(view) {
+  return { left: view.w * 0.33, right: view.w * 0.67, top: view.h * 0.2, bottom: view.h * 0.82 };
+}
+
+// Words ({ x, y, w, h, rot }) that cover `focus` get a new spot beside it, on screen and off `ui` and
+// the other words. Returns the moves ({ word, x, y }); words already clear of it are not listed.
+export function moveOffFocus(words, focus, view, ui = []) {
+  const moves = [];
+  for (const word of words) {
+    const b = wordBox(word.x, word.y, word.w, word.h, word.rot);
+    if (!(b.right > focus.left && b.left < focus.right && b.bottom > focus.top && b.top < focus.bottom)) continue;
+    const others = words.filter((o) => o !== word).map((o) => wordBox(o.x, o.y, o.w, o.h, o.rot));
+    let p = placeWord(word.x, word.y, word.w, word.h, word.rot, view, [...ui, focus, ...others]);
+    if (p.crowded) p = placeWord(word.x, word.y, word.w, word.h, word.rot, view, [...ui, focus]);
+    moves.push({ word, x: p.x, y: p.y });
+  }
+  return moves;
+}
