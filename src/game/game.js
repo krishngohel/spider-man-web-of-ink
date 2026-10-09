@@ -487,9 +487,10 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const dynRes = createDynamicRes({ missLimit: 0.03, start: devicePixelRatio > 1.5 ? 0.8 : 1, onChange: () => resize() });
   dynRes.setEnabled(settings.dynamicRes);
   const capDetector = createFrameCapDetector();
+  let benchPixelRatio = null; // ?bench=1 holds a fixed resolution while it measures
   function resize() {
     const w = innerWidth, h = innerHeight;
-    renderer.setPixelRatio(basePixelRatio() * sanitizeResScale(settings.renderScale, dynRes.scale, 0.45));
+    renderer.setPixelRatio(benchPixelRatio ?? basePixelRatio() * sanitizeResScale(settings.renderScale, dynRes.scale, 0.45));
     renderer.setSize(w, h, false);
     ink.setSize(w, h);
     camera.aspect = w / h;
@@ -1211,6 +1212,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     input.endFrame();
 
     const scriptMs = performance.now() - t0;
+    state.stepMs = scriptMs - renderMs; // the frame's own script time (read by ?bench=1)
     dynRes.update(dtMs);
     if (capDetector.frame(dtMs, scriptMs)) { hud.lowPower(); dynRes.capTo(30); }
     // The game's own CPU work: the frame minus the render submission, which can block on a busy GPU
@@ -1464,7 +1466,24 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
 
   requestAnimationFrame((t) => { last = t; tick(t); });
   const at = params.get('at');
-  if (at === 'swing') enterPlay();
+  const bench = params.get('bench') === '1';
+  if (at === 'swing' || bench) enterPlay();
   else if (at && stepById(at)) devStory(at);
   else menus.showTitle();
+  // ?bench=1: the one-link benchmark for the player's own machine (loaded only when asked for).
+  if (bench) {
+    import('../dev/perfBench.js').then(({ runPerfBench }) => runPerfBench({
+      renderer, ink, scene, dynRes, crowd, state,
+      getQuality: () => quality,
+      basePixelRatio,
+      setPixelRatio: (pr) => { benchPixelRatio = pr; resize(); },
+      // The title shot's ledge: the hero on the spawn roof's west edge, looking out over the city,
+      // golden hour held and clear skies, so every row draws the same frame.
+      place: () => {
+        photoHour = 17.4; weatherState.from = weatherState.to = 'clear'; weatherState.k = 1; weatherState.next = 1e9;
+        placeHeroAt(ledge.x + 0.3, ledge.y, ledge.z, 0, 0, 0, 'ground', -Math.PI / 2); rig.pitch = 0.12;
+      },
+      isClear: () => mode === 'play' && !storyOn,
+    }));
+  }
 }
