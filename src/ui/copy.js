@@ -210,7 +210,7 @@ export const COPY = {
     speedLines: ['Speed lines'],
     soundWords: ['Sound words', 'THWIP! and friends, in comic lettering.'],
     cameraShake: ['Camera shake', 'The camera kicks on big hits and hard landings.'],
-    impactFrames: ['Impact frames', 'A quick ink flash on the biggest hits. Soft is shorter and dimmer.'],
+    impactFrames: ['Impact frames', 'An ink flash on big hits, and a comic panel freeze on finishers and knockouts. Soft is shorter, with no panel.'],
     impactValues: { full: 'Full', soft: 'Soft', off: 'Off' },
     tips: ['Tutorial tips', 'Hints on what to press, on screen while you play.'],
     resetTips: ['Show the tips again', 'Starts the first-play tips over from the beginning.'],
