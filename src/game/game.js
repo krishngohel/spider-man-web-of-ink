@@ -84,6 +84,7 @@ import { createContentWorld } from '../content/world.js';
 import { createPuzzles } from '../ui/puzzles.js';
 import { createTracker } from '../ui/tracker.js';
 import { createSplashMemory } from './splash.js';
+import { watchContextLoss } from '../ui/contextLost.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
@@ -311,6 +312,9 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     save.world.hour = clock.hour;
     if (save.slot <= 3) writeSlot(window.localStorage, save);
   };
+  // The GPU dropped the WebGL context: save the play there was (never the title's rooftop over a
+  // slot's last spot, never a multiplayer world), then a comic card asks for a reload.
+  watchContextLoss(canvas, { onLost: () => { if (mode === 'title' || session.active) return false; persist(); return true; } });
   // Map, waypoint and subway fast travel.
   let waypoint = null;
   const wpV = new THREE.Vector3();
