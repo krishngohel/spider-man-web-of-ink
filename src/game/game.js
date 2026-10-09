@@ -83,6 +83,7 @@ import { resolveSite } from '../story/sites.js';
 import { createContentWorld } from '../content/world.js';
 import { createPuzzles } from '../ui/puzzles.js';
 import { createTracker } from '../ui/tracker.js';
+import { createSplashMemory } from './splash.js';
 
 export async function startGame({ canvas, params, onProgress = () => {} }) {
   performance.mark('boot:start');
@@ -830,17 +831,18 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       persist();
     }
   }
-  // The river: the last place the hero stood on something, and a splash that brings him back.
-  const lastSafe = { x: spawn.x, y: spawn.y, z: spawn.z, t: 0 };
+  // The river: a splash brings the hero back to dry land (see splash.js for where).
+  const splashMem = createSplashMemory(spawn, city.isWater);
   let splashT = -1;
   function riverCheck(dt) {
     const p = hero.body.p;
     if (splashT >= 0) {
       splashT += dt;
       if (splashT > 0.9) {
-        hero.place(lastSafe.x, lastSafe.y, lastSafe.z, 0, 0, 0, 'ground');
-        prevP.x = renderP.x = lastSafe.x; prevP.y = renderP.y = lastSafe.y; prevP.z = renderP.z = lastSafe.z;
-        rig.focus.x = lastSafe.x; rig.focus.y = lastSafe.y + 0.55; rig.focus.z = lastSafe.z;
+        const r = splashMem.respawn();
+        hero.place(r.x, r.y, r.z, 0, 0, 0, r.state);
+        prevP.x = renderP.x = r.x; prevP.y = renderP.y = r.y; prevP.z = renderP.z = r.z;
+        rig.focus.x = r.x; rig.focus.y = r.y + 0.55; rig.focus.z = r.z;
         splashT = -1;
         hud.fade(false);
       }
@@ -856,10 +858,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       hud.fade(true);
       return;
     }
-    if ((hero.state === 'ground' || hero.state === 'wall') && hero.speed < 12) {
-      lastSafe.t += dt;
-      if (lastSafe.t > 0.4) { lastSafe.x = p.x; lastSafe.y = p.y + (hero.state === 'wall' ? 0 : 0.01); lastSafe.z = p.z; lastSafe.t = 0; if (hero.state === 'wall') { lastSafe.x += hero.wall.nx * 0.4; lastSafe.z += hero.wall.nz * 0.4; } }
-    }
+    splashMem.record(p, hero.state, hero.speed, dt, hero.wall);
   }
   function worldEvent(e) {
     const p = hero.body.p;
