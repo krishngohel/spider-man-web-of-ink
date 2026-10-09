@@ -47,9 +47,8 @@ test('a combat set that never arrives leaves the game on the Quaternius clips, s
   expect(errors).toEqual([]);
 });
 
-test('the page has a favicon and preloads the boot models', async ({ page }) => {
+test('the page has a drawn favicon and a description', async ({ page }) => {
   await page.goto('/');
   expect(await page.locator('link[rel="icon"]').getAttribute('href')).toMatch(/^data:image\/svg\+xml/);
-  const pre = await page.locator('link[rel="preload"][as="fetch"]').evaluateAll((ls) => ls.map((l) => l.getAttribute('href').split('/').pop()));
-  expect(pre.sort()).toEqual(['anims1.glb', 'anims2.glb', 'hair_long.glb', 'hero_f.glb', 'hero_m.glb']);
+  expect(await page.locator('meta[name="description"]').getAttribute('content')).toContain('fan game');
 });
