@@ -30,7 +30,7 @@ if (engine === 'firefox') {
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-await p.goto(url);
+await p.goto(url + '?nocine=1'); // story cinematics off, as the comics are read through with Space
 await p.evaluate(() => localStorage.removeItem('web-of-ink-save-3'));
 await p.reload();
 await p.waitForFunction(() => window.__game?.state?.ready, null, { timeout: 120000 });

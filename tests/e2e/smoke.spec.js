@@ -125,7 +125,10 @@ test('story: a new game in slot 1 opens the first comic page, Esc reads on, play
   await page.waitForFunction(ready, null, { timeout: 90000 });
   await page.locator('.title .mbtn', { hasText: 'STORY' }).click();
   await page.locator('.slot').first().locator('.mbtn', { hasText: 'NEW GAME' }).click();
-  await page.waitForFunction(() => window.__game.mode === 'comic', null, { timeout: 15000 });
+  // The opening cinematic comes first (Space skips it), then the first comic page.
+  await page.waitForFunction(() => window.__game.cinematic.active, null, { timeout: 15000 });
+  await page.keyboard.press('Space');
+  await page.waitForFunction(() => window.__game.mode === 'comic' && !window.__game.cinematic.active, null, { timeout: 15000 });
   await expect(page.locator('.comic .cpanel img').first()).toBeVisible();
   await expect(page.locator('.comic .ccaption').first()).toContainText('New York');
   await page.keyboard.press('Escape');

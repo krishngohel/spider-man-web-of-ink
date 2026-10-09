@@ -19,7 +19,7 @@ const p = await b.newPage({ viewport: { width: 1280, height: 720 } });
 const errors = [];
 p.on('pageerror', (e) => errors.push(e.message));
 p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
-await p.goto(url + '?at=swing');
+await p.goto(url + '?at=swing&nocine=1');
 await p.waitForFunction(() => window.__game?.state?.ready, null, { timeout: 120000 });
 await sleep(4000); // the mocap clips load after ready
 

@@ -28,6 +28,19 @@ const tiles = [];
 let bad = 0;
 for (const s of list) {
   await p.evaluate((id) => window.__game.storyAt(id), s.id);
+  // A step with a cinematic (an act opener, a boss reveal, the finale): one frame of it for the
+  // sheet, then it is skipped, the way the comics are read through below.
+  if (s.cine || s.reveal) {
+    await p.waitForFunction(() => window.__game.cinematic.active, null, { timeout: 6000 }).catch(() => {});
+    if (await p.evaluate(() => window.__game.cinematic.active)) {
+      await sleep(900);
+      const f = path.join(out, `${s.id}-cine.png`);
+      await p.screenshot({ path: f });
+      tiles.push({ f, label: `${s.id} cine` });
+      await p.evaluate(() => window.__game.cinematic.skip());
+      await p.waitForFunction(() => !window.__game.cinematic.active, null, { timeout: 5000 }).catch(() => {});
+    } else { bad++; console.log(`FAIL  ${s.id}: its cinematic never started`); }
+  }
   if (s.type === 'panels') {
     await p.waitForFunction(() => window.__game.story().phase === 'read', null, { timeout: 15000 }).catch(() => {});
     await sleep(400);
