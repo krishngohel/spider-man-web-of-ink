@@ -92,6 +92,7 @@ export function createCityLife(scene, city, quality) {
   peds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   peds.frustumCulled = false;
   peds.castShadow = false;
+  peds.name = 'pedestrians';
   group.add(peds);
   const SHIRTS = [0xd8392b, 0x2a5fb0, 0xf2c230, 0x3f8f5a, 0xeeeeea, 0x7a4a9a, 0xe07a2a, 0x2b2b33, 0x5aa0c8];
   // skinned: a real figure (crowd.js) stands in for this one near the camera; pause: seconds it
@@ -131,6 +132,7 @@ export function createCityLife(scene, city, quality) {
   cars.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   cars.frustumCulled = false;
   cars.castShadow = quality.shadows;
+  cars.name = 'traffic';
   group.add(cars);
   const car = Array.from({ length: CAR_N }, (_, i) => ({ axis: 0, lane: 0, pos: 0, dir: 1, speed: 0, max: 12, alive: false, police: i % 17 === 0 }));
   car.forEach((c, i) => cars.setColorAt(i, new THREE.Color(c.police ? 0x22252e : CAR_COLORS[i % CAR_COLORS.length])));

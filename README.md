@@ -69,15 +69,29 @@ node scripts/boss-check.mjs <url> [ids]    # a pilot beats every boss, no god mo
 node scripts/story-walk.mjs <dir> <url>    # a contact sheet of every story beat
 node scripts/content-check.mjs <url>       # collectibles, crimes, races, research, tracker
 node scripts/mp-check.mjs                  # five clients on the local relay
-node scripts/playthrough.mjs <url>         # title to credits on a frozen build
+node scripts/playthrough.mjs <url>         # title to credits on a frozen build (ENGINE=firefox)
 node scripts/fps-check.mjs <url>           # frame budget on a frozen build
 node scripts/load-time.mjs <url>           # under 4 s to the title at 40 Mbps
-node scripts/webkit-check.mjs <url>        # the Safari engine
+node scripts/webkit-check.mjs <url>        # the Safari engine (ENGINE=firefox for Firefox)
+node scripts/bench.mjs <url>               # the ?bench=1 table headless (UNCAPPED=1: vsync off)
+node scripts/boot-errors.mjs <url>         # every console error while it boots
+node scripts/soak.mjs [minutes] <url>      # heap over a few minutes of teleports
+node scripts/gpu-parts.mjs [hour] <url>    # GPU time with parts of the scene hidden
+node scripts/clip-compare.mjs <a> <b>      # two builds of a clip file play the same
 ```
 
 Every script browser is muted. `?at=<step id>` starts the story at any step in a scratch save.
+`?bench=1` runs a benchmark on your own machine and shows a table to screenshot.
+
+Assets: `node scripts/optimize-assets.mjs` packs the mocap clip sets (rotations as shorts,
+meshopt); `node scripts/encode-music.mjs` re-encodes the soundtrack from `assets-src/music`.
+A push to `main` runs the unit tests, builds and deploys to GitHub Pages
+(`.github/workflows/pages.yml`).
 
 ## Credits
 
-Character body and animations: Quaternius (CC0). Fonts: Bangers and Barlow Condensed (Google
-Fonts, OFL). Everything else (city, suits, comic art, portraits, sound, story) is made in code.
+Bodies and base animations by Quaternius (CC0); motion capture from Mixamo (Adobe), retargeted to
+the game skeleton; the classic film suit is "The Amazing Spider-Man 2 Spider-Man" by fredbear1211
+on Sketchfab (CC BY 4.0, fitted to the game skeleton); six CC0 music tracks from OpenGameArt.org;
+Bangers and Barlow Condensed fonts (OFL). The city, the ink look, comic pages, sound effects and
+the story are made in code. Every source, author and licence is in [CREDITS.md](CREDITS.md).

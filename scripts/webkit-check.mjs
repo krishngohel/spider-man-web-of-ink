@@ -27,9 +27,9 @@ p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 p.on('pageerror', (e) => errors.push(e.message));
 const t0 = Date.now();
 await p.goto(url);
-await p.waitForFunction(() => window.__game?.state?.ready || document.querySelector('#loading.error'), null, { timeout: 180000 });
+await p.waitForFunction(() => window.__game?.state?.ready || document.querySelector('#loading.error, #loading.failed'), null, { timeout: 180000 });
 const bootMs = Date.now() - t0;
-const err = await p.evaluate(() => !!document.querySelector('#loading.error'));
+const err = await p.evaluate(() => !!document.querySelector('#loading.error, #loading.failed'));
 console.log(`${engine} boot ${bootMs} ms${err ? ' (LOADING ERROR)' : ''}`);
 await p.screenshot({ path: `${out}/title.png` });
 if (!err) {

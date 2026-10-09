@@ -24,7 +24,7 @@ export function createCrowd({ scene, assets, buildCharacter, life, count = 12 })
     scene.add(m.root);
     pool.push({ m, ped: null, last: { x: 0, z: 0 }, clip: '', react: null, face: 0 });
   }
-  let swapT = 0, bump = null;
+  let swapT = 0, bump = null, hidden = false;
   const peds = life.peds;
   const ready = (m) => m.animator.has('Walking');
 
@@ -42,7 +42,7 @@ export function createCrowd({ scene, assets, buildCharacter, life, count = 12 })
     // The one within reach that can be fist-bumped right now, if any.
     get bumpable() { return bump; },
     update(dt, cam, hero, { spidey = true } = {}) {
-      if (!pool.length || !ready(pool[0].m)) return;
+      if (hidden || !pool.length || !ready(pool[0].m)) return;
       swapT -= dt;
       if (swapT <= 0) {
         swapT = SWAP_EVERY;
@@ -116,5 +116,7 @@ export function createCrowd({ scene, assets, buildCharacter, life, count = 12 })
       return { x: c.m.root.position.x, z: c.m.root.position.z };
     },
     clear() { for (const c of pool) release(c); },
+    // The ?bench=1 ablation: no real figures at all until shown again.
+    setHidden(on) { hidden = !!on; if (hidden) { for (const c of pool) release(c); bump = null; } },
   };
 }

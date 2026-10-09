@@ -186,6 +186,7 @@ export function buildStreetMeshes(props, scene, quality) {
     nearCars.castShadow = quality.shadows; farCars.castShadow = false;
     nearCars.receiveShadow = farCars.receiveShadow = quality.shadows;
     nearCars.frustumCulled = farCars.frustumCulled = false;
+    nearCars.name = farCars.name = 'parkedCars';
     // Each set is packed at the front of its mesh and drawn with count = its size (a zero-scaled
     // instance still runs every vertex, shadow pass included, so hiding by scale saved nothing).
     const cols = props.cars.map((c) => new THREE.Color(c.color));

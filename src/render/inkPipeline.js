@@ -337,8 +337,9 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
 
   // Benchmark switches: cachedShadows skips the shadow map update; repeat draws the composite k
   // times (Safari has no reliable GPU timer: time it by the slope of frame time against k,
-  // scripts/perf-repeat.mjs). Never set in normal play.
-  const debug = { cachedShadows: false, repeat: 1 };
+  // scripts/perf-repeat.mjs); skipComposite draws the scene but not the ink pass (the ?bench=1
+  // ablation; the screen holds its last picture). Never set in normal play.
+  const debug = { cachedShadows: false, repeat: 1, skipComposite: false };
 
   // The fog's colour and range (a THREE.Fog the game drives) and the sky's colours, shared by
   // reference so they follow the time of day.
@@ -371,7 +372,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
     uniforms.uCamMatrix.value.copy(camera.matrixWorld);
     uniforms.uCamPos.value.setFromMatrixPosition(camera.matrixWorld);
     renderer.setRenderTarget(null);
-    for (let k = 0; k < debug.repeat; k++) renderer.render(quadScene, quadCam);
+    if (!debug.skipComposite) for (let k = 0; k < debug.repeat; k++) renderer.render(quadScene, quadCam);
 
     camera.layers.set(0);
     camera.layers.enable(LAYER_FX);

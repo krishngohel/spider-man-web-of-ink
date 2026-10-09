@@ -94,5 +94,8 @@ if (isMain) {
   if (group === 'combat') args.push('--append');
   else args.push('--out', 'public/assets/anims_social.glb', '--data', 'none', '--fps', '20');
   const r = spawnSync(process.execPath, [...args, ...specs], { stdio: 'inherit' });
-  process.exit(r.status ?? 1);
+  if (r.status !== 0) process.exit(r.status ?? 1);
+  // Shrink the rebuilt set (rotations as shorts, meshopt-packed) the way the game ships it.
+  const o = spawnSync(process.execPath, ['scripts/optimize-assets.mjs', `anims_${group}.glb`], { stdio: 'inherit' });
+  process.exit(o.status ?? 1);
 }
