@@ -99,11 +99,13 @@ const click = async (button = 'left') => { await p.mouse.down({ button }); await
   const st = await state();
   results.push(['web blast on a combo of 10', st.combo < 3]);
 }
-// 6. Street throw: a gang brings loose bins and crates; the yank key throws the nearest at the target.
+// 6. Street throw: a gang brings loose bins and crates; aimed at one, the yank key throws it at the
+// target (aimed at the thug, it yanks the thug instead: the next check).
 {
   await fresh([[0, -197]]);
   const before = await p.evaluate(() => window.__game.combat().props.list.length);
-  const s = await state(); await look(s.enemies[0].x, s.enemies[0].z);
+  const crate = await p.evaluate(() => { const h = window.__game.hero().p; const l = window.__game.combat().props.list.filter((q) => q.state === 'rest'); l.sort((a, b) => Math.hypot(a.p.x - h.x, a.p.z - h.z) - Math.hypot(b.p.x - h.x, b.p.z - h.z)); return l[0] ? { x: l[0].p.x, z: l[0].p.z } : null; });
+  if (crate) await look(crate.x, crate.z);
   await sleep(150);
   await p.keyboard.press('KeyE');
   await sleep(120);
@@ -111,6 +113,20 @@ const click = async (button = 'left') => { await p.mouse.down({ button }); await
   await sleep(1000);
   const after = await p.evaluate(() => window.__game.combat().props.list.length);
   results.push([`street throw (${before} props round the gang)`, before > 0 && (flying || after < before)]);
+}
+// 6b. Aimed at the thug with crates around: the yank pulls the thug, no crate flies, the hero stays.
+{
+  await fresh([[0, -192]]);
+  const s = await state(), e0 = s.enemies[0], h0 = (await hero()).p;
+  await look(e0.x, e0.z);
+  await sleep(150);
+  await p.keyboard.press('KeyE');
+  await sleep(150);
+  const flying = await p.evaluate(() => window.__game.combat().props.list.some((q) => q.state === 'flying'));
+  await sleep(500);
+  const e1 = (await state()).enemies.find((q) => q.id === e0.id) ?? e0, h1 = (await hero()).p;
+  const pulled = Math.hypot(e1.x - h1.x, e1.z - h1.z) < Math.hypot(e0.x - h0.x, e0.z - h0.z) - 1;
+  results.push(['yank aimed at a thug pulls him, the hero stays', pulled && !flying && Math.hypot(h1.x - h0.x, h1.y - h0.y, h1.z - h0.z) < 2]);
 }
 // 7. Shield vault: jump at a shield thug and land behind him.
 {

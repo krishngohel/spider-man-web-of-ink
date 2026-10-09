@@ -39,7 +39,9 @@ async function sustain() {
 // Melee: face the boss, close in, punch; dodge just before a blow lands; yank crates into him.
 async function brawl(bossE, h, st, opts = {}) {
   if (await sustain()) return 'heal';
-  // Stuck to a wall or a sign (walked into it): hop off, a crawler cannot dodge or punch.
+  // On a wall under a boss up on the roof (a zip sticks where it lands): run up it, the way a
+  // player would. Anywhere else (walked into a wall or a sign): hop off, a crawler cannot punch.
+  if (h.state === 'wall' && bossE.y - h.p.y > 3) { await ev(([y]) => window.__game.setLook(y, 0.9), [yawTo(h, bossE)]); await key('KeyW', true); await key('ShiftLeft', true); await sleep(250); await key('ShiftLeft', false); return 'run up'; }
   if (h.state === 'wall') { await key('KeyW', false); await page.keyboard.press('Space'); await sleep(200); return 'unstick'; }
   // Knocked off a roof: zip back up to him.
   if (bossE.y - h.p.y > 4 && Math.abs(bossE.vy) < 0.8 && h.state === 'ground') { await key('KeyW', false); await ev(([x, y, z]) => window.__game.aimAt(x, y + 0.5, z), [bossE.x, bossE.y, bossE.z]); await sleep(30); await page.keyboard.press('KeyQ'); await sleep(700); return 'zip'; }

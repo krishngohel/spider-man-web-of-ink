@@ -37,6 +37,10 @@ const ADHESION = 0.5;
 const EDGE_LAUNCH = 1.8;
 // A ledge within this far above the body centre (m) is grabbed and mantled, not stuck to.
 const MANTLE_UP = 2.4, MANTLE_DOWN = 0.4;
+// A zip's sideways swing around its anchor fades at this rate (1/s); a vault over a roof edge goes
+// this fast inward (m/s); off the side of a wall he rises at most this fast; a zip to a face this
+// close under a roof edge (m) climbs over it, and does so once within ZIP_OVER of the top.
+const ZIP_SIDE_DAMP = 10, VAULT_IN = 4, WALL_OFF_UP = 9, ZIP_OVER = 6.5, ZIP_EDGE = 6, WALL_LET_GO = 0.25;
 // Swinging round a building corner: an extra push along the way, at most this (m/s), at most this
 // often (s).
 const CORNER_BOOST = 4, CORNER_GAP = 0.6;
@@ -254,9 +258,9 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     if (swing.active) swing.release();
     hero.pendingWeb = null; hero.zip = null; hero.wallMomentum = false;
     const vn = v.x * nx + v.z * nz;
-    const tx = (v.x - vn * nx) * 0.7, tz = (v.z - vn * nz) * 0.7;
-    const vy = Math.sqrt(2 * g() * Math.max(0.4, up + 0.8));
-    const inward = Math.max(4, Math.min(9, Math.abs(vn) * 0.6));
+    const tx = (v.x - vn * nx) * 0.5, tz = (v.z - vn * nz) * 0.5;
+    const vy = Math.sqrt(2 * g() * Math.max(0.4, up + 0.8)); // just enough to clear the edge
+    const inward = Math.max(3, Math.min(5.5, Math.abs(vn) * 0.5));
     push(tx - nx * inward - v.x, vy - v.y, tz - nz * inward - v.z, 'mantle over the edge', true);
     hero.state = 'air'; hero.airTime = 0.2;
     hero.launchUntil = hero.time + tune.launchWindow + 0.5;
@@ -301,7 +305,7 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     }
     // The winch reels right up to the surface: the zip ends when the hero touches it.
     rope.attach(hit, body, 0.3);
-    hero.zip = { top: hit.ny > 0.5, box: hit.box };
+    hero.zip = { top: hit.ny > 0.5, box: hit.box, y: hit.y };
     hero.zipTime = 0;
     hero.pendingWeb = null;
     hero.state = 'zip';
@@ -617,6 +621,19 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     applyGravity(body, g(), dt);
     applyDrag(body, dragK(g(), tune.terminal), dt);
     rope.setReel(tune.zipSpeed, tune.zipTension);
+    // A zip pulls straight in. Gravity swings the body sideways around the anchor, and as the
+    // winch shortens the line that swing spins up (a skater pulling in her arms): zips arrived at
+    // 60 m/s and flung the hero over the roof. The sideways part is damped and the speed capped.
+    {
+      const a = rope.pivot, p0 = body.p, v0 = body.v;
+      const ux = a.x - p0.x, uy = a.y - p0.y, uz = a.z - p0.z, ul = Math.hypot(ux, uy, uz) || 1;
+      const vr = (v0.x * ux + v0.y * uy + v0.z * uz) / ul;
+      const k = 1 - Math.exp(-ZIP_SIDE_DAMP * dt);
+      const tx = v0.x - vr * ux / ul, ty = v0.y - vr * uy / ul, tz = v0.z - vr * uz / ul;
+      applyDv(body, 'rope', -tx * k, -ty * k, -tz * k);
+      const sp = Math.hypot(v0.x, v0.y, v0.z), cap = tune.zipSpeed * 1.1;
+      if (sp > cap) { const c = cap / sp - 1; applyDv(body, 'rope', v0.x * c, v0.y * c, v0.z * c); }
+    }
     moveOnRope(dt);
     const p = body.p, v = body.v;
     const w = rope.pivot;
@@ -643,7 +660,27 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
       if (hero.quickZip && intent.jump) { pointLaunch(intent); hero.state = 'air'; hero.airTime = 0; }
       return;
     }
-    if (touch.wall && enterWall(touch)) { hero.launchUntil = hero.time + tune.launchWindow; return; }
+    // A zip to a roof, or to the face just under its edge, that meets the face near the top: up
+    // and over onto the roof.
+    const toEdge = hero.zip && (hero.zip.top || (hero.zip.box && hero.zip.box.maxY - hero.zip.y < ZIP_EDGE));
+    if (touch.wall && toEdge && touch.box && touch.box.maxY - body.p.y < ZIP_OVER && touch.box.maxY - body.p.y > -0.5) {
+      const v = body.v, h = Math.hypot(touch.nx, touch.nz) || 1, nx = touch.nx / h, nz = touch.nz / h;
+      rope.release();
+      const vy = Math.sqrt(2 * g() * Math.max(0.6, touch.box.maxY - body.p.y + 0.6));
+      push(-nx * VAULT_IN - v.x, vy - v.y, -nz * VAULT_IN - v.z, 'zip over the edge', true);
+      hero.state = 'air'; hero.airTime = 0.2; hero.zip = null;
+      hero.launchUntil = hero.time + tune.launchWindow + 0.4;
+      emit('vault');
+      return;
+    }
+    if (touch.wall && enterWall(touch)) {
+      // Arrival on a face sticks: hands and feet take the zip's speed (it is mostly upward when
+      // zipping from the street, and kept it slid the hero up and off the top).
+      const v = body.v;
+      push(-v.x * 0.85, Math.min(v.y, 2) - v.y, -v.z * 0.85, 'zip sticks to the wall', true);
+      hero.launchUntil = hero.time + tune.launchWindow;
+      return;
+    }
     if (hero.zipTime > ZIP_TIMEOUT) { hero.zip = null; rope.release(); toAir(); emit('release'); }
   }
 
@@ -705,6 +742,17 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     const thx = v.x - vn * nx, thz = v.z - vn * nz; // along the wall, horizontal
     const mx = intent.moveX, mz = intent.moveZ;
     const into = -(mx * nx + mz * nz);
+    // The stick held away from the wall a moment lets go of it (holding it there pinned the hero
+    // in place: a zip into a short wall left him stuck on it).
+    hero.wallAwayT = into < -0.6 ? (hero.wallAwayT ?? 0) + dt : 0;
+    if (hero.wallAwayT > WALL_LET_GO) {
+      hero.wallAwayT = 0;
+      push(nx * 3 - vn * nx, Math.max(0, 1.5 - v.y), nz * 3 - vn * nz, 'let go of the wall');
+      hero.state = 'air'; hero.airTime = 0.1; hero.wallMomentum = false;
+      emit('release');
+      move(dt);
+      return;
+    }
     const lx = mx + into * nx, lz = mz + into * nz; // lateral input along the wall
     let wantHx, wantHz, wantY, accH, accY;
     const lat = Math.hypot(lx, lz);
@@ -740,14 +788,24 @@ export function createHero(world, { gravity = 'comic', assist = 'normal' } = {})
     } else {
       if (cornerWrap()) return;
       hero.wallLost += dt;
-      if (hero.wallLost > WALL_LOST) {
-        const box = hero.wall.box;
-        const p = body.p;
-        if (v.y > 1 && box && p.y + 1.5 >= box.maxY && p.y - 0.9 <= box.maxY + 0.5) {
-          // Ran up past the roof edge with the hands still on it: vault onto the roof.
-          push(-nx * 4, 5, -nz * 4, 'wall vault', true);
+      const box = hero.wall.box;
+      const p = body.p;
+      // Run up past the top of the face: vault at once (waiting out WALL_LOST at a wall run's
+      // speed carried him metres higher first).
+      const overTop = v.y > 1 && box && p.y + 1.5 >= box.maxY && p.y - 0.9 <= box.maxY + 3;
+      if (hero.wallLost > WALL_LOST || overTop) {
+        if (overTop) {
+          // Ran up past the roof edge with the hands still on it: a short hop onto the roof. The
+          // velocity is set, not added to: added on top of a wall run's 15 m/s it flung him
+          // metres into the air and a dozen metres across the roof.
+          // The hop is exactly what clears the edge from here, whatever speed he ran up at.
+          const vn = v.x * nx + v.z * nz, ax = (v.x - vn * nx) * 0.5, az = (v.z - vn * nz) * 0.5;
+          const vy = Math.sqrt(2 * g() * Math.max(0.3, box.maxY - p.y + 1));
+          push(ax - nx * VAULT_IN - v.x, vy - v.y, az - nz * VAULT_IN - v.z, 'wall vault', true);
           emit('vault');
         }
+        // Off the side of a wall at speed (no roof to land on): a pop, not a launch.
+        else if (v.y > WALL_OFF_UP) push(0, WALL_OFF_UP - v.y, 0, 'off the wall', true);
         hero.state = 'air'; hero.airTime = 0.2; hero.wallMomentum = false;
         return;
       }

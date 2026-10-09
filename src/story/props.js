@@ -101,9 +101,18 @@ export function createProps({ scene, world }) {
     list, add, remove, tryYank, lift, drop, throwAt, step,
     // A street throw (Insomniac's L1 + R1): the nearest loose thing within r metres of the hero
     // flies at the target.
-    yankNearest(heroP, target, r = 9) {
+    // aim (optional, a horizontal direction): only a crate within about 25 degrees of it, and
+    // nearer the aim than the target, is thrown (aimed at a thug, E yanks the thug).
+    yankNearest(heroP, target, r = 9, aim = null) {
       let best = null, bd = r;
-      for (const p of list) { if (p.state !== 'rest') continue; const d = Math.hypot(p.p.x - heroP.x, p.p.z - heroP.z); if (d < bd) { bd = d; best = p; } }
+      const al = aim ? Math.hypot(aim.x, aim.z) || 1 : 1;
+      const off = (x, z) => { const l = Math.hypot(x - heroP.x, z - heroP.z) || 1; return 1 - ((x - heroP.x) * aim.x + (z - heroP.z) * aim.z) / (l * al); };
+      for (const p of list) {
+        if (p.state !== 'rest') continue;
+        const d = Math.hypot(p.p.x - heroP.x, p.p.z - heroP.z);
+        if (aim && target && (off(p.p.x, p.p.z) > 0.094 || off(p.p.x, p.p.z) > off(target.body.p.x, target.body.p.z))) continue;
+        if (d < bd) { bd = d; best = p; }
+      }
       if (!best || !target) return null;
       const tp = target.body.p, d = Math.hypot(tp.x - best.p.x, tp.z - best.p.z);
       launch(best, { x: tp.x, y: tp.y + 0.4, z: tp.z }, Math.max(0.35, Math.min(0.9, d / 24)), 'hero');

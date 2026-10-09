@@ -346,6 +346,10 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     // A dodge needs a fight nearby, or an attack on its way (a shot or a dive from far off).
     const close = engaged.some((e) => toward(e).d < 15 + COMBAT.senseRange || (e.state === 'windup' && toward(e).d < 45 + COMBAT.senseRange));
     hero.fightClose = close; // dive is a dodge here, not a wall dash
+    // Near a fight E belongs to combat (yank, throw): it never also fires a hang web, even on a step
+    // where combat cannot act on it (staggered by a hit, a move playing); that reeled the hero off
+    // to a building mid-fight.
+    if (intent.hangPressed && !hero.swing.active && (close || enemies.active.some((e) => !e.boss && isActive(e) && toward(e).d < COMBAT.yankRange))) intent.hangPressed = false;
     const sensed = engaged.some((e) => e.state === 'windup' && (!e.atBody || e.atBody === hero.body));
     if (intent.divePressed && close && (['ground', 'air', 'wall'].includes(hero.state) || (sensed && (hero.state === 'swing' || hero.state === 'hang')))) buffer.press('dodge', c.hclock);
     groundAt = ctx.groundAt ?? null;
@@ -505,7 +509,7 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
     // Throw (the hang key with a loose prop in reach): it flies at the target and floors him and
     // whoever stands next to him. A gunner is disarmed first, as before.
     if (intent.yankPressed && tgt && !tgt.boss && props && !hero.swing.active && near.d < 20 && !(tgt.A?.ranged && !tgt.disarmed)) {
-      const thrown = props.yankNearest(P(), tgt);
+      const thrown = props.yankNearest(P(), tgt, 9, camFwd);
       if (thrown) {
         intent.hangPressed = false;
         c.used.propThrow = (c.used.propThrow ?? 0) + 1;
@@ -514,6 +518,15 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
         return;
       }
     }
+    // In a fight E is the yank: with no target picked (the camera off the thugs), the nearest one
+    // in reach is pulled. It never falls through to a hang web, which reeled the hero off to the
+    // nearest building mid-fight.
+    if (intent.yankPressed && !hero.swing.active && (!tgt || near.d >= COMBAT.yankRange)) {
+      let best = null;
+      for (const e of enemies.active) { if (e.boss || !isActive(e)) continue; const u = toward(e); if (u.d < COMBAT.yankRange && Math.abs(u.dy) < 6 && (!best || u.d < best.u.d)) best = { e, u }; }
+      if (best) { c.target = tgt = best.e; near = best.u; }
+      if (best || close) intent.hangPressed = false;
+    }
     // Yank (the hang key, when a target is near and the hero is not on a web).
     if (intent.yankPressed && tgt && near.d < COMBAT.yankRange && !hero.swing.active) {
       intent.hangPressed = false;
@@ -521,8 +534,14 @@ export function createHeroCombat({ hero, enemies, projectiles, onEvent = () => {
       if (tgt.boss) { if (tgt.boss.yank(near)) onEvent({ type: 'yank', e: tgt }); else startMove('strike'); return; }
       const A = ARCHETYPES[tgt.arch];
       if (A.ranged && !tgt.disarmed) { tgt.disarmed = true; word('YOINK!', tgt); onEvent({ type: 'disarm', e: tgt }); enemies.hit(tgt, { dmg: 2, dir: { x: -near.x, z: -near.z }, push: 1, from: P() }); }
-      else if (A.heavy) startMove('strike');
-      else {
+      else if (A.heavy) {
+        // Too big to haul in: he is tugged a step and staggers; the hero stays put (it used to be a
+        // web strike that flew the hero at him).
+        applyDv(tgt.body, 'rope', -near.x * 6 - tgt.body.v.x, 2, -near.z * 6 - tgt.body.v.z);
+        enemies.hit(tgt, { dmg: 2, dir: { x: -near.x, z: -near.z }, push: 0, lift: 0, from: P() });
+        word('HEAVY!', tgt);
+        onEvent({ type: 'yank', e: tgt });
+      } else {
         applyDv(tgt.body, 'rope', -near.x * 15 - tgt.body.v.x, 4, -near.z * 15 - tgt.body.v.z);
         enemies.hit(tgt, { dmg: 3, dir: { x: -near.x, z: -near.z }, push: 0, lift: 3.5, from: P() });
         word('YANK!', tgt);
