@@ -238,6 +238,12 @@ button { font: inherit; }
 .pm-suit.can { background: #d8ecc8; }
 .pm-swatch { display: flex; gap: 3px; margin-bottom: 4px; }
 .pm-swatch i { width: 26px; height: 18px; border: 2px solid var(--ink); }
+.pm-art { display: block; width: 100%; aspect-ratio: 3 / 4; object-fit: cover; border: 2px solid var(--ink); margin-bottom: 5px; background: #cfc4a8; }
+.pm-suit:not(.have):not(.on):not(.can) .pm-art { filter: grayscale(0.85) brightness(0.8); }
+.pm-swatch.under { margin: -14px 0 4px 4px; position: relative; }
+.pm-swatch.under i { width: 16px; height: 10px; }
+.pm-swatch.only { margin: 0 0 4px 0; }
+.pm-swatch.only i { width: 26px; height: 18px; }
 .pm-list .pm-row { display: flex; gap: 12px; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 2px dashed rgba(0, 0, 0, 0.2); }
 .pm-row b { font-family: var(--head); font-weight: 400; font-size: 18px; display: block; }
 .pm-row span { font-size: 13px; }

@@ -44,10 +44,13 @@ export function createProgressMenu(root, { save, onChange, onBack }) {
         const storyOk = !s.story || save.story.done.includes(s.story) || !!save.story.choices?.completedOnce;
         const can = !have && storyOk && p.level >= s.level && affordable(save, s.cost);
         const sw = el('div', { class: 'pm-swatch' }, [el('i', { style: `background:${hex(s.red)}` }), el('i', { style: `background:${hex(s.blue)}` }), el('i', { style: `background:${hex(s.black)}` })]);
+        // Card art (scripts/suit-thumbs.mjs); the colour swatch stays if the picture cannot load.
+        const art = el('img', { class: 'pm-art', src: `./assets/suits/thumbs/${s.id}.webp`, alt: '', loading: 'lazy', draggable: 'false', onerror: (e) => { e.target.remove(); sw.classList.add('only'); } });
+        sw.classList.add('under');
         return el('button', { class: `pm-suit${on ? ' on' : have ? ' have' : can ? ' can' : ''}`, onclick: () => {
           if (have) { p.suit = s.id; onChange(); render(); return; }
           if (can && pay(save, s.cost)) { p.suits.push(s.id); p.suit = s.id; onChange(); render(); }
-        } }, [sw, el('b', {}, s.name), el('em', {}, on ? COPY.progress.wearing : have ? COPY.progress.wear : !storyOk ? COPY.progress.story : `${COPY.progress.level} ${s.level}: ${costText(s.cost)}`)]);
+        } }, [art, sw, el('b', {}, s.name), el('em', {}, on ? COPY.progress.wearing : have ? COPY.progress.wear : !storyOk ? COPY.progress.story : `${COPY.progress.level} ${s.level}: ${costText(s.cost)}`)]);
       }));
     } else if (tab === 'gadgets') {
       body = el('div', { class: 'pm-list' }, GADGETS.map((g) => {
