@@ -90,6 +90,7 @@ export function createPoser(heroModel, opts = {}) {
   let trickN = 0;
   let variant = 0;          // which swing pose set this swing uses (A, B, C)
   let lastHeading = 0, bank = 0, flutter = 0, perchT = 0, idleT = 0;
+  let swingHeld = 0; // seconds settled on the current web
   let swings = 0;
   let inverted = false;
   let mantleT = 0;          // hands-on-the-edge pose while going over a ledge
@@ -342,7 +343,9 @@ export function createPoser(heroModel, opts = {}) {
           // Not a weight on a string (Insomniac's swing): the body leads into the dive, chest first
           // with the legs trailing, then lies back through the rise with the legs swinging ahead.
           const a0 = hero.swing.angle(b.p, b.v);
-          const lean = 0.42 * smoothstep(-70, -35, a0) * (1 - smoothstep(-25, -5, a0)) - 0.55 * smoothstep(-5, 30, a0);
+          // Kept small: the body hangs along the web, leaning a little into the dive and back on the
+          // rise (bigger leans with the spring's lag laid him flat, a superhero flying, not swinging).
+          const lean = 0.25 * smoothstep(-70, -35, a0) * (1 - smoothstep(-25, -5, a0)) - 0.4 * smoothstep(-5, 30, a0);
           u.copy(vel).addScaledVector(tmp2, -vel.dot(tmp2));
           if (u.lengthSq() > 1e-6) { u.normalize(); tmp2.multiplyScalar(Math.cos(lean)).addScaledVector(u, Math.sin(lean)).normalize(); }
         }
@@ -444,7 +447,9 @@ export function createPoser(heroModel, opts = {}) {
       while (turn < -Math.PI) turn += 2 * Math.PI;
       lastHeading = heading;
       const rate = hs > 4 && dt > 0 ? turn / dt : 0;
-      bank += (Math.max(-0.7, Math.min(0.7, -rate * 0.45)) - bank) * Math.min(1, dt * 5);
+      // On a web the heading turns all through the arc (a pendulum, not a turn): bank only a little.
+      const bankK = swinging ? 0.25 : 1;
+      bank += (Math.max(-0.7, Math.min(0.7, -rate * 0.45 * bankK)) - bank) * Math.min(1, dt * 5);
       // Never-still legs in the air: a slow flutter so no pose ever freezes.
       if (st === 'air' || st === 'swing' || st === 'glide') {
         flutter += dt;
@@ -458,9 +463,16 @@ export function createPoser(heroModel, opts = {}) {
       // A trick spins on top of that, exactly, so flips stay crisp.
       qTarget.copy(qBase);
       if (st !== 'ground' && st !== 'wall' && Math.abs(bank) > 1e-3) { tmp2.set(0, 0, 1); qTrick.setFromAxisAngle(tmp2, bank); qTarget.multiply(qTrick); }
-      {
+      // Settled on a web (a moment after the catch), the body follows the line with a plain
+      // exponential follow: it trails by a few degrees at any frame rate. The spring's lag at a
+      // swing's turn rate was 20 to 30 degrees, which laid the body flat across the web.
+      swingHeld = swinging ? swingHeld + dt : 0;
+      if (swingHeld > 0.3) {
+        qSmooth.slerp(qTarget, 1 - Math.exp(-dt * 22));
+        angVel.set(0, 0, 0);
+      } else {
         const h = Math.min(dt, 1 / 30);
-        const w0 = swinging ? 11 : st === 'ground' ? 16 : 13;
+        const w0 = swinging ? 14 : st === 'ground' ? 16 : 13;
         qErr.copy(qTarget).multiply(qInv.copy(qSmooth).invert());
         if (qErr.w < 0) { qErr.x = -qErr.x; qErr.y = -qErr.y; qErr.z = -qErr.z; qErr.w = -qErr.w; }
         const ang = 2 * Math.acos(Math.min(1, qErr.w));

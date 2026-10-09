@@ -1498,7 +1498,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     hero: () => ({
       p: { ...hero.body.p }, v: { ...hero.body.v }, state: hero.state, speed: hero.speed,
       rope: { active: hero.rope.active || hero.swing.active, length: hero.swing.active ? hero.swing.L : hero.rope.length, pivots: hero.rope.pivots.length, tension: hero.swing.active ? hero.swing.tension : hero.rope.tension, stalled: hero.rope.stalled },
-      swing: { active: hero.swing.active, L: hero.swing.L, angle: hero.swing.active ? hero.swing.angle(hero.body.p, hero.body.v) : 0 },
+      swing: { active: hero.swing.active, L: hero.swing.L, angle: hero.swing.active ? hero.swing.angle(hero.body.p, hero.body.v) : 0, P: hero.swing.active ? { x: hero.swing.P.x, y: hero.swing.P.y, z: hero.swing.P.z } : null },
       facing: { ...hero.facing }, hangInverted: hero.hangInverted,
     }),
     camera: () => ({ yaw: rig.yaw, pitch: rig.pitch, pos: { ...rig.pos }, fwd: { ...rig.fwd }, fov: rig.fov }),
