@@ -45,9 +45,11 @@ export function placeRequests(city, lamps, list = REQUESTS) {
     if (r.task.kind === 'fetch') {
       // An open roof: nothing stacked on it (a setback tower's base has the shaft on its middle).
       const covered = (b) => city.boxes.some((t) => t !== b && t.kind === 'building' && t.min[1] >= b.max[1] - 0.01 && t.min[1] < b.max[1] + 1 && t.min[0] < b.max[0] && t.max[0] > b.min[0] && t.min[2] < b.max[2] && t.max[2] > b.min[2]);
-      const near = city.boxes.filter((b) => b.kind === 'building' && !b.landmark && b.max[1] > 5 && b.max[1] < 70 && b.max[0] - b.min[0] > 6 && b.max[2] - b.min[2] > 6 && !covered(b))
+      // The cheap tests first: covered() scans every box, so it runs only on the roofs nearby (run on
+      // every building it cost about a second of boot).
+      const near = city.boxes.filter((b) => b.kind === 'building' && !b.landmark && b.max[1] > 5 && b.max[1] < 70 && b.max[0] - b.min[0] > 6 && b.max[2] - b.min[2] > 6)
         .map((b) => ({ b, dd: Math.hypot((b.min[0] + b.max[0]) / 2 - giver.x, (b.min[2] + b.max[2]) / 2 - giver.z) }))
-        .filter((q) => q.dd > 15 && q.dd < 160).sort((a, b) => a.dd - b.dd).slice(0, 6);
+        .filter((q) => q.dd > 15 && q.dd < 160 && !covered(q.b)).sort((a, b) => a.dd - b.dd).slice(0, 6);
       const pick = near[Math.floor(hash(r.id + 'r') * near.length)]?.b;
       if (pick) {
         // A clear spot on the roof (not under an AC unit, a hut or a water tower), nearest its middle.

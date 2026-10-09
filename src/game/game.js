@@ -243,13 +243,18 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   onProgress(0.15);
 
   performance.mark('boot:warmStart');
-  await ink.warm(scene, camera);
-  performance.mark('boot:warmEnd');
+  // The city's shaders compile in parallel while the hero assets finish downloading; then the hero
+  // and the crowd join the scene, so the warm draw builds their programs in the same pass instead
+  // of on the first frame.
+  const cityCompile = ink.compileAsync(scene, camera);
   const assets = await assetsP;
   let heroModel = buildHeroModel(assets);
   // Real figures for the nearest pedestrians (src/world/crowd.js), fewer on lower quality.
   const crowd = createCrowd({ scene, assets, buildCharacter, life, count: quality.name === 'low' ? 0 : quality.name === 'medium' ? 6 : 12 });
   scene.add(heroModel.root);
+  await cityCompile;
+  await ink.warm(scene, camera);
+  performance.mark('boot:warmEnd');
   // The hero's feet plant on the collision ground (steps, kerbs, roof edges) when he stands or walks.
   const groundAt = (x, y, z) => world.groundHeight(x, y, z);
   let poser = createPoser(heroModel, { groundAt });
