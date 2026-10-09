@@ -395,6 +395,7 @@ export function createInkPipeline(renderer, quality, { gpuTime = false } = {}) {
   // this laptop); doing it here, while the hero assets are still downloading, hides most of it.
   async function warm(scene, camera) {
     await compileAsync(scene, camera);
+    performance.mark('boot:warmCompiled');
     const culled = [];
     scene.traverse((o) => { if ((o.isMesh || o.isPoints || o.isLine) && o.frustumCulled) { o.frustumCulled = false; culled.push(o); } });
     try {
