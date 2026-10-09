@@ -10,11 +10,23 @@ import { COMIC_SHADE, SHADOW_ALPHA, addShadeUniforms, comicToon } from '../rende
 // forearms, gloves and boots; blue sides, under-arms and legs; black web lines over the red; the
 // chest spider; big white eye lenses with black rims. No texture, so suits are cheap to swap.
 
+// A file that fails to arrive is asked for once more (a dropped connection, a busy host) before the
+// boot gives up and says which file failed.
+export async function loadRetry(loader, url, tries = 2) {
+  for (let i = 1; ; i++) {
+    try { return await loader.loadAsync(url); } catch (err) {
+      if (i >= tries) throw new Error(`Could not load ${url.split('/').pop()}: ${err?.message ?? err}`);
+      console.warn('retrying', url, err);
+      await new Promise((r) => setTimeout(r, 400 * i));
+    }
+  }
+}
+
 export async function loadHeroAssets(base = './assets/', onProgress = () => {}) {
   const loader = new GLTFLoader();
   const names = ['hero_m.glb', 'anims1.glb', 'anims2.glb', 'hero_f.glb', 'hair_long.glb'];
   let done = 0;
-  const [hero, a1, a2, heroF, hair] = await Promise.all(names.map((n) => loader.loadAsync(base + n).then((g) => { onProgress(++done / names.length); return g; })));
+  const [hero, a1, a2, heroF, hair] = await Promise.all(names.map((n) => loadRetry(loader, base + n).then((g) => { onProgress(++done / names.length); return g; })));
   const clips = new Map();
   for (const clip of [...a1.animations, ...a2.animations]) clips.set(clip.name, sanitizeClip(clip));
   // hero_m.glb carries a second skinned mesh, the fitted film suit (scripts/fit-suit.mjs). The hero
@@ -28,18 +40,20 @@ export async function loadHeroAssets(base = './assets/', onProgress = () => {}) 
 
 // The mocap clips (scripts/mixamo-clips.mjs) load after the game is up, so the first load stays
 // fast: the combat set first (kicks, punches, reactions, falls), then the social set (emotes, story
-// and city acting). Until then everything falls back to the Quaternius clips.
-export async function loadCombatClips(assets, base = './assets/') {
-  const loader = new GLTFLoader();
-  const g = await loader.loadAsync(base + 'anims_combat.glb');
-  for (const clip of g.animations) assets.clips.set(clip.name, sanitizeClip(clip));
-  assets.combatReady = true;
+// and city acting). Until then, and for good if a set never arrives (each is asked for twice), that
+// set falls back to the Quaternius clips: combatReady or socialReady simply stays false.
+export async function loadCombatClips(assets, base = './assets/', loader = new GLTFLoader()) {
   try {
-    const s = await loader.loadAsync(base + 'anims_social.glb');
+    const g = await loadRetry(loader, base + 'anims_combat.glb');
+    for (const clip of g.animations) assets.clips.set(clip.name, sanitizeClip(clip));
+    assets.combatReady = true;
+  } catch (err) { console.warn('combat clips', err); }
+  try {
+    const s = await loadRetry(loader, base + 'anims_social.glb');
     for (const clip of s.animations) assets.clips.set(clip.name, sanitizeClip(clip));
     assets.socialReady = true;
   } catch (err) { console.warn('social clips', err); }
-  return true;
+  return !!assets.combatReady;
 }
 
 export const hasClip = (assets, name) => assets.clips.has(name);
