@@ -84,6 +84,29 @@ test('rebinding a key from the controls screen', async ({ page }) => {
   await expect(page.locator('.panel .row', { hasText: 'Web zip' }).locator('.chip')).toHaveText('Q');
 });
 
+test('title: Continue loads the last slot played, and Esc backs out of every title page', async ({ page }) => {
+  const errors = collectErrors(page);
+  await page.goto('/');
+  await page.evaluate(() => {
+    for (let i = 1; i <= 3; i++) localStorage.removeItem(`web-of-ink-save-${i}`);
+    localStorage.setItem('web-of-ink-last-slot', '3');
+    localStorage.setItem('web-of-ink-save-3', JSON.stringify({ slot: 3, story: { step: 'prologue.swing', done: ['prologue.open'], choices: {} } }));
+  });
+  await page.reload();
+  await page.waitForFunction(ready, null, { timeout: 90000 });
+  for (const name of ['SETTINGS', 'CREDITS', "WHAT'S NEW", 'STORY']) {
+    await page.locator('.title .mbtn', { hasText: name }).first().click();
+    await expect(page.locator('.title')).toBeHidden();
+    await page.waitForTimeout(350);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('.title')).toBeVisible();
+  }
+  await expect(page.locator('.title .mbtn.cont')).toContainText('Slot 3');
+  await page.locator('.title .mbtn.cont').click();
+  await page.waitForFunction(() => window.__game.storyOn && window.__game.save().slot === 3 && window.__game.mode === 'play', null, { timeout: 15000 });
+  expect(errors).toEqual([]);
+});
+
 test('pause menu opens from play and resumes', async ({ page }) => {
   await page.goto('/?at=swing');
   await page.waitForFunction(ready, null, { timeout: 90000 });

@@ -21,6 +21,7 @@ export const DEFAULT_SETTINGS = {
   speedLines: true,
   soundWords: true,
   impactFrames: 'full',
+  tips: true,          // the first-play and story tutorial tips
   quality: 'high',
   renderScale: 1,
   dynamicRes: true,
@@ -83,6 +84,7 @@ export function sanitizeSettings(raw = {}) {
     speedLines: bool(r.speedLines, d.speedLines),
     soundWords: bool(r.soundWords, d.soundWords),
     impactFrames: oneOf(r.impactFrames, ['full', 'soft', 'off'], d.impactFrames),
+    tips: bool(r.tips, d.tips),
     quality: oneOf(r.quality, ['high', 'medium', 'low'], d.quality),
     renderScale: num(r.renderScale, 0.5, 1, d.renderScale),
     dynamicRes: bool(r.dynamicRes, d.dynamicRes),

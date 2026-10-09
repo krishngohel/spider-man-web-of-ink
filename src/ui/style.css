@@ -45,7 +45,8 @@ button { font: inherit; }
 .menu .card { width: min(380px, calc(100vw - 32px)); }
 .card h2 { margin: 0 0 12px; font-family: var(--head); font-size: 40px; letter-spacing: 1px; color: var(--red); -webkit-text-stroke: 1px var(--ink); text-shadow: 3px 3px 0 var(--ink); }
 .card h3 { margin: 16px 0 6px; font-family: var(--head); font-size: 22px; letter-spacing: 1px; color: var(--blue); }
-.menu .buttons { display: grid; gap: 10px; }
+.menu .buttons { display: grid; gap: 8px; }
+.menu .buttons .mbtn { font-size: 23px; padding: 6px 14px; }
 .row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 2px dashed rgba(18, 16, 28, 0.2); font-size: 19px; }
 .row .note { display: block; font-size: 14px; opacity: 0.7; }
 .chip { font-family: var(--body); font-weight: 700; font-size: 17px; min-width: 120px; padding: 5px 10px; cursor: pointer; background: #fff;
@@ -81,7 +82,8 @@ button { font: inherit; }
 .speedo b { font-size: 46px; font-weight: 400; }
 .speedo span { font-size: 20px; margin-left: 4px; }
 .speedo.hidden { display: none; }
-.fps { position: absolute; left: 12px; top: 10px; font: 700 15px var(--body); color: #fff; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink); }
+/* Bottom left, under the combat panel: the top left is the district caption's. */
+.fps { position: absolute; left: 10px; bottom: 2px; font: 700 13px var(--body); color: #fff; text-shadow: 1px 1px 0 var(--ink), -1px -1px 0 var(--ink); }
 .fps.hidden { display: none; }
 .statelabel { position: absolute; left: 12px; top: 30px; font: 700 15px var(--body); color: #fff; text-shadow: 1px 1px 0 var(--ink); }
 .tip { position: absolute; left: 50%; bottom: 26px; transform: translateX(-50%) rotate(-0.6deg); width: min(520px, calc(100vw - 32px)); background: #fff;
@@ -107,10 +109,11 @@ button { font: inherit; }
   75% { transform: translate(-50%, -58%) rotate(var(--tilt)) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -70%) rotate(var(--tilt)) scale(0.9); opacity: 0; }
 }
-.toast { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); background: var(--yellow); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink);
-  padding: 8px 14px; font-size: 18px; max-width: min(560px, calc(100vw - 32px)); pointer-events: auto; }
-.toast.hidden { display: none; }
-.toast button { margin-left: 10px; }
+/* A timed notice under the boss bar (Low Power Mode): nothing to click, gone by itself. */
+.ui-layer > .notice { position: fixed; left: 50%; top: 16px; z-index: 6; width: max-content; max-width: min(460px, calc(100vw - 32px)); padding: 7px 14px;
+  background: var(--paper); border: 3px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); font: 600 16px/1.3 var(--body); color: var(--ink);
+  pointer-events: none; opacity: 0; transform: translate(-50%, -8px) rotate(-0.5deg); transition: opacity 0.3s, transform 0.3s; }
+.ui-layer > .notice.show { opacity: 1; transform: translate(-50%, 0) rotate(-0.5deg); }
 
 /* Help -------------------------------------------------------------------------------------- */
 .help { position: fixed; right: 16px; top: 50%; transform: translateY(-50%); z-index: 8; width: min(340px, calc(100vw - 32px)); background: var(--paper);
@@ -434,3 +437,29 @@ body.cb .bfill { background: linear-gradient(#5ab0ff, #1f4fb6); }
 .emote-title { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -60%); font: 30px var(--head); letter-spacing: 1px; color: var(--ink); }
 .emote-page { position: absolute; left: 50%; top: 50%; transform: translate(-50%, 90%); font: 11px var(--body, sans-serif); letter-spacing: 1px; color: var(--ink); opacity: 0.7; white-space: nowrap; }
 .cb-slot.off { opacity: 0.35; }
+
+/* Title: Continue with where the slot stands, half-width pairs. */
+.mbtn .msub { display: block; font: 600 15px var(--body); letter-spacing: 0; -webkit-text-stroke: 0; margin-top: 1px; opacity: 0.95; }
+.title .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.title .pair .mbtn { font-size: 21px; padding: 6px 12px; }
+/* Settings in tabs, a value beside every slider. */
+.panel.settings .card { width: min(660px, calc(100vw - 32px)); }
+.set-tabs .chip { min-width: 0; }
+.set-body { min-height: 396px; }
+.row .slide { display: flex; align-items: center; gap: 10px; }
+.row output { min-width: 52px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; }
+/* What's new and the credits page. */
+.wn-lead { font-size: 19px; margin: 0 0 8px; }
+.wn-list { margin: 0; padding-left: 22px; display: grid; gap: 8px; font-size: 18px; line-height: 1.3; }
+.cr-list { max-height: min(58vh, 520px); overflow: auto; padding-right: 6px; outline: none; }
+.cr-list h3 { margin: 14px 0 4px; }
+.cr-list p { margin: 3px 0; font-size: 17px; line-height: 1.3; }
+/* A gamepad driving the menus: a clear ring on whatever has focus. */
+body.pad-nav .ui-layer button:focus, body.pad-nav .ui-layer input:focus, body.pad-nav .ui-layer summary:focus, body.pad-nav .ui-layer [data-scroll]:focus { outline: 4px solid var(--blue); outline-offset: 2px; }
+.pm-skill:focus-visible, .pm-suit:focus-visible, .slot .mbtn:focus-visible { outline: 4px solid var(--blue); outline-offset: 2px; }
+/* Tutorial tips off. */
+body.no-tips .tip, body.no-tips .storytips { display: none; }
+/* Cinema bars up: the HUD steps out of the shot and comes back after. */
+body.cine .ui-layer > :is(.hud, .notice, .objective, .storytips, .stimer, .stealthbox, .holdprompt, .tdprompt), body.cine .cb > :is(.cb-panel, .cb-combo, .cb-gadget, .cb-prompts, .cb-target) { opacity: 0 !important; transition: opacity 0.3s; }
+body.cine-out .ui-layer > :is(.hud, .objective, .storytips, .stimer), body.cine-out .cb > :is(.cb-panel, .cb-gadget) { animation: hudback 0.35s ease-out; }
+@keyframes hudback { from { opacity: 0; } to { opacity: 1; } }

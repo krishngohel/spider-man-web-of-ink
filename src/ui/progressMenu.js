@@ -20,7 +20,7 @@ export function createProgressMenu(root, { save, onChange, onBack }) {
   function render() {
     const p = save.progress, lv = levelFor(p.xp);
     const tabs = el('div', { class: 'pm-tabs' }, ['skills', 'suits', 'gadgets', 'mods', 'powers'].map((t) =>
-      el('button', { class: `chip${t === tab ? ' on' : ''}`, onclick: () => { tab = t; render(); } }, COPY.progress.tabs[t])));
+      el('button', { class: `chip${t === tab ? ' on' : ''}`, 'data-tab': t, onclick: () => { tab = t; render(); } }, COPY.progress.tabs[t])));
     const head = el('div', { class: 'pm-head' }, [
       el('b', {}, `${COPY.progress.level} ${p.level}`),
       el('span', { class: 'pm-xp' }, [el('i', { style: `width:${lv.need ? (lv.into / lv.need) * 100 : 100}%` })]),
@@ -83,13 +83,15 @@ export function createProgressMenu(root, { save, onChange, onBack }) {
     }
     panel.replaceChildren(el('div', { class: 'card wide' }, [
       el('h2', {}, COPY.progress.title), head, tabs, body,
-      el('div', { class: 'foot' }, [el('button', { class: 'mbtn', onclick: () => { api.hide(); onBack(); } }, COPY.buttons.back)]),
+      el('div', { class: 'foot' }, [el('button', { class: 'mbtn', 'data-back': true, onclick: () => { api.hide(); onBack(); } }, COPY.buttons.back)]),
     ]));
   }
 
   const api = {
     show(t = tab) { tab = t; render(); panel.classList.remove('hidden'); },
     hide() { panel.classList.add('hidden'); },
+    back() { api.hide(); onBack(); },
+    node: panel,
     get open() { return !panel.classList.contains('hidden'); },
   };
   return api;

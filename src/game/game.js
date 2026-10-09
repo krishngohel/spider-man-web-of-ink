@@ -77,7 +77,9 @@ import { ARCHETYPES, isActive } from '../combat/enemies.js';
 import { DEFAULTS } from '../physics/constants.js';
 import { createDirector } from '../story/director.js';
 import { createStoryUi } from '../ui/storyUi.js';
-import { createSlots } from '../ui/slots.js';
+import { createSlots, slotSummary } from '../ui/slots.js';
+import { createNav } from '../ui/nav.js';
+import { impactFlash } from './impact.js';
 import { stepById } from '../story/steps.js';
 import { resolveSite } from '../story/sites.js';
 import { createContentWorld } from '../content/world.js';
@@ -290,6 +292,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   }
   const uiRoot = el('div', { class: 'ui-layer' });
   document.body.append(uiRoot);
+  // Every menu page shares one way around: gamepad, Esc and B for Back, menu sounds (ui/nav.js).
+  const nav = createNav({ sound: (k) => sfx.event({ type: k }), unlock: () => sfx.unlock(), capturing: () => input.capturing });
   const emoteWheel = createEmoteWheel(uiRoot, { has: (clip) => heroModel.animator.has(clip) });
   const combatHud = createCombatHud(uiRoot, { get combat() { return combat; }, get hero() { return hero; }, getSettings: () => settings, getDevice: () => input.device });
   {
@@ -354,9 +358,23 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     getSettings: () => settings,
     setSettings: applySettings,
     input,
+    nav,
     onPlay: () => enterPlay(),
-    onResume: () => resume(),
-    onRestart: () => { hero.place(spawn.x, spawn.y, spawn.z, 0, 0, 0, 'ground'); resume(); },
+    onResume: (o) => resume(o),
+    onRestart: (o) => { hero.place(spawn.x, spawn.y, spawn.z, 0, 0, 0, 'ground'); resume(o); },
+    // Continue on the title: the last slot played, straight in.
+    getContinue: () => {
+      const n = lastSlot(window.localStorage);
+      const sv = n ? loadSlot(window.localStorage, n) : null;
+      if (!sv) return null;
+      const sm = slotSummary(sv);
+      return { slot: n, where: sm.where, percent: sm.percent };
+    },
+    onContinue: (slot) => enterStory(slot, false),
+    onResetTips: () => hud.resetTips(),
+    inChallenge: () => content.challenge,
+    onRetryChallenge: () => { content.retryRun(); resume(); },
+    onQuitChallenge: () => { content.quitRun(); resume(); },
     onQuit: () => toTitle(),
     onProgress: () => progressMenu.show(),
     onRoster: () => rosterMenu.show(),
@@ -369,6 +387,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     onNights: () => { requests.stop(); if (storyOn) { director.stop(); storyOn = false; } storyEnv = { hour: 23, weather: 'clear' }; enterPlay(); content.startNights(); },
   });
   const slots = createSlots(uiRoot, { onPick: (slot, fresh) => enterStory(slot, fresh), onBack: () => menus.showTitle() });
+  nav.register(slots.node, () => slots.back());
   const storyUi = createStoryUi(uiRoot, { getSettings: () => settings, onSound: (k) => sfx.event({ type: k }), canAdvanceRadio: () => mode === 'play' && !session?.active });
   // Street gangs wait while a comic or card is up, and while a crime runs (one fight at a time: a
   // crime used to overwrite a running gang's slot and orphan it).
@@ -377,6 +396,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   // Characters (spec 13): the roster unlocks in solo free roam after the story; ?roster opens it.
   const rosterOpen = () => params.has('roster') || save.story.done.includes('act4.epilogue') || !!save.story.choices?.completedOnce;
   const rosterMenu = createRosterMenu(uiRoot, { isOpen: rosterOpen, current: () => character.id, onPick: (id) => { switchCharacter(id); rosterMenu.hide(); resume(); }, onBack: () => menus.showPause() });
+  nav.register(rosterMenu.node, () => rosterMenu.back());
   // Metal for Electro: lamp posts, traffic lights, antennas, cranes and the bridge cables.
   const metal = [
     ...street.lamps.map((l) => ({ x: l.x, y: 6.1, z: l.z })),
@@ -424,6 +444,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const modes = createModes({ session, scene, hud, uiRoot, city, getHero: () => hero, getCamera: () => camera, applyRule: (r) => { mpRule = r; } });
   const social = createSocial({ session, scene, uiRoot, getCamera: () => camera, getAim: () => findAimPoint(world, hero.body, { x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z }) ?? world.raycast(rig.pos.x, rig.pos.y, rig.pos.z, rig.fwd.x, rig.fwd.y, rig.fwd.z, 300) });
   const lobby = createLobby(uiRoot, { session, onEnter: () => enterMp(), onBack: () => (session.active ? resume() : menus.showTitle()), startMode: (k, o) => modes.start(k, o) });
+  nav.register(lobby.node, () => lobby.back());
+  nav.register(lobby.worldNode, () => lobby.backWorld());
   session.on('message', (id, data) => { modes.message(id, data); social.message(id, data); });
   session.on('status', (kind) => { if (kind === 'closed') { progress.useSave(save); if (mode !== 'title') hud.caption('LEFT THE WORLD', 2); } });
   let mpEntered = false;
@@ -452,6 +474,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     for (const [id, e] of have) if (!on || !session.players.has(id)) combat.enemies.remove(e);
   }
   const progressMenu = createProgressMenu(uiRoot, { save, onChange: () => { progress.apply(); persist(); }, onBack: () => menus.showPause() });
+  nav.register(progressMenu.node, () => progressMenu.back());
   const progress = createProgressRuntime({ save, heroModel, combat, hero, hud, sfx, ink });
   progress.apply();
 
@@ -516,9 +539,14 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   addEventListener('keydown', (e) => {
     sfx.unlock();
     if (e.code === 'Backquote') devPanel.toggle();
-    // Esc with the pointer locked makes the browser release it (which pauses); some browsers then
-    // also deliver the keydown. That one must not resume the game straight away.
-    if (e.code === 'Escape' && mode === 'paused' && menus.pauseOpen && !input.capturing && performance.now() - pausedAt > 300) { e.preventDefault(); resume(); }
+    // Esc on the pause menu resumes through the shared menu navigation (ui/nav.js), which also
+    // ignores the Esc that released the pointer and opened the menu.
+  });
+  // A hidden tab (closed, switched away from, a laptop lid) saves now, not at the next 20 s save.
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState !== 'hidden' || mode === 'title' || session?.active) return;
+    save.playTime += saveT; saveT = 0;
+    persist();
   });
 
   // Comic pages that began while the game was paused take over again when play resumes.
@@ -572,12 +600,15 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     if (locked()) document.exitPointerLock();
     if (session.active) lobby.showWorld(); else menus.showPause();
   }
-  function resume() {
+  // From a click on Resume (a real user gesture) the mouse is taken back straight away; Esc and a
+  // pad's B resume without it (the next click on the game takes it, as always).
+  function resume({ lock = false } = {}) {
     mode = 'play';
     resetIntent();
     menus.hideAll();
     input.setEnabled(true);
-    comicResumes();
+    if (comicResumes()) return;
+    if (lock && !locked() && input.device !== 'pad') { try { canvas.requestPointerLock?.()?.catch?.(() => {}); } catch { /* engines that throw instead */ } }
   }
   function toTitle() {
     content.stop(); requests.stop(); storyEnv = null;
@@ -758,18 +789,20 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
           const cx = hp.x + (dx / l) * Math.max(0.4, l - 0.35), cz = hp.z + (dz / l) * Math.max(0.4, l - 0.35);
           if (e.heavy) fx.burst(cx, q.y + 0.45, cz); else fx.spark(cx, q.y + 0.45, cz);
         }
-        if (e.heavy && (e.stop ?? 0) >= 0.08 && settings.impactFrames !== 'off') {
+        const hitFlash = e.heavy && (e.stop ?? 0) >= 0.08 ? impactFlash(settings.impactFrames, 'hit') : null;
+        if (hitFlash && !impactLong) {
           const s = screenOf(e.e.body.p.x, e.e.body.p.y, e.e.body.p.z);
-          if (!impactLong) { ink.setImpact(1, true, s.x / innerWidth, 1 - s.y / innerHeight); clearTimeout(impactTimer); impactTimer = setTimeout(() => ink.setImpact(0), 50); }
+          ink.setImpact(hitFlash.strength, hitFlash.soft, s.x / innerWidth, 1 - s.y / innerHeight); clearTimeout(impactTimer); impactTimer = setTimeout(() => ink.setImpact(0), hitFlash.ms);
         }
         break;
       }
       case 'heroHurt': sfx.event({ type: 'hurt' }); combatHud.hurt(); combat.enemies.cheer?.(); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.5); break;
       case 'finisher': {
         const s = screenOf(at.x, at.y, at.z);
-        if (settings.impactFrames !== 'off') ink.setImpact(1, settings.impactFrames === 'soft', s.x / innerWidth, 1 - s.y / innerHeight);
+        const fl = impactFlash(settings.impactFrames, 'finisher');
+        if (fl) ink.setImpact(fl.strength, fl.soft, s.x / innerWidth, 1 - s.y / innerHeight);
         clearTimeout(impactTimer); impactLong = true;
-        impactTimer = setTimeout(() => { ink.setImpact(0); impactLong = false; }, 220);
+        impactTimer = setTimeout(() => { ink.setImpact(0); impactLong = false; }, fl ? fl.ms : 220);
         break;
       }
       case 'slam': fx.ring(e.at.x, e.at.y - 0.9, e.at.z, 2.2); if (settings.cameraShake) rig.shake = 0.8; break;
@@ -1053,7 +1086,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
         if (b && !padComic.b) storyUi.skipComic();
         padComic.a = a; padComic.b = b;
       }
-      if (menus.open) menus.padNav();
+      nav.update(dt);
       if (mode === 'map' && (input.pressed('map') || input.pressed('pause'))) map.hide();
     }
 
@@ -1207,7 +1240,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     prof('render', Tr);
 
     const Th = performance.now();
-    hud.update(dt, { fps, speed: mode === 'play' ? hero.speed : 0, anchor: mode === 'play' ? preview : null, state: hero.state, dev: dev || devPanel.open, w: innerWidth, h: innerHeight });
+    hud.update(dt, { fps, speed: mode === 'play' ? hero.speed : 0, anchor: mode === 'play' ? preview : null, state: hero.state, dev: dev || devPanel.open, w: innerWidth, h: innerHeight, play: mode === 'play' && !nav.open });
     prof('hud', Th);
     input.endFrame();
 
@@ -1296,6 +1329,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     boom: (p) => { fx.ring(p.x, p.y, p.z, 2.2); if (settings.cameraShake) rig.shake = Math.max(rig.shake, 0.8); sfx.event({ type: 'land', hard: true, impact: 30 }); const h = hero.body.p; if (Math.hypot(h.x - p.x, h.z - p.z) < 6) combat.heroHit({ dmg: 30, dir: { x: 0, z: 1 }, from: null, unblockable: true }); },
     crimeWaypoint: (w) => { crimeWp = w; if (w) { if (!waypoint || waypoint.auto) waypoint = { ...w, auto: true }; } else if (waypoint?.auto) waypoint = null; },
     holding: () => input.down('hang'),
+    placeHero: (x, y, z) => placeHeroAt(x, y, z, 0, 0, 0, 'ground'),
     pressedHang: () => input.pressed('hang'),
     busy: () => (storyOn && director.quiet) || session.active || !settings.crimes || !!combat.encounter,
     puzzle: (kind) => { mode = 'comic'; input.setEnabled(false); if (locked()) document.exitPointerLock(); return puzzles.play(kind).then((ok) => { mode = 'play'; resetIntent(); input.setEnabled(true); return ok; }); },
@@ -1308,6 +1342,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     waypoint: (w) => { if (w) { if (!waypoint || waypoint.auto) waypoint = { ...w, auto: true }; } else if (waypoint?.auto) waypoint = null; },
   });
   const tracker = createTracker(uiRoot, { data: () => ({ ...content.tracker(), requests: requests.count() }), onBack: () => menus.showPause() });
+  nav.register(tracker.node, () => tracker.back());
   function takePhoto() {
     const got = content.photo({ x: rig.pos.x, y: rig.pos.y, z: rig.pos.z, fx: rig.fwd.x, fy: rig.fwd.y, fz: rig.fwd.z });
     hud.flash?.();
@@ -1449,6 +1484,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     setTime(h) { settings = { ...settings, timeOfDay: 'cycle' }; clock.set(h); },
     setWeather(w) { if (WEATHERS.includes(w)) { weatherState.from = w; weatherState.to = w; weatherState.k = 1; weatherState.next = 1e9; } },
     play: () => enterPlay(),
+    hud: () => hud, // test hook: sound words, notices, letterbox
+    nav: () => nav,
     get frameTimes() { return Array.from(frameTimes.slice(0, Math.min(frameIdx, frameTimes.length))); },
     get workTimes() { return Array.from(workTimes.slice(0, Math.min(frameIdx, workTimes.length))); },
     get gpuTimes() { return Array.from(gpuTimes.slice(0, Math.min(frameIdx, gpuTimes.length))).filter((v) => v >= 0); },

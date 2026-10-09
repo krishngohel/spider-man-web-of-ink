@@ -14,7 +14,6 @@ const pct = (rows) => {
 export function createTracker(root, { data, onBack }) {
   const panel = el('div', { class: 'menu hidden tracker' });
   root.append(panel);
-  window.addEventListener('keydown', (e) => { if (e.code === 'Escape' && !panel.classList.contains('hidden')) { e.preventDefault(); e.stopPropagation(); panel.classList.add('hidden'); onBack(); } }, true);
   function show() {
     const t = data();
     const head = el('tr', {}, ['District', 'Crimes', 'Hideout', 'Backpacks', 'Photos', 'Tags', 'Pigeons', 'Research'].map((h) => el('th', {}, h)));
@@ -22,7 +21,7 @@ export function createTracker(root, { data, onBack }) {
     const medal = (m) => el('span', { class: `medal m${m.medal}` }, m.medal ? MEDALS[m.medal] : 'not run');
     panel.replaceChildren(el('div', { class: 'card' }, [
       el('h2', {}, `CITY PROGRESS ${pct(t.rows)}%`),
-      el('div', { class: 'tscroll' }, [
+      el('div', { class: 'tscroll', tabindex: '0', 'data-scroll': true }, [
         el('table', { class: 'ttable' }, [head, ...rows]),
         el('h3', {}, 'Taskmaster challenges'),
         el('div', { class: 'tgrid' }, t.challenges.map((c) => el('div', { class: 'titem' }, [el('b', {}, c.name), medal(c)]))),
@@ -32,9 +31,10 @@ export function createTracker(root, { data, onBack }) {
         el('h3', {}, 'Daily Bugle assignments'),
         el('div', { class: 'tgrid' }, t.bugle.map((a) => el('div', { class: 'titem' }, [el('b', {}, a.title), el('span', { class: a.done ? 'medal m3' : 'medal m0' }, a.done ? 'printed' : 'open')]))),
       ]),
-      el('div', { class: 'buttons' }, [el('button', { class: 'mbtn', onclick: () => { panel.classList.add('hidden'); onBack(); } }, 'BACK')]),
+      el('div', { class: 'buttons' }, [el('button', { class: 'mbtn', 'data-back': true, onclick: () => { panel.classList.add('hidden'); onBack(); } }, 'BACK')]),
     ]));
     panel.classList.remove('hidden');
   }
-  return { show, hide: () => panel.classList.add('hidden'), get open() { return !panel.classList.contains('hidden'); } };
+  // Esc and a pad's B come here through the shared menu navigation (ui/nav.js).
+  return { show, hide: () => panel.classList.add('hidden'), back() { panel.classList.add('hidden'); onBack(); }, node: panel, get open() { return !panel.classList.contains('hidden'); } };
 }
