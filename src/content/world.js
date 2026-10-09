@@ -383,6 +383,9 @@ export function createContentWorld(g) {
     for (const m of ringMeshes) scene.remove(m);
     ringMeshes.length = 0;
     for (const e of run.list) combat.enemies.remove(e);
+    // The challenge's gang goes with it: left in place, the empty encounter would count as busted
+    // and pay a crime token on the next step.
+    if (combat.encounter?.kind === 'challenge') combat.clearEncounter();
     g.timer(null);
     run = null;
     return c;
@@ -392,6 +395,7 @@ export function createContentWorld(g) {
     for (const m of ringMeshes) scene.remove(m);
     ringMeshes.length = 0;
     for (const e of run.list) if (!ok) combat.enemies.remove(e);
+    if (!ok && combat.encounter?.kind === 'challenge') combat.clearEncounter();
     g.timer(null);
     if (ok) {
       let medal = medalFor(run.t, c);

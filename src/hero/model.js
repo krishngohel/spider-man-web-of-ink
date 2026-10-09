@@ -477,13 +477,14 @@ const SUIT_RECOLOR_HOOKS = (uniforms) => ({
 // loaded the first time the suit is worn and bound to that hero's own bones. The painted body shows
 // until it arrives. 'tasm' is the classic film suit that lives inside hero_m.glb.
 const fittedFiles = new Map();
+const fittedReady = new Map(); // id -> loaded scene, so a cached suit attaches at once
 let fittedBase = './assets/';
 export function setSuitModelBase(base) { fittedBase = base; }
 export const isSuitFile = (m) => !!m && m !== 'tasm';
 export function loadSuitModel(id) {
   if (!isSuitFile(id)) return Promise.resolve(null);
   if (!fittedFiles.has(id)) {
-    fittedFiles.set(id, new GLTFLoader().loadAsync(`${fittedBase}suits/${id}.glb`).then((g) => g.scene).catch((e) => {
+    fittedFiles.set(id, new GLTFLoader().loadAsync(`${fittedBase}suits/${id}.glb`).then((g) => { fittedReady.set(id, g.scene); return g.scene; }).catch((e) => {
       console.warn('suit model failed to load', id, e?.message ?? e);
       fittedFiles.delete(id);
       return null;
@@ -528,14 +529,22 @@ function wearModel(hero, suit) {
   hero.wantModel = m;
   if (!isSuitFile(m)) { showSuitModel(hero, m ? 'tasm' : 'paint'); return; }
   hero.fitted ??= new Map();
+  // A file already loaded attaches at once (a comic panel draws in the same frame).
+  if (!hero.fitted.has(m) && fittedReady.has(m)) attach(hero, m, fittedReady.get(m));
   if (hero.fitted.has(m)) { showSuitModel(hero, m); return; }
   showSuitModel(hero, 'paint');
   loadSuitModel(m).then((scene) => {
-    if (!scene || hero.fitted.has(m)) return;
-    hero.fitted.set(m, attachFitted(hero, scene));
+    // A hero thrown away meanwhile (a character switch) gets nothing: it would only leak.
+    if (!scene || hero.disposed || hero.fitted.has(m)) return;
+    attach(hero, m, scene);
     const w = hero.wantModel;
     showSuitModel(hero, isSuitFile(w) ? (hero.fitted.has(w) ? w : 'paint') : w ? 'tasm' : 'paint');
   });
+}
+// A file whose meshes bind to nothing (a joint the body lacks) keeps the painted body.
+function attach(hero, m, scene) {
+  const meshes = attachFitted(hero, scene);
+  if (meshes.length) hero.fitted.set(m, meshes);
 }
 
 export function setSuit(hero, suit) {

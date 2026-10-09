@@ -96,8 +96,9 @@ export function createCinematic({ camera, hud, root }) {
     update(dt) {
       if (phase === 'idle') return;
       // A pad's B skips, as it skips a comic.
-      const pads = navigator.getGamepads?.() ?? [];
-      const b = !![...pads].find((p) => p && p.connected)?.buttons[1]?.pressed;
+      const pads = navigator.getGamepads?.();
+      let b = false;
+      if (pads) for (let i = 0; i < pads.length; i++) if (pads[i]?.connected) { b = !!pads[i].buttons[1]?.pressed; break; }
       if (b && !padB) skip();
       padB = b;
       if (phase === 'shots') {

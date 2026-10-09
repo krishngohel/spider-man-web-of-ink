@@ -17,6 +17,8 @@ import { LAYER_FX } from '../render/layers.js';
 import { COPY } from '../ui/copy.js';
 import { comicToon } from '../render/comicShade.js';
 import { buildCinematic } from './cinematics.js';
+import { suitById } from '../progress/progression.js';
+import { loadSuitModel } from '../hero/model.js';
 
 // Runs the story (spec 10): the current step from the save, one handler per step type, the
 // objective card and waypoint, mission time and weather, retries on defeat (the step starts over;
@@ -178,6 +180,7 @@ export function createDirector(g) {
   function complete(id) {
     const step = runner.step;
     if (!step || step.id !== id) return;
+    retries = 0; // the count is per step: a loss here must not skip the next boss's reveal
     if (step.type === 'fight' || step.type === 'defend' || step.type === 'stealth') g.reward('storyStep');
     // A mission won: a breather, back to full health (spec F3).
     if (['fight', 'defend', 'stealth', 'boss', 'chase'].includes(step.type) && !gauntlet) combat.heroCombat.revive();
@@ -353,7 +356,14 @@ export function createDirector(g) {
         break;
       }
       case 'panels':
-        if (cur.phase === 'draw' && --cur.drawIn <= 0) {
+        // The suit models the pages show (the worn one and any a shot asks for) load before the
+        // pages are drawn, or the first comic in a suit would show the painted body (3 s at most).
+        if (cur.phase === 'draw' && !cur.suitsP) {
+          const ids = new Set([save.progress?.suit ?? 'classic']);
+          for (const pg of step.pages ?? []) for (const p of pg.panels ?? []) if (p.shot?.suit) ids.add(p.shot.suit);
+          cur.suitsP = Promise.race([Promise.all([...ids].map((i) => loadSuitModel(suitById(i).model))), new Promise((r) => setTimeout(r, 3000))]).then(() => { cur.suitsOk = true; });
+        }
+        if (cur.phase === 'draw' && cur.suitsOk && --cur.drawIn <= 0) {
           cur.phase = 'read';
           const pages = drawPanels(step);
           const ep = epoch;

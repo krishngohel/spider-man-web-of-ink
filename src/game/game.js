@@ -429,6 +429,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     // Peter out of the suit (a stroll) is a cast look, not a roster character.
     const def = !ROSTER.some((c) => c.id === id) && CAST[id] ? { ...CAST[id], kind: 'civilian' } : characterById(id);
     scene.remove(heroModel.root);
+    heroModel.disposed = true; // a suit file still loading for it attaches nothing
     // The old body's own materials and gear geometry go (the skinned body geometry is shared).
     heroModel.root.traverse((o) => { if (!o.isMesh) return; for (const mt of [].concat(o.material)) mt?.dispose?.(); if (!o.isSkinnedMesh) o.geometry?.dispose?.(); });
     heroModel = buildCharacter(assets, def);
@@ -1149,6 +1150,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
       if (mode === 'map' && (input.pressed('map') || input.pressed('pause'))) map.hide();
     }
 
+    if (mode === 'play') nav.idle();
     if (mode !== 'play' && mode !== 'title') interpolate();
     // The hero shakes a little while frozen on a blow (drawn only).
     if (mode === 'play' && combat.heroCombat.c.heroStop > 0) {
@@ -1605,7 +1607,7 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
   const bench = params.get('bench') === '1';
   if (at === 'swing' || bench) enterPlay();
   else if (at && stepById(at)) devStory(at);
-  else { menus.showTitle(); gpuHint = maybeShowGpuHint(uiRoot, gpuRaw, window.localStorage); }
+  else { menus.showTitle(); gpuHint = maybeShowGpuHint(menus.titleNode, gpuRaw, window.localStorage); }
   // ?bench=1: the one-link benchmark for the player's own machine (loaded only when asked for).
   if (bench) {
     import('../dev/perfBench.js').then(({ runPerfBench }) => runPerfBench({

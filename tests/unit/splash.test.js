@@ -26,6 +26,18 @@ describe('splash memory', () => {
     expect(Math.abs(r.z)).toBeLessThan(10);
   });
 
+  it('a fall off a bridge deck (standing over the water) comes back to the deck, not the shore', () => {
+    const m = createSplashMemory({ x: 0, y: 0, z: 10 }, isWater);
+    step(m, { x: 0, y: 0.5, z: 5 }, 'ground', 0, 1);
+    for (let z = 0; z >= -200; z -= 2) m.record({ x: 0, y: 20, z }, 'ground', 8, 0.1);
+    step(m, { x: 0, y: 20, z: -200 }, 'ground', 0, 1);
+    m.record({ x: 0, y: 5, z: -203 }, 'air', 10, 0.1);
+    const r = m.respawn();
+    expect(r.state).toBe('ground');
+    expect(r.z).toBeLessThan(-150);
+    expect(r.y).toBeCloseTo(20, 0);
+  });
+
   it('never keeps a spot over the water', () => {
     const m = createSplashMemory({ x: 0, y: 0, z: 10 }, isWater);
     step(m, { x: 0, y: 40, z: -50 }, 'swing', 30, 5);

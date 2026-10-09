@@ -154,17 +154,24 @@ export function createNav({ sound = () => {}, unlock = () => {}, capturing = () 
     }
   }
 
+  const down = { up: false, down: false, left: false, right: false, a: false, b: false, start: false, lb: false, rb: false };
+  const firstPad = () => {
+    const pads = navigator.getGamepads?.();
+    if (pads) for (let i = 0; i < pads.length; i++) if (pads[i]?.connected) return pads[i];
+    return null;
+  };
+  // Called while playing (no menu): the next page to open counts as new, so the Start press that
+  // opens the pause is not read again as Back on the pause's first frame.
+  function idle() { last = null; }
   // Polled by the game loop while a menu may be up.
   function update(dt = 1 / 60) {
     const p = active();
-    const pad = [...(navigator.getGamepads?.() ?? [])].find((q) => q && q.connected);
+    const pad = firstPad();
     if (!p || !pad) { last = p; prev.clear(); hold.dir = null; return; }
     const btn = (i) => !!pad.buttons[i]?.pressed;
     const ax = pad.axes[0] ?? 0, ay = pad.axes[1] ?? 0;
-    const down = {
-      up: btn(12) || ay < -0.6, down: btn(13) || ay > 0.6, left: btn(14) || ax < -0.6, right: btn(15) || ax > 0.6,
-      a: btn(0), b: btn(1), start: btn(9), lb: btn(4), rb: btn(5),
-    };
+    down.up = btn(12) || ay < -0.6; down.down = btn(13) || ay > 0.6; down.left = btn(14) || ax < -0.6; down.right = btn(15) || ax > 0.6;
+    down.a = btn(0); down.b = btn(1); down.start = btn(9); down.lb = btn(4); down.rb = btn(5);
     // A page that just opened ignores whatever was already held (the press that opened it).
     if (p !== last) { last = p; for (const k in down) prev.set(k, down[k]); hold.dir = null; return; }
     const edge = (k) => { const was = prev.get(k) ?? false; prev.set(k, down[k]); return down[k] && !was; };
@@ -187,7 +194,7 @@ export function createNav({ sound = () => {}, unlock = () => {}, capturing = () 
   addEventListener('mousemove', () => document.body.classList.remove('pad-nav'), { passive: true });
 
   return {
-    register, update, focusables,
+    register, update, idle, focusables,
     back: () => goBack(active()),
     get open() { return !!active(); },
     get active() { return active()?.node ?? null; },

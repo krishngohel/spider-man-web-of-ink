@@ -51,7 +51,7 @@ export function createMenus(root, {
     el('h2', {}, COPY.pause),
     el('div', { class: 'buttons' }, [
       // A click on Resume is a real user gesture: the game takes the mouse back on it.
-      el('button', { class: 'mbtn primary', onclick: () => onResume({ lock: true }) }, COPY.buttons.resume),
+      el('button', { class: 'mbtn primary', onclick: (e) => onResume({ lock: e.detail > 0 }) }, COPY.buttons.resume), // a key or pad press (detail 0) never takes the mouse
       el('button', { class: 'mbtn challenge', onclick: () => onRetryChallenge() }, B.retryChallenge),
       el('button', { class: 'mbtn challenge', onclick: () => onQuitChallenge() }, B.quitChallenge),
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onProgress(); } }, COPY.buttons.progress),
@@ -62,7 +62,7 @@ export function createMenus(root, {
       el('button', { class: 'mbtn', onclick: () => { hideAll(); onRoster(); } }, COPY.buttons.roster),
       el('button', { class: 'mbtn', onclick: () => openSettings('pause') }, COPY.buttons.settings),
       el('button', { class: 'mbtn', onclick: () => openControls('pause') }, COPY.buttons.controls),
-      el('button', { class: 'mbtn', onclick: () => onRestart({ lock: true }) }, COPY.buttons.restart),
+      el('button', { class: 'mbtn', onclick: (e) => onRestart({ lock: e.detail > 0 }) }, COPY.buttons.restart),
       el('button', { class: 'mbtn', onclick: () => onQuit() }, COPY.buttons.quit),
     ]),
   ]));
@@ -267,6 +267,7 @@ export function createMenus(root, {
 
   return {
     showTitle, showPause, hideAll,
+    titleNode: title, // the title page (the GPU hint lives in it, so a pad can reach its button)
     get open() { return !!visible(); },
     get pauseOpen() { return !pause.classList.contains('hidden'); },
   };
