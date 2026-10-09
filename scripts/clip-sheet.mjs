@@ -15,7 +15,8 @@ await p.goto(base + '/__clips.html');
 const pages = await p.evaluate(async ({ file, filter }) => {
   const THREE = await import('/node_modules/three/build/three.module.js');
   const { GLTFLoader } = await import('/node_modules/three/examples/jsm/loaders/GLTFLoader.js');
-  const L = new GLTFLoader();
+  const { MeshoptDecoder } = await import('/node_modules/three/examples/jsm/libs/meshopt_decoder.module.js');
+  const L = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder); // the clip sets are meshopt-packed
   const hero = await L.loadAsync('/assets/hero_m.glb');
   const anims = await L.loadAsync(`/assets/anims_${file}.glb`);
   const re = new RegExp(filter);

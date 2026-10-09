@@ -1367,6 +1367,8 @@ export async function startGame({ canvas, params, onProgress = () => {} }) {
     state,
     scene, // dev probes toggle parts of the scene to time them
     music: () => music.current,
+    // Test hook: whether the mocap sets arrived (they load after boot) and how many clips there are.
+    clips: () => ({ combat: !!assets.combatReady, social: !!assets.socialReady, count: assets.clips.size }),
     requests: () => requests.state(),
     requestSpots: () => requests.spots.map((s) => ({ id: s.r.id, giver: s.giver, roof: s.roof, corner: s.corner, kind: s.r.task.kind })),
     get frame() { return frame; },

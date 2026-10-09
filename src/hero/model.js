@@ -43,6 +43,14 @@ export async function loadHeroAssets(base = './assets/', onProgress = () => {}) 
 // and city acting). Until then, and for good if a set never arrives (each is asked for twice), that
 // set falls back to the Quaternius clips: combatReady or socialReady simply stays false.
 export async function loadCombatClips(assets, base = './assets/', loader = new GLTFLoader()) {
+  // Both sets are packed with EXT_meshopt_compression (scripts/optimize-assets.mjs); the decoder
+  // loads with them, after boot, so the first load does not carry it.
+  if (loader.setMeshoptDecoder) {
+    try {
+      const { MeshoptDecoder } = await import('three/addons/libs/meshopt_decoder.module.js');
+      loader.setMeshoptDecoder(MeshoptDecoder);
+    } catch (err) { console.warn('meshopt decoder', err); }
+  }
   try {
     const g = await loadRetry(loader, base + 'anims_combat.glb');
     for (const clip of g.animations) assets.clips.set(clip.name, sanitizeClip(clip));

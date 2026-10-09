@@ -90,7 +90,11 @@ const MAP = opt.map === 'mixamo' ? MIXAMO : MESHY;
 // Mixamo bones arrive as "mixamorig:Hips", or "mixamorigHips" once three has sanitized the name.
 const norm = (n) => n.replace(/^mixamorig\d*:?/, '');
 
-const io = new NodeIO().registerExtensions(ALL_EXTENSIONS);
+// The clip sets in public/assets are meshopt-packed (scripts/optimize-assets.mjs): --append reads
+// one back. The output is written plain; scripts/mixamo-clips.mjs packs it again afterwards.
+const { MeshoptDecoder } = await import('meshoptimizer');
+await MeshoptDecoder.ready;
+const io = new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({ 'meshopt.decoder': MeshoptDecoder });
 const V = (a) => new THREE.Vector3(...a), Q = (a) => new THREE.Quaternion(...a);
 // Rotation of a possibly scaled matrix (the Meshy armature carries a 0.01 unit scale).
 const rotationOf = (m) => { const q = new THREE.Quaternion(); m.decompose(new THREE.Vector3(), q, new THREE.Vector3()); return q; };
@@ -132,7 +136,9 @@ function channelsOf(anim) {
   for (const ch of anim.listChannels()) {
     const node = norm(ch.getTargetNode().getName()), path = ch.getTargetPath();
     const s = ch.getSampler();
-    const times = Array.from(s.getInput().getArray()), values = Array.from(s.getOutput().getArray());
+    // Outputs may be normalized integers (scripts/optimize-assets.mjs stores rotations as shorts).
+    const o = s.getOutput(), div = o.getNormalized() ? { 5120: 127, 5121: 255, 5122: 32767, 5123: 65535 }[o.getComponentType()] ?? 1 : 1;
+    const times = Array.from(s.getInput().getArray()), values = Array.from(o.getArray(), (v) => (div === 1 ? v : Math.max(-1, v / div)));
     chans.set(`${node}.${path}`, { times, values, size: s.getOutput().getElementSize(), interp: s.getInterpolation() });
   }
   return chans;
